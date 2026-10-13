@@ -1,0 +1,7 @@
+{
+  "name": "Forret - Smart Pantry & Budget Chef",
+  "description": "Budget-optimierte Vorratsverwaltung, automatische Einkaufsliste und KI-gestützte Rezeptvorschläge mit Kalorien- und Kostenkalkulation pro Portion.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
