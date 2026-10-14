@@ -2,6 +2,8 @@
 
 Eine moderne Web-App zur intelligenten Vorratsverwaltung, Budgetplanung und Anti-Food-Waste-Rezeptempfehlung mit Google Gemini AI.
 
+📖 **Ausführliche Dokumentation zu Stil, Vision & Konzept:** [APP_CONCEPT.md](./APP_CONCEPT.md)
+
 ---
 
 ## Features
