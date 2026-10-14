@@ -1199,7 +1199,7 @@ export function UnifiedAddModal({
                               onChange={() => {}}
                               style={{ accentColor: "#059669", width: "16px", height: "16px", cursor: "pointer", marginTop: "3px" }}
                             />
-                            <ProductMark tone={item.tone} name={item.name} compact />
+                            <ProductMark tone={item.tone} name={item.name} category={item.category} compact />
                             <div style={{ flex: 1 }}>
                               <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
                                 <strong style={{ fontSize: "12.5px", color: "#0f172a" }}>
@@ -1417,7 +1417,7 @@ export function UnifiedAddModal({
                   border: "1px solid #e2e8f0",
                 }}
               >
-                <ProductMark tone={getFoodTone(manualName, manualCategory)} name={manualName} />
+                <ProductMark tone={getFoodTone(manualName, manualCategory)} name={manualName} category={manualCategory} />
                 <div>
                   <span style={{ fontSize: "10px", color: "#64748b", fontWeight: 600, display: "block" }}>
                     Lebensmittel-Vorschau

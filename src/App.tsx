@@ -776,7 +776,7 @@ function PantryScreen({
               key={item.id}
               onClick={() => onEditItem(item)}
             >
-              <ProductMark tone={item.tone} name={item.name} />
+              <ProductMark tone={item.tone} name={item.name} category={item.category} />
               <div className="product-content">
                 <div className="product-heading">
                   <div>

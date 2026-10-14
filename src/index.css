@@ -542,54 +542,64 @@ h2 {
 
 .product-mark {
   position: relative;
-  display: grid;
-  width: 54px;
-  height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
   flex: 0 0 auto;
-  place-items: center;
-  overflow: hidden;
+  border-radius: 13px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
   background: #f8fafc;
-  border-radius: 14px;
-  border: 1px solid rgba(226, 232, 240, 0.8);
-  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.7);
-  transition: transform 180ms ease, box-shadow 180ms ease;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  transition: transform 150ms ease, box-shadow 150ms ease, border-color 150ms ease;
 }
 
 .product-mark.compact {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
 }
 
-.product-mark.compact svg {
-  width: 22px;
-  height: 22px;
+.product-mark svg {
+  flex-shrink: 0;
+  transition: transform 150ms ease;
 }
 
 .product-card:hover .product-mark {
-  transform: scale(1.03);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(15, 23, 42, 0.07);
 }
 
-.product-mark.rice { background: linear-gradient(135deg, #fefce8, #fef9c3); border-color: #fef08a; }
-.product-mark.egg { background: linear-gradient(135deg, #fffbeb, #fed7aa); border-color: #fde68a; }
-.product-mark.sauce { background: linear-gradient(135deg, #fef2f2, #fee2e2); border-color: #fecaca; }
-.product-mark.peas { background: linear-gradient(135deg, #ecfdf5, #d1fae5); border-color: #a7f3d0; }
-.product-mark.onion { background: linear-gradient(135deg, #f0fdf4, #dcfce7); border-color: #bbf7d0; }
-.product-mark.chicken { background: linear-gradient(135deg, #fff1f2, #ffe4e6); border-color: #fecdd3; }
-.product-mark.pasta { background: linear-gradient(135deg, #fefce8, #fef08a); border-color: #fde047; }
-.product-mark.oats { background: linear-gradient(135deg, #fffbeb, #fef3c7); border-color: #fde68a; }
-.product-mark.milk { background: linear-gradient(135deg, #f0f9ff, #e0f2fe); border-color: #bae6fd; }
-.product-mark.cheese { background: linear-gradient(135deg, #fffbeb, #fef3c7); border-color: #fde68a; }
-.product-mark.tomato { background: linear-gradient(135deg, #fef2f2, #fee2e2); border-color: #fecaca; }
-.product-mark.oil { background: linear-gradient(135deg, #fefce8, #ecfccb); border-color: #d9f99d; }
-.product-mark.lemon { background: linear-gradient(135deg, #fefce8, #fef08a); border-color: #fde047; }
-.product-mark.apple { background: linear-gradient(135deg, #fff1f2, #fee2e2); border-color: #fecdd3; }
-.product-mark.bread { background: linear-gradient(135deg, #fffbeb, #fed7aa); border-color: #fde68a; }
-.product-mark.carrot { background: linear-gradient(135deg, #fff7ed, #ffedd5); border-color: #fed7aa; }
-.product-mark.broccoli { background: linear-gradient(135deg, #ecfdf5, #d1fae5); border-color: #a7f3d0; }
-.product-mark.garlic { background: linear-gradient(135deg, #f8fafc, #f1f5f9); border-color: #e2e8f0; }
-.product-mark.water { background: linear-gradient(135deg, #f0f9ff, #e0f2fe); border-color: #7dd3fc; }
-.product-mark.generic { background: linear-gradient(135deg, #ecfdf5, #d1fae5); border-color: #a7f3d0; }
+.product-mark.freezer { background: #eff6ff; border-color: #bfdbfe; }
+.product-mark.milk { background: #f0f9ff; border-color: #bae6fd; }
+.product-mark.cheese { background: #fffbeb; border-color: #fde68a; }
+.product-mark.egg { background: #fffbeb; border-color: #fde68a; }
+.product-mark.chicken { background: #fff1f2; border-color: #fecdd3; }
+.product-mark.beef { background: #fff1f2; border-color: #fecdd3; }
+.product-mark.fish { background: #f0fdfa; border-color: #99f6e4; }
+.product-mark.salad { background: #f0fdf4; border-color: #bbf7d0; }
+.product-mark.peas { background: #f0fdf4; border-color: #bbf7d0; }
+.product-mark.onion { background: #fff7ed; border-color: #fed7aa; }
+.product-mark.carrot { background: #fff7ed; border-color: #fed7aa; }
+.product-mark.broccoli { background: #f0fdf4; border-color: #bbf7d0; }
+.product-mark.garlic { background: #fff7ed; border-color: #fed7aa; }
+.product-mark.tomato { background: #fef2f2; border-color: #fecaca; }
+.product-mark.apple { background: #fef2f2; border-color: #fecaca; }
+.product-mark.banana { background: #fefce8; border-color: #fef08a; }
+.product-mark.citrus { background: #fefce8; border-color: #fef08a; }
+.product-mark.lemon { background: #fefce8; border-color: #fef08a; }
+.product-mark.bread { background: #fffbeb; border-color: #fde68a; }
+.product-mark.rice { background: #fffbeb; border-color: #fde68a; }
+.product-mark.pasta { background: #fffbeb; border-color: #fde68a; }
+.product-mark.oats { background: #fffbeb; border-color: #fde68a; }
+.product-mark.water { background: #f0f9ff; border-color: #7dd3fc; }
+.product-mark.drink { background: #f5f3ff; border-color: #ddd6fe; }
+.product-mark.coffee { background: #fef3c7; border-color: #fde68a; }
+.product-mark.sauce { background: #fff7ed; border-color: #fed7aa; }
+.product-mark.oil { background: #fefce8; border-color: #fef08a; }
+.product-mark.refrigerator { background: #f0f9ff; border-color: #bae6fd; }
+.product-mark.generic { background: #ecfdf5; border-color: #a7f3d0; }
 
 .product-content {
   min-width: 0;
