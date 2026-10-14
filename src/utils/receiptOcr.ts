@@ -1,3 +1,4 @@
+import { GoogleGenAI } from "@google/genai";
 import { getFoodTone } from "../components/FoodIcons";
 
 export interface ParsedReceiptFoodItem {
@@ -31,18 +32,22 @@ export async function analyzeReceiptWithGemini(params: {
     "";
 
   if (!apiKey) {
-    return parseReceiptFallback(params.text || "");
+    if (params.text && params.text.trim().length > 0) {
+      return parseReceiptFallback(params.text);
+    }
+    throw new Error("Kein Gemini API-Schlüssel gefunden. Bitte erstelle einen Key in Google AI Studio.");
   }
 
-  const promptText = `Du bist ein professioneller OCR- & Kassenbon-Analyst für deutsche Supermärkte (Rewe, Edeka, Aldi, Lidl, Kaufland, Netto, Penny, Alnatura, dm).
-Analysiere den übergebenen Kassenbon (Bild oder Text).
+  const promptText = `Du bist ein professioneller OCR- & Kassenbon-Analyst für deutsche Supermärkte (Rewe, Edeka, Aldi, Lidl, Kaufland, Netto, Penny, dm, Alnatura).
+Analysiere diesen Kassenbon (Foto oder Text) und extrahiere alle Lebensmittel und Getränke.
+
 Regeln:
 1. Extrahiere ALLE Lebensmittel und Getränke als einzelne Positionen.
-2. Ignoriere Non-Food-Artikel (wie Leergut/Pfand, Einkaufstüten, Coupons, Rabatte, Tabak, Drogerie-Artikel ohne Lebensmittelbezug).
-3. Bereinige kryptische Kassenbon-Abkürzungen in lesbare Produktnamen (z.B. "JA! BASM REIS 1KG" -> "Ja! Basmati Reis", "BIO FREIL EI 10" -> "Bio Freiland-Eier", "KIKKOM SOJA 150" -> "Kikkoman Sojasauce").
+2. Ignoriere Non-Food-Artikel (wie Leergut/Pfand, Einkaufstüten, Tabak, Zeitschriften, Drogerie-Artikel ohne Lebensmittelbezug).
+3. Bereinige kryptische Kassenbon-Abkürzungen in lesbare, saubere Produktnamen (z.B. "JA! BASM REIS 1KG" -> "Ja! Basmati Reis", "BIO FREIL EI 10" -> "Bio Freiland-Eier", "KIKKOM SOJA 150" -> "Kikkoman Sojasauce", "TK ERBSEN 450" -> "TK Erbsen").
 4. Ordne passende Mengen ("amount"), Einheiten ("unit": "g" | "ml" | "Stk."), Einzel-/Gesamtpreise in Euro ("price") und die passende Vorratskategorie ("category": "Kühl" | "Trocken" | "Saucen" | "Tiefkühl") zu.
 
-Antworte STRIKT als valides JSON in folgendem Schema:
+Antworte AUSSCHLIESSLICH als valides JSON in folgendem Schema ohne Markdown-Backticks:
 {
   "items": [
     {
@@ -55,13 +60,14 @@ Antworte STRIKT als valides JSON in folgendem Schema:
   ]
 }`;
 
+  // 1. Try with GoogleGenAI SDK (Primary)
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    const ai = new GoogleGenAI({ apiKey });
+    const contents: any[] = [];
 
-    const parts: any[] = [];
     if (params.imageBase64) {
       const cleanBase64 = params.imageBase64.replace(/^data:[^;]+;base64,/, "");
-      parts.push({
+      contents.push({
         inlineData: {
           mimeType: params.mimeType || "image/jpeg",
           data: cleanBase64,
@@ -70,64 +76,71 @@ Antworte STRIKT als valides JSON in folgendem Schema:
     }
 
     if (params.text) {
-      parts.push({
+      contents.push({
         text: `Kassenbon-Textinhalt:\n${params.text}`,
       });
     }
 
-    parts.push({ text: promptText });
+    contents.push(promptText);
 
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts }],
-        generationConfig: { responseMimeType: "application/json" },
-      }),
-    });
+    const modelsToTry = ["gemini-3.8-flash", "gemini-flash-lite-latest", "gemini-3.5-flash-lite"];
+    let rawText = "";
 
-    if (!res.ok) {
-      console.warn("[Receipt OCR] Gemini HTTP Fehler:", res.status);
-      return parseReceiptFallback(params.text || "");
+    for (const model of modelsToTry) {
+      try {
+        const resp = await ai.models.generateContent({
+          model,
+          contents,
+          config: {
+            responseMimeType: "application/json",
+            temperature: 0.2,
+          },
+        });
+        rawText = resp.text?.trim() || "";
+        if (rawText) break;
+      } catch (mErr) {
+        console.warn(`[Receipt OCR] Fehler mit Modell ${model}:`, mErr);
+      }
     }
 
-    const data = await res.json();
-    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!rawText) {
-      return parseReceiptFallback(params.text || "");
-    }
+    if (rawText) {
+      const cleanJson = rawText.replace(/^```json/i, "").replace(/^```/, "").replace(/```$/, "").trim();
+      const parsed = JSON.parse(cleanJson);
 
-    const cleanJson = rawText.replace(/^```json/i, "").replace(/^```/, "").replace(/```$/, "").trim();
-    const parsed = JSON.parse(cleanJson);
-
-    if (parsed && Array.isArray(parsed.items) && parsed.items.length > 0) {
-      return parsed.items.map((item: any, idx: number) => {
-        const tone = getFoodTone(item.name || "", item.category);
-        const amount = Number(item.amount) || (item.unit === "Stk." ? 1 : 500);
-        const unit = item.unit || "g";
-        return {
-          id: `receipt-item-${Date.now()}-${idx}`,
-          name: String(item.name || "Lebensmittel"),
-          quantity: `${amount} ${unit}`,
-          amount,
-          total: amount,
-          unit,
-          price: Number(item.price) || 1.99,
-          category: (item.category as any) || "Trocken",
-          selected: true,
-          tone,
-          caloriesPer100g: 180,
-          proteinPer100g: 6.5,
-          carbsPer100g: 25.0,
-          fatPer100g: 2.0,
-        };
-      });
+      if (parsed && Array.isArray(parsed.items) && parsed.items.length > 0) {
+        return parsed.items.map((item: any, idx: number) => {
+          const tone = getFoodTone(item.name || "", item.category);
+          const amount = Number(item.amount) || (item.unit === "Stk." ? 1 : 500);
+          const unit = item.unit || "g";
+          return {
+            id: `receipt-item-${Date.now()}-${idx}`,
+            name: String(item.name || "Lebensmittel"),
+            quantity: `${amount} ${unit}`,
+            amount,
+            total: amount,
+            unit,
+            price: Number(item.price) || 1.99,
+            category: (item.category as any) || "Trocken",
+            selected: true,
+            tone,
+            caloriesPer100g: 180,
+            proteinPer100g: 6.5,
+            carbsPer100g: 25.0,
+            fatPer100g: 2.0,
+          };
+        });
+      }
     }
   } catch (err) {
-    console.warn("[Receipt OCR] Fehler bei Analyse:", err);
+    console.error("[Receipt OCR] SDK Analyse fehlgeschlagen:", err);
   }
 
-  return parseReceiptFallback(params.text || "");
+  // Fallback to text parsing only if text was provided
+  if (params.text && params.text.trim().length > 0) {
+    return parseReceiptFallback(params.text);
+  }
+
+  return [];
 }
 
 /**

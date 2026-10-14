@@ -60,75 +60,84 @@ export function UnifiedAddModal({
 
   // Receipt OCR State
   const [receiptImage, setReceiptImage] = useState<string | null>(null);
-  const [receiptItems, setReceiptItems] = useState<ParsedReceiptFoodItem[]>([
-    {
-      id: "r-1",
-      name: "Ja! Basmati Reis (1kg)",
-      quantity: "1000 g",
-      amount: 1000,
-      total: 1000,
-      unit: "g",
-      price: 1.99,
-      category: "Trocken",
-      selected: true,
-      tone: "rice",
-      caloriesPer100g: 355,
-      proteinPer100g: 8.5,
-      carbsPer100g: 78.0,
-      fatPer100g: 0.9,
-    },
-    {
-      id: "r-2",
-      name: "Bio Freiland-Eier (10er)",
-      quantity: "10 Stk.",
-      amount: 10,
-      total: 10,
-      unit: "Stk.",
-      price: 3.29,
-      category: "Kühl",
-      selected: true,
-      tone: "egg",
-      caloriesPer100g: 140,
-      proteinPer100g: 13.0,
-      carbsPer100g: 0.7,
-      fatPer100g: 9.8,
-    },
-    {
-      id: "r-3",
-      name: "Kikkoman Sojasauce (150ml)",
-      quantity: "150 ml",
-      amount: 150,
-      total: 150,
-      unit: "ml",
-      price: 2.49,
-      category: "Saucen",
-      selected: true,
-      tone: "sauce",
-      caloriesPer100g: 77,
-      proteinPer100g: 10.0,
-      carbsPer100g: 3.2,
-      fatPer100g: 0.1,
-    },
-    {
-      id: "r-4",
-      name: "TK Bio Erbsen (450g)",
-      quantity: "450 g",
-      amount: 450,
-      total: 450,
-      unit: "g",
-      price: 2.19,
-      category: "Tiefkühl",
-      selected: true,
-      tone: "peas",
-      caloriesPer100g: 81,
-      proteinPer100g: 5.4,
-      carbsPer100g: 14.4,
-      fatPer100g: 0.4,
-    },
-  ]);
+  const [receiptItems, setReceiptItems] = useState<ParsedReceiptFoodItem[]>([]);
   const [isAnalyzingReceipt, setIsAnalyzingReceipt] = useState(false);
   const [receiptRawText, setReceiptRawText] = useState("");
   const [receiptUploadSuccess, setReceiptUploadSuccess] = useState(false);
+  const [receiptError, setReceiptError] = useState<string | null>(null);
+
+  const handleLoadDemoReceipt = () => {
+    const demoItems: ParsedReceiptFoodItem[] = [
+      {
+        id: "demo-1",
+        name: "Ja! Basmati Reis (1kg)",
+        quantity: "1000 g",
+        amount: 1000,
+        total: 1000,
+        unit: "g",
+        price: 1.99,
+        category: "Trocken",
+        selected: true,
+        tone: "rice",
+        caloriesPer100g: 355,
+        proteinPer100g: 8.5,
+        carbsPer100g: 78.0,
+        fatPer100g: 0.9,
+      },
+      {
+        id: "demo-2",
+        name: "Bio Freiland-Eier (10er)",
+        quantity: "10 Stk.",
+        amount: 10,
+        total: 10,
+        unit: "Stk.",
+        price: 3.29,
+        category: "Kühl",
+        selected: true,
+        tone: "egg",
+        caloriesPer100g: 140,
+        proteinPer100g: 13.0,
+        carbsPer100g: 0.7,
+        fatPer100g: 9.8,
+      },
+      {
+        id: "demo-3",
+        name: "Kikkoman Sojasauce (150ml)",
+        quantity: "150 ml",
+        amount: 150,
+        total: 150,
+        unit: "ml",
+        price: 2.49,
+        category: "Saucen",
+        selected: true,
+        tone: "sauce",
+        caloriesPer100g: 77,
+        proteinPer100g: 10.0,
+        carbsPer100g: 3.2,
+        fatPer100g: 0.1,
+      },
+      {
+        id: "demo-4",
+        name: "TK Bio Erbsen (450g)",
+        quantity: "450 g",
+        amount: 450,
+        total: 450,
+        unit: "g",
+        price: 2.19,
+        category: "Tiefkühl",
+        selected: true,
+        tone: "peas",
+        caloriesPer100g: 81,
+        proteinPer100g: 5.4,
+        carbsPer100g: 14.4,
+        fatPer100g: 0.4,
+      },
+    ];
+    setReceiptItems(demoItems);
+    setReceiptUploadSuccess(true);
+    setReceiptError(null);
+    if (onNotify) onNotify("Demo-Kassenbon geladen (4 Positionen)");
+  };
 
   // Manual Form State
   const [manualName, setManualName] = useState("");
@@ -445,7 +454,7 @@ export function UnifiedAddModal({
               <p style={{ margin: "2px 0 0", fontSize: "10.5px", color: "#64748b" }}>
                 {activeMode === "menu" && "Wähle deine bevorzugte Eingabemethode"}
                 {activeMode === "camera" && "EAN per Kamera, Foto oder Code scannen"}
-                {activeMode === "receipt" && "Kassenzettel mit 4 Positionen einbuchen"}
+                {activeMode === "receipt" && (receiptItems.length > 0 ? `Kassenzettel mit ${receiptItems.length} Positionen einbuchen` : "Kassenbon per Foto scannen")}
                 {activeMode === "database" && "Open Food Facts Datenbank durchsuchen"}
                 {activeMode === "manual" && "Name, Menge und Nährwerte selbst erfassen"}
               </p>
@@ -848,9 +857,6 @@ export function UnifiedAddModal({
           )}
 
           {/* ========================================================
-              VIEW 3: RECEIPT IMPORT
-              ======================================================== */}
-          {/* ========================================================
               VIEW 3: RECEIPT IMPORT (Echter Foto-Upload & Gemini AI OCR)
               ======================================================== */}
           {activeMode === "receipt" && (
@@ -863,7 +869,7 @@ export function UnifiedAddModal({
                     alignItems: "center",
                     justifyContent: "center",
                     gap: "6px",
-                    padding: "10px",
+                    padding: "11px 10px",
                     background: "#059669",
                     color: "white",
                     borderRadius: "12px",
@@ -888,6 +894,7 @@ export function UnifiedAddModal({
                       const file = e.target.files?.[0];
                       if (!file) return;
                       setIsAnalyzingReceipt(true);
+                      setReceiptError(null);
                       const reader = new FileReader();
                       reader.onload = async (ev) => {
                         const dataUrl = ev.target?.result as string;
@@ -900,10 +907,16 @@ export function UnifiedAddModal({
                           if (items.length > 0) {
                             setReceiptItems(items);
                             setReceiptUploadSuccess(true);
-                            if (onNotify) onNotify(`Gemini OCR: ${items.length} Lebensmittel auf dem Bon erkannt!`);
+                            if (onNotify) onNotify(`✓ ${items.length} Lebensmittel auf dem Bon erkannt!`);
+                          } else {
+                            setReceiptUploadSuccess(false);
+                            setReceiptError("Keine Lebensmittel auf dem Bild erkannt. Bitte stelle sicher, dass der Kassenbon gut beleuchtet und scharf ist.");
                           }
-                        } catch (err) {
+                        } catch (err: unknown) {
                           console.error("Receipt OCR error:", err);
+                          setReceiptUploadSuccess(false);
+                          const msg = err instanceof Error ? err.message : "Fehler bei der Bon-Analyse.";
+                          setReceiptError(msg);
                         } finally {
                           setIsAnalyzingReceipt(false);
                         }
@@ -919,7 +932,7 @@ export function UnifiedAddModal({
                     alignItems: "center",
                     justifyContent: "center",
                     gap: "6px",
-                    padding: "10px",
+                    padding: "11px 10px",
                     background: "#f1f5f9",
                     color: "#334155",
                     borderRadius: "12px",
@@ -944,6 +957,7 @@ export function UnifiedAddModal({
                       const file = e.target.files?.[0];
                       if (!file) return;
                       setIsAnalyzingReceipt(true);
+                      setReceiptError(null);
                       const reader = new FileReader();
                       reader.onload = async (ev) => {
                         const dataUrl = ev.target?.result as string;
@@ -956,10 +970,16 @@ export function UnifiedAddModal({
                           if (items.length > 0) {
                             setReceiptItems(items);
                             setReceiptUploadSuccess(true);
-                            if (onNotify) onNotify(`Gemini OCR: ${items.length} Lebensmittel auf dem Bon erkannt!`);
+                            if (onNotify) onNotify(`✓ ${items.length} Lebensmittel auf dem Bon erkannt!`);
+                          } else {
+                            setReceiptUploadSuccess(false);
+                            setReceiptError("Keine Lebensmittel auf dem Bild erkannt. Bitte stelle sicher, dass der Kassenbon gut beleuchtet und scharf ist.");
                           }
-                        } catch (err) {
+                        } catch (err: unknown) {
                           console.error("Receipt OCR error:", err);
+                          setReceiptUploadSuccess(false);
+                          const msg = err instanceof Error ? err.message : "Fehler bei der Bon-Analyse.";
+                          setReceiptError(msg);
                         } finally {
                           setIsAnalyzingReceipt(false);
                         }
@@ -996,162 +1016,209 @@ export function UnifiedAddModal({
                     Gemini Vision OCR analysiert deinen Kassenbon...
                   </strong>
                   <p style={{ margin: "4px 0 0", fontSize: "11px", color: "#047857" }}>
-                    Erkenne Lebensmittel, Mengen, Mengenangaben und Preise.
+                    Lese Produkte, Mengen und Preise aus dem Beleg ein...
                   </p>
                 </div>
               )}
 
-              {/* Receipt Image Thumbnail if uploaded */}
-              {receiptImage && !isAnalyzingReceipt && (
+              {/* Error Message */}
+              {receiptError && !isAnalyzingReceipt && (
+                <div style={{ fontSize: "11.5px", color: "#b91c1c", background: "#fef2f2", border: "1px solid #fecaca", padding: "10px 14px", borderRadius: "12px", display: "flex", alignItems: "flex-start", gap: "8px" }}>
+                  <span style={{ fontSize: "14px", marginTop: "-1px" }}>⚠️</span>
+                  <div style={{ flex: 1 }}>
+                    <strong style={{ display: "block", marginBottom: "2px" }}>Erkennung fehlgeschlagen</strong>
+                    <span>{receiptError}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Receipt Image Thumbnail only if successfully scanned */}
+              {receiptImage && !isAnalyzingReceipt && receiptUploadSuccess && receiptItems.length > 0 && (
                 <div
                   style={{
                     display: "flex",
                     alignItems: "center",
                     gap: "10px",
                     padding: "8px 12px",
-                    background: "#f8fafc",
+                    background: "#ecfdf5",
                     borderRadius: "10px",
-                    border: "1px solid #e2e8f0",
+                    border: "1px solid #a7f3d0",
                   }}
                 >
                   <img
                     src={receiptImage}
                     alt="Kassenbon"
-                    style={{ width: "36px", height: "36px", objectFit: "cover", borderRadius: "6px", border: "1px solid #cbd5e1" }}
+                    style={{ width: "36px", height: "36px", objectFit: "cover", borderRadius: "6px", border: "1px solid #10b981" }}
                   />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <span style={{ fontSize: "11px", fontWeight: 700, color: "#1e293b", display: "block" }}>
-                      Kassenbon-Scan erfasst
+                    <span style={{ fontSize: "11px", fontWeight: 700, color: "#065f46", display: "block" }}>
+                      Kassenbon erfasst
                     </span>
-                    <span style={{ fontSize: "10px", color: "#059669" }}>
-                      ✓ KI-Analyse erfolgreich
+                    <span style={{ fontSize: "10.5px", color: "#047857" }}>
+                      ✓ {receiptItems.length} Positionen erfolgreich erkannt
                     </span>
                   </div>
                   <button
                     type="button"
                     onClick={() => {
                       setReceiptImage(null);
+                      setReceiptItems([]);
                       setReceiptUploadSuccess(false);
+                      setReceiptError(null);
                     }}
-                    style={{ background: "transparent", border: "none", color: "#94a3b8", fontSize: "12px", cursor: "pointer" }}
+                    style={{ background: "transparent", border: "none", color: "#64748b", fontSize: "12px", cursor: "pointer" }}
                   >
                     Entfernen
                   </button>
                 </div>
               )}
 
-              {/* Header summary of recognized items */}
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  background: "#f8fafc",
-                  padding: "8px 12px",
-                  borderRadius: "10px",
-                  border: "1px solid #e2e8f0",
-                }}
-              >
-                <span style={{ fontSize: "11.5px", fontWeight: 750, color: "#334155" }}>
-                  Erkannte Positionen ({receiptItems.filter((i) => i.selected).length}/{receiptItems.length})
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const allSelected = receiptItems.every((i) => i.selected);
-                    setReceiptItems((prev) => prev.map((item) => ({ ...item, selected: !allSelected })));
-                  }}
-                  style={{
-                    background: "transparent",
-                    border: "none",
-                    color: "#059669",
-                    fontSize: "11px",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                  }}
-                >
-                  {receiptItems.every((i) => i.selected) ? "Alle abwählen" : "Alle auswählen"}
-                </button>
-              </div>
-
-              {/* Recognized Items Checklist */}
-              <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxHeight: "240px", overflowY: "auto" }}>
-                {receiptItems.map((item) => (
-                  <div
-                    key={item.id}
-                    onClick={() => {
-                      setReceiptItems((prev) =>
-                        prev.map((i) => (i.id === item.id ? { ...i, selected: !i.selected } : i))
-                      );
+              {/* Empty state when no receipt scanned yet */}
+              {receiptItems.length === 0 && !isAnalyzingReceipt && (
+                <div style={{ textAlign: "center", padding: "26px 16px", background: "#f8fafc", borderRadius: "16px", border: "1px dashed #cbd5e1" }}>
+                  <div style={{ fontSize: "30px", marginBottom: "6px" }}>🧾</div>
+                  <h4 style={{ margin: "0 0 4px", fontSize: "13px", fontWeight: 750, color: "#0f172a" }}>
+                    Noch kein Kassenbon analysiert
+                  </h4>
+                  <p style={{ margin: "0 0 14px", fontSize: "11px", color: "#64748b", lineHeight: 1.4, maxWidth: "280px", marginLeft: "auto", marginRight: "auto" }}>
+                    Mache ein Foto von deinem Einkaufszettel (Rewe, Aldi, Lidl, Edeka etc.). Die KI erkennt die Lebensmittel automatisch.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleLoadDemoReceipt}
+                    style={{
+                      background: "#ffffff",
+                      border: "1px solid #cbd5e1",
+                      borderRadius: "10px",
+                      padding: "8px 16px",
+                      fontSize: "11.5px",
+                      fontWeight: 700,
+                      color: "#059669",
+                      cursor: "pointer",
+                      boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
                     }}
+                  >
+                    💡 Beispiel-Bon testen (4 Artikel)
+                  </button>
+                </div>
+              )}
+
+              {/* Header summary of recognized items */}
+              {receiptItems.length > 0 && (
+                <>
+                  <div
                     style={{
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "space-between",
+                      background: "#f8fafc",
                       padding: "8px 12px",
-                      background: item.selected ? "#ffffff" : "#f8fafc",
-                      border: item.selected ? "1.5px solid #10b981" : "1px solid #e2e8f0",
-                      borderRadius: "12px",
-                      cursor: "pointer",
-                      opacity: item.selected ? 1 : 0.6,
-                      transition: "all 150ms ease",
+                      borderRadius: "10px",
+                      border: "1px solid #e2e8f0",
                     }}
                   >
-                    <div style={{ display: "flex", alignItems: "center", gap: "9px" }}>
-                      <input
-                        type="checkbox"
-                        checked={item.selected}
-                        onChange={() => {}}
-                        style={{ accentColor: "#059669", width: "16px", height: "16px", cursor: "pointer" }}
-                      />
-                      <ProductMark tone={item.tone} name={item.name} compact />
-                      <div>
-                        <strong style={{ fontSize: "12px", color: "#0f172a", display: "block" }}>
-                          {item.name}
-                        </strong>
-                        <span style={{ fontSize: "10.5px", color: "#64748b" }}>
-                          {item.category} · {item.quantity}
+                    <span style={{ fontSize: "11.5px", fontWeight: 750, color: "#334155" }}>
+                      Erkannte Positionen ({receiptItems.filter((i) => i.selected).length}/{receiptItems.length})
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const allSelected = receiptItems.every((i) => i.selected);
+                        setReceiptItems((prev) => prev.map((item) => ({ ...item, selected: !allSelected })));
+                      }}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        color: "#059669",
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                      }}
+                    >
+                      {receiptItems.every((i) => i.selected) ? "Alle abwählen" : "Alle auswählen"}
+                    </button>
+                  </div>
+
+                  {/* Recognized Items Checklist */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxHeight: "240px", overflowY: "auto" }}>
+                    {receiptItems.map((item) => (
+                      <div
+                        key={item.id}
+                        onClick={() => {
+                          setReceiptItems((prev) =>
+                            prev.map((i) => (i.id === item.id ? { ...i, selected: !i.selected } : i))
+                          );
+                        }}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          padding: "8px 12px",
+                          background: item.selected ? "#ffffff" : "#f8fafc",
+                          border: item.selected ? "1.5px solid #10b981" : "1px solid #e2e8f0",
+                          borderRadius: "12px",
+                          cursor: "pointer",
+                          opacity: item.selected ? 1 : 0.6,
+                          transition: "all 150ms ease",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: "9px" }}>
+                          <input
+                            type="checkbox"
+                            checked={item.selected}
+                            onChange={() => {}}
+                            style={{ accentColor: "#059669", width: "16px", height: "16px", cursor: "pointer" }}
+                          />
+                          <ProductMark tone={item.tone} name={item.name} compact />
+                          <div>
+                            <strong style={{ fontSize: "12px", color: "#0f172a", display: "block" }}>
+                              {item.name}
+                            </strong>
+                            <span style={{ fontSize: "10.5px", color: "#64748b" }}>
+                              {item.category} · {item.quantity}
+                            </span>
+                          </div>
+                        </div>
+                        <span style={{ fontSize: "11.5px", fontWeight: 750, color: "#059669" }}>
+                          {item.price ? `${item.price.toFixed(2).replace(".", ",")} €` : ""}
                         </span>
                       </div>
-                    </div>
-                    <span style={{ fontSize: "11.5px", fontWeight: 750, color: "#059669" }}>
-                      {item.price ? `${item.price.toFixed(2).replace(".", ",")} €` : ""}
-                    </span>
+                    ))}
                   </div>
-                ))}
-              </div>
 
-              {/* Confirm & Add Button */}
-              {receiptItems.filter((i) => i.selected).length > 0 && (
-                <button
-                  type="button"
-                  className="primary-button generate-button"
-                  style={{ height: "46px", borderRadius: "12px", fontSize: "13px", marginTop: "4px" }}
-                  onClick={() => {
-                    const selected = receiptItems.filter((i) => i.selected);
-                    selected.forEach((item) => {
-                      onAddProduct({
-                        name: item.name,
-                        category: item.category,
-                        amount: item.amount,
-                        total: item.total,
-                        unit: item.unit,
-                        tone: item.tone,
-                        minAmount: Math.round(item.amount * 0.3),
-                        caloriesPer100g: item.caloriesPer100g,
-                        proteinPer100g: item.proteinPer100g,
-                        carbsPer100g: item.carbsPer100g,
-                        fatPer100g: item.fatPer100g,
-                      });
-                    });
-                    if (onNotify) {
-                      onNotify(`✓ ${selected.length} Lebensmittel vom Kassenbon hinzugefügt!`);
-                    }
-                    handleClose();
-                  }}
-                >
-                  {receiptItems.filter((i) => i.selected).length} Positionen in Vorrat übernehmen
-                </button>
+                  {/* Confirm & Add Button */}
+                  {receiptItems.filter((i) => i.selected).length > 0 && (
+                    <button
+                      type="button"
+                      className="primary-button generate-button"
+                      style={{ height: "46px", borderRadius: "12px", fontSize: "13px", marginTop: "4px" }}
+                      onClick={() => {
+                        const selected = receiptItems.filter((i) => i.selected);
+                        selected.forEach((item) => {
+                          onAddProduct({
+                            name: item.name,
+                            category: item.category,
+                            amount: item.amount,
+                            total: item.total,
+                            unit: item.unit,
+                            tone: item.tone,
+                            minAmount: Math.round(item.amount * 0.3),
+                            caloriesPer100g: item.caloriesPer100g,
+                            proteinPer100g: item.proteinPer100g,
+                            carbsPer100g: item.carbsPer100g,
+                            fatPer100g: item.fatPer100g,
+                          });
+                        });
+                        if (onNotify) {
+                          onNotify(`✓ ${selected.length} Lebensmittel vom Kassenbon hinzugefügt!`);
+                        }
+                        handleClose();
+                      }}
+                    >
+                      {receiptItems.filter((i) => i.selected).length} Positionen in Vorrat übernehmen
+                    </button>
+                  )}
+                </>
               )}
             </div>
           )}
