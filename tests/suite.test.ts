@@ -1,5 +1,5 @@
 import { deduplicatePantry, formatMhdDisplay, getMhdStatus, getItemNutrientSpecs, type PantryItem } from "../src/App";
-import { parseReceiptFallback } from "../src/utils/receiptOcr";
+import { parseReceiptFallback, calculateEstimatedMhd } from "../src/utils/receiptOcr";
 import { getRecipePantryBreakdown } from "../src/utils/pantryMatching";
 import { FULL_RECIPE_CATALOG } from "../src/data/recipeCatalog";
 import { getFoodTone } from "../src/components/FoodIcons";
@@ -151,6 +151,74 @@ assert(Boolean(parsedReis && parsedReis.amount === 1000 && parsedReis.unit === "
 
 const parsedEier = parsedReceiptItems.find((i) => i.name.toLowerCase().includes("eier"));
 assert(Boolean(parsedEier && parsedEier.amount === 10 && parsedEier.unit === "Stk."), "Extracted 10 Stk. Bio Eier correctly");
+
+// Shelf-Life Heuristic Tests (Zero-Effort MHD Matrix)
+console.log("\n📅 Testing Automatic Shelf-Life Heuristic (calculateEstimatedMhd)...");
+
+const schnitzelEstimate = calculateEstimatedMhd("Hähn.Minutenschnitz.", "Kühl");
+assert(schnitzelEstimate.shelfLifeDays === 3, "Poultry (Hähnchen) gets 3 days shelf-life");
+assert(schnitzelEstimate.isUrgent === true, "Poultry flagged as urgent/akut");
+
+const salatEstimate = calculateEstimatedMhd("Pflücksalat", "Kühl");
+assert(salatEstimate.shelfLifeDays === 4, "Leafy salad (Pflücksalat) gets 4 days shelf-life");
+assert(salatEstimate.isUrgent === true, "Leafy salad flagged as urgent/akut");
+
+const paprikaEstimate = calculateEstimatedMhd("Paprika rot", "Kühl");
+assert(paprikaEstimate.shelfLifeDays === 7, "Fresh vegetables (Paprika) gets 7 days shelf-life");
+assert(paprikaEstimate.isUrgent === false, "Vegetables not marked urgent");
+
+const joghurtEstimate = calculateEstimatedMhd("Joghurt mild 1,5%", "Kühl");
+assert(joghurtEstimate.shelfLifeDays === 14, "Dairy/Yogurt gets 14 days shelf-life");
+
+const tkEstimate = calculateEstimatedMhd("Kartoffel-Gitter TK", "Tiefkühl");
+assert(tkEstimate.shelfLifeDays === 180, "Frozen foods get 180 days shelf-life");
+
+const haferEstimate = calculateEstimatedMhd("Haferflocken Zart", "Trocken");
+assert(haferEstimate.shelfLifeDays === 240, "Dry oats/cereals get 240 days shelf-life");
+
+const monsterEstimate = calculateEstimatedMhd("Monster White Zero", "Getränke");
+assert(monsterEstimate.shelfLifeDays === 365, "Canned drinks get 365 days shelf-life");
+
+// Real Lidl Receipt Fallback Test
+console.log("\n🛒 Testing Real Lidl Receipt Parsing (Discounts, Weights, Pfand)...");
+const lidlReceiptSample = `
+LIDL Dienstleistung GmbH & Co. KG
+Vogelwoogstr. 100, 67659 Kaiserslautern
+----------------------------------------
+Paprika rot                   0,63 A
+  0,210 kg x 2,99 EUR/kg
+Pflücksalat                   0,99 A
+Gurken                        0,59 A
+Kartoffel-Gitter              1,99 A
+Joghurt mild 1,5%             0,69 A
+Haferflocken Zart             0,79 A
+Cornichons scharf             1,29 A
+Monster White Zero            1,59 B
+Pepsi Zero                    1,19 B
+Pfand 0,25                    0,25 B
+Pfand 0,25                    0,25 B
+Tortilla Wraps Weiz.          1,19 A
+Hähn.Minutenschnitz.          4,99 A
+----------------------------------------
+Lidl Plus Rabatt             -1,68
+----------------------------------------
+Zu zahlen EUR                14,99
+`;
+
+const parsedLidl = parseReceiptFallback(lidlReceiptSample);
+assert(parsedLidl.length === 11, `Parsed exactly 11 valid food items from Lidl receipt (found ${parsedLidl.length})`);
+
+const lidlPaprika = parsedLidl.find((i) => i.name.toLowerCase().includes("paprika"));
+assert(Boolean(lidlPaprika && lidlPaprika.amount === 210 && lidlPaprika.unit === "g"), "Weight subline (0,210 kg x 2,99 EUR/kg) folded into 210 g");
+
+const lidlPfand = parsedLidl.find((i) => i.name.toLowerCase().includes("pfand"));
+assert(!lidlPfand, "Non-food Pfand/deposit lines excluded");
+
+const lidlRabatt = parsedLidl.find((i) => i.name.toLowerCase().includes("rabatt"));
+assert(!lidlRabatt, "Lidl Plus discount lines excluded");
+
+const lidlSchnitzel = parsedLidl.find((i) => i.name.toLowerCase().includes("schnitz"));
+assert(Boolean(lidlSchnitzel && lidlSchnitzel.isUrgent === true && lidlSchnitzel.mhd), "Hähnchenschnitzel has urgent flag and calculated MHD");
 
 // -----------------------------------------------------------------------------
 // TEST SUITE 6: RECIPE MATCHING & INGREDIENT RATIOS
