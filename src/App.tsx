@@ -645,9 +645,6 @@ function AppHeader({
             <span>Reset</span>
           </button>
         )}
-        <Button className="avatar" title="Haushalt & Profil öffnen" onClick={onOpenHousehold}>
-          <Icon name="user" size={18} />
-        </Button>
       </div>
     </header>
   );
@@ -784,19 +781,7 @@ function PantryScreen({
 
       <div className="section-heading">
         <div><h2>Lebensmittel</h2><p>Nach Füllstand sortiert</p></div>
-        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-          {onOpenReset && (
-            <Button
-              className="text-button"
-              onClick={onOpenReset}
-              title="Vorrat verwalten / Duplikate fixen / Reset"
-              style={{ fontSize: "11px", color: "#64748b" }}
-            >
-              <Icon name="sync" size={13} /> Reset
-            </Button>
-          )}
-          <Button className="text-button">Sortieren <Icon name="chevron" size={14} /></Button>
-        </div>
+        <Button className="text-button">Sortieren <Icon name="chevron" size={14} /></Button>
       </div>
 
       <div className="inventory-list">
@@ -944,6 +929,21 @@ function PantryScreen({
           </div>
         )}
       </div>
+
+      {/* Bottom Management & Reset Action */}
+      {pantry.length > 0 && onOpenReset && (
+        <div className="pantry-bottom-actions">
+          <button
+            type="button"
+            className="pantry-bottom-reset-btn"
+            onClick={onOpenReset}
+            title="Vorrat verwalten / Duplikate fixen / Reset"
+          >
+            <Icon name="trash" size={13} />
+            <span>Vorrat verwalten, Duplikate bereinigen & Reset</span>
+          </button>
+        </div>
+      )}
 
       <Button className="fab" title="Produkt hinzufügen" onClick={onOpenAddModal}>
         <Icon name="plus" size={24} />

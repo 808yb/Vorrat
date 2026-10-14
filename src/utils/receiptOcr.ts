@@ -215,6 +215,29 @@ export function parseReceiptFallback(rawText: string): ParsedReceiptFoodItem[] {
       }
     }
 
+    // Parse package size if present (e.g. 1kg, 500g, 150ml, 10er)
+    const qtyMatch = nameLower.match(/(\d+)\s*(kg|g|ml|l|er|stk)/i);
+    if (qtyMatch) {
+      const val = parseInt(qtyMatch[1], 10);
+      const u = qtyMatch[2].toLowerCase();
+      if (u === "kg") {
+        amount = val * 1000;
+        unit = "g";
+      } else if (u === "l") {
+        amount = val * 1000;
+        unit = "ml";
+      } else if (u === "ml") {
+        amount = val;
+        unit = "ml";
+      } else if (u === "g") {
+        amount = val;
+        unit = "g";
+      } else if (u === "er" || u === "stk") {
+        amount = val;
+        unit = "Stk.";
+      }
+    }
+
     const tone = getFoodTone(name, category);
 
     items.push({
