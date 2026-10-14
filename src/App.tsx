@@ -11,6 +11,9 @@ import { UnifiedAddModal } from "./components/UnifiedAddModal";
 import { EditPantryItemModal } from "./components/EditPantryItemModal";
 import { SavedMealsScreen } from "./components/SavedMealsScreen";
 import { HouseholdSyncModal } from "./components/HouseholdSyncModal";
+import { PwaInstallBanner } from "./components/PwaInstallBanner";
+import { RecipeImportModal } from "./components/RecipeImportModal";
+import { NutritionCoachModal } from "./components/NutritionCoachModal";
 import {
   WeeklyMealPlannerScreen,
   type PlannedMeal,
@@ -551,9 +554,11 @@ const defaultGroceries: GroceryItem[] = [
 
 function AppHeader({
   onOpenHousehold,
+  onOpenCoach,
   onResetDemo,
 }: {
   onOpenHousehold: () => void;
+  onOpenCoach?: () => void;
   onResetDemo: () => void;
 }) {
   return (
@@ -563,6 +568,17 @@ function AppHeader({
         <span>Forret</span>
       </div>
       <div className="header-actions">
+        {onOpenCoach && (
+          <button
+            type="button"
+            className="coach-header-btn"
+            onClick={onOpenCoach}
+            title="Smarter Ernährungs-Coach & Makros"
+          >
+            <Icon name="sparkles" size={13} />
+            <span>Coach</span>
+          </button>
+        )}
         <div
           className="sync-state"
           onClick={onOpenHousehold}
@@ -585,19 +601,52 @@ function PantryScreen({
   updateAmount,
   onOpenAddModal,
   onEditItem,
+  onCookFromExpiring,
 }: {
   pantry: PantryItem[];
   updateAmount: (id: number, delta: number) => void;
   onOpenAddModal: () => void;
   onEditItem: (item: PantryItem) => void;
+  onCookFromExpiring?: (urgentItemNames: string[]) => void;
 }) {
   const [filter, setFilter] = useState("Alle");
   const [search, setSearch] = useState("");
-  const chips = ["Alle", "Kühlschrank", "Trockenvorrat", "Gewürze & Saucen", "Getränke"];
+
+  const urgentItems = useMemo(() => {
+    return pantry.filter(
+      (item) =>
+        !item.isUnlimited &&
+        item.amount > 0 &&
+        (getMhdStatus(item.mhd) === "soon" || getMhdStatus(item.mhd) === "expired")
+    );
+  }, [pantry]);
+
+  const [savedWasteStats] = useState<{ count: number; money: number }>(() => {
+    try {
+      const saved = localStorage.getItem("vorrat_food_waste_saved");
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return { count: 8, money: 24.5 };
+  });
+
+  const chips = [
+    "Alle",
+    ...(urgentItems.length > 0 ? [`🚨 Dringend (${urgentItems.length})`] : ["🚨 Dringend"]),
+    "Kühlschrank",
+    "Trockenvorrat",
+    "Gewürze & Saucen",
+    "Getränke",
+  ];
 
   const visible = pantry.filter((item) => {
+    const isUrgent =
+      !item.isUnlimited &&
+      item.amount > 0 &&
+      (getMhdStatus(item.mhd) === "soon" || getMhdStatus(item.mhd) === "expired");
+
     const categoryMatch =
       filter === "Alle" ||
+      (filter.startsWith("🚨") && isUrgent) ||
       (filter === "Kühlschrank" && item.category === "Kühl") ||
       (filter === "Trockenvorrat" && item.category === "Trocken") ||
       (filter === "Gewürze & Saucen" && item.category === "Saucen") ||
@@ -611,6 +660,38 @@ function PantryScreen({
         <div><p className="eyebrow">Deine Küche</p><h1>Vorrat</h1></div>
         <div className="summary-pill"><span>{pantry.length}</span> Produkte</div>
       </section>
+
+      {/* Food Waste Retter Alert Banner */}
+      {urgentItems.length > 0 && (
+        <div className="food-waste-alert-banner">
+          <div className="food-waste-header">
+            <span className="waste-badge">🚨 Food-Waste Alarm</span>
+            <span className="waste-count">
+              {urgentItems.length} {urgentItems.length === 1 ? "Zutat läuft bald ab" : "Zutaten laufen bald ab"}
+            </span>
+          </div>
+          <p className="waste-names">
+            {urgentItems.map((u) => u.name).slice(0, 4).join(" · ")}
+          </p>
+          <div className="waste-action-row">
+            <button
+              type="button"
+              className="waste-cook-btn"
+              onClick={() => {
+                if (onCookFromExpiring) {
+                  onCookFromExpiring(urgentItems.map((u) => u.name));
+                }
+              }}
+            >
+              <span>Aus Resten kochen</span>
+              <Icon name="chevron" size={14} />
+            </button>
+            <div className="waste-saved-pill" title="Bereits gerettete Lebensmittel">
+              🌱 Bisher gerettet: {savedWasteStats.count} Zutaten (~{savedWasteStats.money.toFixed(0)} €)
+            </div>
+          </div>
+        </div>
+      )}
 
       <label className="search-field">
         <Icon name="search" size={18} />
@@ -750,6 +831,7 @@ function CookScreen({
   onMicTrigger,
   onNotify,
   onAddMissingToGroceries,
+  onOpenImportRecipe,
 }: {
   pantry: PantryItem[];
   customRecipes?: CatalogRecipe[];
@@ -762,6 +844,7 @@ function CookScreen({
   onMicTrigger: () => void;
   onNotify?: (message: string) => void;
   onAddMissingToGroceries?: (items: Array<{ name: string; amount?: string }>) => void;
+  onOpenImportRecipe?: () => void;
 }) {
   const [servings, setServings] = useState(3);
   const [intent, setIntent] = useState("");
@@ -1047,6 +1130,17 @@ function CookScreen({
         <p className="generator-hint">
           <Icon name="check" size={13} /> Nutzt bevorzugt, was bald verbraucht werden sollte
         </p>
+
+        {onOpenImportRecipe && (
+          <button
+            type="button"
+            className="recipe-import-trigger-btn"
+            onClick={onOpenImportRecipe}
+          >
+            <Icon name="sparkles" size={15} />
+            <span>Rezept importieren (Link / Instagram / TikTok / Text)</span>
+          </button>
+        )}
       </section>
 
       {/* Quick link to dedicated Saved Meals & Cooking screen */}
@@ -2040,9 +2134,28 @@ export default function App() {
   };
 
   const [isHouseholdModalOpen, setIsHouseholdModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isCoachModalOpen, setIsCoachModalOpen] = useState(false);
   const [toast, setToast] = useState("");
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+
+  const handleCookFromExpiring = (urgentItemNames: string[]) => {
+    setActiveTab("discover");
+    notify(`Reste-Kochen vorbereitet: ${urgentItemNames.slice(0, 3).join(", ")}`);
+  };
+
+  const handleSaveImportedRecipe = (
+    recipe: CatalogRecipe,
+    addMissingToGroceries: boolean,
+    missingItems: Array<{ name: string; amount?: string }>
+  ) => {
+    handleAddCustomRecipe(recipe);
+    setFavorites((prev) => (prev.includes(recipe.id) ? prev : [recipe.id, ...prev]));
+    if (addMissingToGroceries && missingItems.length > 0) {
+      handleAddMissingToGroceries(missingItems);
+    }
+  };
 
   // Sync to local storage
   useEffect(() => {
@@ -2376,6 +2489,7 @@ export default function App() {
     <div className="app-shell">
       <AppHeader
         onOpenHousehold={() => setIsHouseholdModalOpen(true)}
+        onOpenCoach={() => setIsCoachModalOpen(true)}
         onResetDemo={handleResetDemo}
       />
 
@@ -2385,6 +2499,7 @@ export default function App() {
           updateAmount={updateAmount}
           onOpenAddModal={() => setIsAddModalOpen(true)}
           onEditItem={(item) => setEditingPantryItem(item)}
+          onCookFromExpiring={handleCookFromExpiring}
         />
       )}
 
@@ -2399,6 +2514,7 @@ export default function App() {
           onCook={cookRecipe}
           onNavigateToCook={() => setActiveTab("cook")}
           onAddMissingToGroceries={handleAddMissingToGroceries}
+          onOpenImportRecipe={() => setIsImportModalOpen(true)}
           onMicTrigger={() => {
             notify("Sprachnotiz: 'Reis & Eier schnell'");
           }}
@@ -2499,6 +2615,27 @@ export default function App() {
         onSave={handleUpdatePantryItem}
         onDelete={handleDeletePantryItem}
       />
+
+      {/* PWA Install Banner (iOS Safari & Android Offline Install) */}
+      <PwaInstallBanner />
+
+      {/* Recipe Import Modal (Web, Social Media, TikTok, Instagram) */}
+      <RecipeImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        pantryItems={pantry}
+        onSaveRecipe={handleSaveImportedRecipe}
+        onNotify={notify}
+      />
+
+      {/* Smart Nutrition Coach Modal (Zero-cost macros & lean AI consult) */}
+      <NutritionCoachModal
+        isOpen={isCoachModalOpen}
+        onClose={() => setIsCoachModalOpen(false)}
+        pantry={pantry}
+        onNotify={notify}
+      />
     </div>
   );
 }
+

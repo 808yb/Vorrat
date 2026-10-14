@@ -12,7 +12,10 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="Forret" />
     <meta name="format-detection" content="telephone=no" />
-    <meta name="theme-color" content="#f8fafc" />
+    <meta name="theme-color" content="#020617" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="apple-touch-icon" href="/icon.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -20,6 +23,13 @@
   <body class="h-full font-sans antialiased text-slate-900 bg-slate-950 selection:bg-emerald-500 selection:text-white">
     <div id="root" class="h-full"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch(() => {});
+        });
+      }
+    </script>
   </body>
 </html>
 

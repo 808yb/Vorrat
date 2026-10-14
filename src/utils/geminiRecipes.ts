@@ -131,15 +131,20 @@ export function saveCustomRecipe(recipe: CatalogRecipe, rawIngredients: RawGemin
   }
 }
 
+export function getGeminiApiKey(): string {
+  return (
+    (import.meta as any).env?.VITE_GEMINI_API_KEY ||
+    (typeof process !== "undefined" && process.env?.GEMINI_API_KEY) ||
+    ""
+  );
+}
+
 export async function generateRecipeWithGemini(
   userQuery: string,
   pantry: Array<{ name: string; amount: number; unit: string; isUnlimited?: boolean }>,
   _servings: number = 2
 ): Promise<CatalogRecipe> {
-  const apiKey =
-    (import.meta as any).env?.VITE_GEMINI_API_KEY ||
-    (typeof process !== "undefined" && process.env?.GEMINI_API_KEY) ||
-    "";
+  const apiKey = getGeminiApiKey();
 
   const pantrySummary = pantry
     .map((p) => `- ${p.name}: ${p.isUnlimited ? "unbegrenzt" : `${p.amount} ${p.unit}`}`)
@@ -609,3 +614,142 @@ async function callGeminiCascade(apiKey: string, prompt: string): Promise<RawGem
 
   return newRecipe;
 }
+
+export async function importRecipeFromTextOrUrlWithGemini(
+  content: string,
+  pantryItems: Array<{ name: string; amount?: number }>
+): Promise<{ recipe: CatalogRecipe; missingIngredients: RawGeminiIngredient[]; rawIngredients: RawGeminiIngredient[] }> {
+  const apiKey = getGeminiApiKey();
+
+  if (!apiKey) {
+    throw new Error("Kein Gemini API-Schlüssel hinterlegt. Bitte erstelle einen Key in Google AI Studio.");
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
+
+  const isUrl = /^https?:\/\//i.test(content.trim());
+
+  const prompt = `Du bist ein Rezept-Extraktor. Analysiere diesen Rezept-Inhalt (${isUrl ? "Weblink" : "Text/Social-Media Caption/Notiz"}) und extrahiere daraus ein strukturiertes Rezept für EINE PORTION (Basisportionierung).
+
+Inhalt zum Extrahieren:
+"""
+${content.trim().slice(0, 4000)}
+"""
+
+Antworte AUSSCHLIESSLICH mit gültigem JSON im folgenden Schema ohne Markdown-Formatierung:
+{
+  "title": "Prägnanter Rezeptname",
+  "subtitle": "Kurze, appetitliche Beschreibung (1 Satz)",
+  "time": "Zubereitungszeit (z.B. 20 Min.)",
+  "difficulty": "Einfach" | "Mittel",
+  "baseCal": 450,
+  "baseProt": 25,
+  "baseCarb": 50,
+  "baseCost": 2.80,
+  "chefTip": "Praktischer Profi-Tipp",
+  "imageKeywords": "z.B. pasta, curry, salad, pizza",
+  "tone": "mint" | "sage" | "amber",
+  "ingredients": [
+    {
+      "name": "Zutatenname (z.B. Spaghetti, Olivenöl, Knoblauch)",
+      "baseAmountPerPortion": 100,
+      "unit": "g" | "ml" | "Stk." | "TL" | "EL",
+      "optional": false
+    }
+  ],
+  "steps": [
+    {
+      "stepNumber": 1,
+      "title": "Vorbereiten",
+      "instruction": "Detaillierte Anweisung für diesen Schritt.",
+      "duration": "5 Min.",
+      "tag": "Vorbereitung"
+    }
+  ]
+}`;
+
+  const response = await ai.models.generateContent({
+    model: "gemini-2.5-flash",
+    contents: prompt,
+    config: {
+      temperature: 0.2,
+      responseMimeType: "application/json",
+    },
+  });
+
+  const responseText = response.text?.trim() || "";
+  const cleaned = responseText.replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
+  const parsed: RawGeminiRecipe = JSON.parse(cleaned);
+
+  const recipeId = "imported-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6);
+  const imageUrl = resolveRecipeFoodImage(parsed.title, parsed.imageKeywords);
+
+  const pantryNames = pantryItems.map((p) => p.name.toLowerCase().trim());
+  const inStockIngredients = parsed.ingredients.filter((ing) => {
+    const iLower = ing.name.toLowerCase().trim();
+    return pantryNames.some((pLower) => pLower.includes(iLower) || iLower.includes(pLower));
+  });
+
+  const missingIngredients = parsed.ingredients.filter((ing) => !inStockIngredients.includes(ing));
+  const calculatedMatchScore = Math.round(
+    (inStockIngredients.length / Math.max(1, parsed.ingredients.length)) * 100
+  );
+
+  const recipe: CatalogRecipe = {
+    id: recipeId,
+    title: parsed.title,
+    subtitle: parsed.subtitle || "Aus dem Web / Social Media importiert",
+    time: parsed.time || "20 Min.",
+    difficulty: parsed.difficulty || "Einfach",
+    baseCal: Math.round(Number(parsed.baseCal) || 450),
+    baseProt: Math.round(Number(parsed.baseProt) || 20),
+    baseCarb: Math.round(Number(parsed.baseCarb) || 45),
+    baseCost: Number(parsed.baseCost) || 2.5,
+    tone: parsed.tone || "mint",
+    chefTip: parsed.chefTip || "Frisch zubereitet schmeckt es am besten!",
+    imageUrl,
+    isAiGenerated: true,
+    matchScore: calculatedMatchScore,
+    optional:
+      missingIngredients.length > 0
+        ? `Fehlt: ${missingIngredients.map((m) => m.name).slice(0, 3).join(", ")}`
+        : "Alles im Vorrat vorhanden",
+    available: (s: number) => {
+      if (inStockIngredients.length > 0) {
+        return inStockIngredients
+          .slice(0, 3)
+          .map((ing) => `${Math.round(ing.baseAmountPerPortion * s)} ${ing.unit} ${ing.name}`)
+          .join(" · ");
+      }
+      return parsed.ingredients
+        .slice(0, 3)
+        .map((ing) => `${Math.round(ing.baseAmountPerPortion * s)} ${ing.unit} ${ing.name}`)
+        .join(" · ");
+    },
+    ingredientsList: (s: number) => {
+      return parsed.ingredients.map((ing) => ({
+        name: ing.name,
+        amount: `${Math.round(ing.baseAmountPerPortion * s)} ${ing.unit}`,
+        optional: Boolean(ing.optional),
+      }));
+    },
+    steps: Array.isArray(parsed.steps)
+      ? parsed.steps.map((st, idx) => ({
+          stepNumber: st.stepNumber || idx + 1,
+          title: st.title || `Schritt ${idx + 1}`,
+          instruction: st.instruction || "",
+          duration: st.duration || "3 Min.",
+          tag: st.tag || "Kochen",
+        }))
+      : [],
+  };
+
+  saveCustomRecipe(recipe, parsed.ingredients);
+
+  return {
+    recipe,
+    missingIngredients,
+    rawIngredients: parsed.ingredients,
+  };
+}
+
