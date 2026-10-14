@@ -10,6 +10,7 @@ import { getRecipePantryBreakdown } from "./utils/pantryMatching";
 import { UnifiedAddModal } from "./components/UnifiedAddModal";
 import { EditPantryItemModal } from "./components/EditPantryItemModal";
 import { SavedMealsScreen } from "./components/SavedMealsScreen";
+import { HouseholdSyncModal } from "./components/HouseholdSyncModal";
 import {
   WeeklyMealPlannerScreen,
   type PlannedMeal,
@@ -548,7 +549,13 @@ const defaultGroceries: GroceryItem[] = [
   { id: 5, name: "Limetten", quantity: "2 Stück", price: "0,98 €", category: "Obst & Gemüse", reason: "Für geplante Rezepte" },
 ];
 
-function AppHeader({ onResetDemo }: { onResetDemo: () => void }) {
+function AppHeader({
+  onOpenHousehold,
+  onResetDemo,
+}: {
+  onOpenHousehold: () => void;
+  onResetDemo: () => void;
+}) {
   return (
     <header className="app-header">
       <div className="brand">
@@ -556,11 +563,18 @@ function AppHeader({ onResetDemo }: { onResetDemo: () => void }) {
         <span>Forret</span>
       </div>
       <div className="header-actions">
-        <div className="sync-state" onClick={onResetDemo} title="Klick: Demo zurücksetzen" style={{ cursor: "pointer" }}>
+        <div
+          className="sync-state"
+          onClick={onOpenHousehold}
+          title="Haushalt & Mitbewohner einladen (Cloud-Sync)"
+          style={{ cursor: "pointer" }}
+        >
           <span />
           <Icon name="sync" size={14} /> Synced
         </div>
-        <Button className="avatar" title="Demo-Profil"><Icon name="user" size={18} /></Button>
+        <Button className="avatar" title="Haushalt & Profil öffnen" onClick={onOpenHousehold}>
+          <Icon name="user" size={18} />
+        </Button>
       </div>
     </header>
   );
@@ -786,6 +800,7 @@ function CookScreen({
   }, [activeSearchedRecipe, favorites, servings]);
 
   const [viewMode, setViewMode] = useState<"swipe" | "list">("swipe");
+  const [stockFilter, setStockFilter] = useState<"all" | "perfect" | "max2">("all");
 
   // All catalog recipes formatted for the Tinder Swipe Deck (calories & macros per portion)
   // When a recipe is searched, it becomes the CURRENT (first) card at index 0!
@@ -804,6 +819,37 @@ function CookScreen({
       availableFormatted: item.available(servings),
     }));
   }, [activeSearchedRecipe, catalogShuffleList, servings]);
+
+  // Calculate missing ingredient counts for every recipe in the catalog
+  const recipesWithStockStats = useMemo(() => {
+    return allCatalogRecipesFormatted.map((rec) => {
+      const breakdown = getRecipePantryBreakdown(rec, pantry, servings);
+      return {
+        ...rec,
+        missingCount: breakdown.missing.length,
+      };
+    });
+  }, [allCatalogRecipesFormatted, pantry, servings]);
+
+  const perfectStockCount = useMemo(() => {
+    return recipesWithStockStats.filter((r) => r.missingCount === 0).length;
+  }, [recipesWithStockStats]);
+
+  const max2StockCount = useMemo(() => {
+    return recipesWithStockStats.filter((r) => r.missingCount <= 2).length;
+  }, [recipesWithStockStats]);
+
+  const filteredDeckRecipes = useMemo(() => {
+    if (stockFilter === "perfect") {
+      const filtered = recipesWithStockStats.filter((r) => r.missingCount === 0);
+      return filtered.length > 0 ? filtered : recipesWithStockStats;
+    }
+    if (stockFilter === "max2") {
+      const filtered = recipesWithStockStats.filter((r) => r.missingCount <= 2);
+      return filtered.length > 0 ? filtered : recipesWithStockStats;
+    }
+    return allCatalogRecipesFormatted;
+  }, [stockFilter, recipesWithStockStats, allCatalogRecipesFormatted]);
 
   // Active 3 recipes selected from catalog based on shuffle index (for list view)
   const recipes = useMemo(() => {
@@ -1037,10 +1083,97 @@ function CookScreen({
         </button>
       </div>
 
+      {/* Resteverwertungs-Filter: Alle vs 100% Vorrat vs Max 1-2 Zutaten nachkaufen */}
+      <div className="stock-filter-toolbar" style={{ margin: "10px 0 14px" }}>
+        <div style={{ display: "flex", gap: "6px", overflowX: "auto", paddingBottom: "4px" }}>
+          <button
+            type="button"
+            className={`chip ${stockFilter === "all" ? "active" : ""}`}
+            style={{
+              background: stockFilter === "all" ? "#0f172a" : "#ffffff",
+              color: stockFilter === "all" ? "#ffffff" : "#475569",
+              borderColor: stockFilter === "all" ? "#0f172a" : "#e2e8f0",
+              fontWeight: 700,
+            }}
+            onClick={() => {
+              setStockFilter("all");
+              setDeckKey((k) => k + 1);
+            }}
+          >
+            Alle Rezepte ({allCatalogRecipesFormatted.length})
+          </button>
+          <button
+            type="button"
+            className={`chip ${stockFilter === "perfect" ? "active" : ""}`}
+            style={{
+              background: stockFilter === "perfect" ? "#059669" : "#ffffff",
+              color: stockFilter === "perfect" ? "#ffffff" : "#047857",
+              borderColor: stockFilter === "perfect" ? "#059669" : "#a7f3d0",
+              fontWeight: 700,
+              display: "flex",
+              alignItems: "center",
+              gap: "4px",
+            }}
+            onClick={() => {
+              setStockFilter("perfect");
+              setDeckKey((k) => k + 1);
+            }}
+            title="Kein Zukauf nötig · Perfekt wenn Läden abends schon zu haben"
+          >
+            <span>🌙</span> 100% Vorrat ({perfectStockCount})
+          </button>
+          <button
+            type="button"
+            className={`chip ${stockFilter === "max2" ? "active" : ""}`}
+            style={{
+              background: stockFilter === "max2" ? "#0284c7" : "#ffffff",
+              color: stockFilter === "max2" ? "#ffffff" : "#0369a1",
+              borderColor: stockFilter === "max2" ? "#0284c7" : "#bae6fd",
+              fontWeight: 700,
+              display: "flex",
+              alignItems: "center",
+              gap: "4px",
+            }}
+            onClick={() => {
+              setStockFilter("max2");
+              setDeckKey((k) => k + 1);
+            }}
+            title="Maximal 1 bis 2 Zutaten nachkaufen"
+          >
+            <span>🛒</span> Max. 1–2 Zukauf ({max2StockCount})
+          </button>
+        </div>
+
+        {stockFilter === "perfect" && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              padding: "10px 12px",
+              background: "#ecfdf5",
+              border: "1px solid #a7f3d0",
+              borderRadius: "12px",
+              marginTop: "8px",
+              fontSize: "11px",
+              color: "#065f46",
+            }}
+          >
+            <span style={{ fontSize: "16px" }}>🌙</span>
+            <div>
+              <strong>Abend-Filter aktiv: Läden schon zu?</strong>
+              <div style={{ color: "#047857", fontSize: "10.5px" }}>
+                Zeige nur Rezepte, für die du 0 Zutaten nachkaufen musst.
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
       {viewMode === "swipe" ? (
         <RecipeSwipeDeck
-          key={deckKey}
-          recipes={allCatalogRecipesFormatted}
+          key={`${deckKey}-${stockFilter}`}
+          recipes={filteredDeckRecipes}
           servings={servings}
           pantry={pantry}
           favorites={favorites}
@@ -1682,23 +1815,25 @@ function ShoppingScreen({
 
 function BottomNav({
   active,
-  badge,
+  pantryBadge = 0,
+  shoppingCount = 0,
   savedCount,
   plannedCount = 0,
   onChange,
 }: {
   active: Tab;
-  badge: number;
+  pantryBadge?: number;
+  shoppingCount?: number;
   savedCount: number;
   plannedCount?: number;
   onChange: (tab: Tab) => void;
 }) {
   const items: { id: Tab; label: string; icon: IconName; count?: number }[] = [
-    { id: "pantry", label: "Vorrat", icon: "archive" },
+    { id: "pantry", label: "Vorrat", icon: "archive", count: pantryBadge > 0 ? pantryBadge : undefined },
     { id: "discover", label: "Entdecken", icon: "sparkles" },
     { id: "planner", label: "Planer", icon: "calendar", count: plannedCount > 0 ? plannedCount : undefined },
     { id: "cook", label: "Kochen", icon: "chef", count: savedCount > 0 ? savedCount : undefined },
-    { id: "shop", label: "Einkauf", icon: "cart", count: badge > 0 ? badge : undefined },
+    { id: "shop", label: "Einkauf", icon: "cart", count: shoppingCount > 0 ? shoppingCount : undefined },
   ];
 
   return (
@@ -1902,10 +2037,9 @@ export default function App() {
       });
       return updated;
     });
-    setCartBadge((prev) => Math.max(prev, newItems.length));
   };
 
-  const [cartBadge, setCartBadge] = useState(3);
+  const [isHouseholdModalOpen, setIsHouseholdModalOpen] = useState(false);
   const [toast, setToast] = useState("");
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -2040,7 +2174,6 @@ export default function App() {
         });
         return copy;
       });
-      setCartBadge((count) => count + lowStockAlerts.length);
     }
 
     notify(
@@ -2126,10 +2259,7 @@ export default function App() {
     // 2. Remove checked items from groceries
     setGroceries((prev) => prev.filter((g) => !checkedIds.includes(g.id)));
 
-    // 3. Update cart badge
-    setCartBadge((prev) => Math.max(0, prev - itemsToRestock.length));
-
-    // 4. Toast notification
+    // 3. Toast notification
     const summary = restockedSummary.slice(0, 2).join(", ");
     const more = restockedSummary.length > 2 ? ` (+${restockedSummary.length - 2} weitere)` : "";
     notify(`${itemsToRestock.length} Artikel eingekauft · ${summary}${more} in Vorrat verbucht`);
@@ -2184,7 +2314,6 @@ export default function App() {
   const handleResetDemo = () => {
     setPantry(defaultPantry);
     setGroceries(defaultGroceries);
-    setCartBadge(3);
     notify("Demo-Bestände zurückgesetzt");
   };
 
@@ -2240,13 +2369,15 @@ export default function App() {
       }
       return next;
     });
-    setCartBadge((b) => b + items.length);
-    notify(`${items.length} fehlende Zutat(en) zur Einkaufsliste hinzugefügt!`);
+    notify(`${items.length} ${items.length === 1 ? "fehlende Zutat" : "fehlende Zutaten"} zur Einkaufsliste hinzugefügt!`);
   };
 
   return (
     <div className="app-shell">
-      <AppHeader onResetDemo={handleResetDemo} />
+      <AppHeader
+        onOpenHousehold={() => setIsHouseholdModalOpen(true)}
+        onResetDemo={handleResetDemo}
+      />
 
       {activeTab === "pantry" && (
         <PantryScreen
@@ -2328,7 +2459,8 @@ export default function App() {
 
       <BottomNav
         active={activeTab}
-        badge={Math.max(cartBadge, lowStockCount)}
+        pantryBadge={lowStockCount}
+        shoppingCount={groceries.length}
         savedCount={favorites.length}
         plannedCount={plannedMeals.length}
         onChange={setActiveTab}
@@ -2340,6 +2472,15 @@ export default function App() {
           {toast}
         </div>
       )}
+
+      {/* Household Sync & Sharing Modal (WG / Familie Einladungslink) */}
+      <HouseholdSyncModal
+        isOpen={isHouseholdModalOpen}
+        onClose={() => setIsHouseholdModalOpen(false)}
+        onNotify={notify}
+        pantryCount={pantry.length}
+        shoppingCount={groceries.length}
+      />
 
       {/* Unified Add Modal (Plus Button: Kamera, Bon, DB-Suche oder Manuell) */}
       <UnifiedAddModal

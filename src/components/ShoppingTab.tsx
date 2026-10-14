@@ -74,7 +74,7 @@ export const ShoppingTab: React.FC<ShoppingTabProps> = ({
   };
 
   return (
-    <div className="space-y-4 pb-20">
+    <div className="space-y-4 pb-32">
       {/* Budget & Cost Brake Card */}
       <div className="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-4 shadow-sm space-y-3">
         <div className="flex items-center justify-between">

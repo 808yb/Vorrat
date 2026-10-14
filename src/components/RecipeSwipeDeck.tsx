@@ -350,16 +350,16 @@ export function RecipeSwipeDeck({
     setSwipeDirection(direction);
 
     if (direction === "right") {
-      // Swipe Right = MERKEN (Rezept merken & in Gemerkte Mahlzeiten speichern)
+      // Swipe Right = In Gemerkte Rezepte (Tab Kochen) speichern
       if (onBookmark) {
         onBookmark(currentRecipe.id, currentRecipe.title);
       } else {
         if (!isFav) {
           onToggleFavorite(currentRecipe.id, currentRecipe.title);
         }
-        if (onNotify) {
-          onNotify(`«${currentRecipe.title}» gemerkt! In deiner Liste gemerkter Meals.`);
-        }
+      }
+      if (onNotify) {
+        onNotify(`✓ «${currentRecipe.title}» in Gemerkte Rezepte (Tab "Kochen") gespeichert!`);
       }
     } else {
       // Swipe Left = PASS / Überspringen
@@ -616,7 +616,7 @@ export function RecipeSwipeDeck({
                 className="swipe-stamp stamp-like"
                 style={{ opacity: opacityRight }}
               >
-                <span>MERKEN</span>
+                <span>ZU GEMERKT (KOCHEN)</span>
               </motion.div>
 
               <motion.div
@@ -735,7 +735,7 @@ export function RecipeSwipeDeck({
           <button
             type="button"
             className="swipe-action-btn like"
-            title="Rezept merken & in Liste speichern (Nach rechts swipen)"
+            title="Zu Gemerkte Rezepte (In Tab 'Kochen' speichern)"
             onClick={() => handleSwipe("right")}
           >
             <svg
@@ -757,7 +757,7 @@ export function RecipeSwipeDeck({
       {/* Swipe Gesture Hint */}
       {currentRecipe && (
         <p className="swipe-gesture-hint">
-          <span>Wische links zum Überspringen</span> · <span>Wische rechts zum Merken</span>
+          <span>Wische links: Überspringen</span> · <span>Wische rechts: Zu Gemerkte Rezepte (Kochen)</span>
         </p>
       )}
     </div>

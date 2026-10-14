@@ -296,3 +296,28 @@ export function lookupBarcode(barcode: string): OpenFoodFactsProduct | null {
 
   return null;
 }
+
+/**
+ * Universal German pluralization helper.
+ * Example: formatPlural(1, 'Zutat', 'Zutaten') => '1 Zutat'
+ * Example: formatPlural(4, 'Zutat', 'Zutaten') => '4 Zutaten'
+ */
+export function formatPlural(count: number, singular: string, plural: string): string {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+export function formatZutatenCount(count: number): string {
+  return formatPlural(count, 'Zutat', 'Zutaten');
+}
+
+export function formatMahlzeitenCount(count: number): string {
+  return formatPlural(count, 'Mahlzeit', 'Mahlzeiten');
+}
+
+export function formatArtikelCount(count: number): string {
+  return formatPlural(count, 'Artikel', 'Artikel');
+}
+
+export function formatPositionenCount(count: number): string {
+  return formatPlural(count, 'Position', 'Positionen');
+}

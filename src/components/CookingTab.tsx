@@ -149,7 +149,7 @@ export const CookingTab: React.FC<CookingTabProps> = ({
   };
 
   return (
-    <div className="space-y-4 pb-20">
+    <div className="space-y-4 pb-32">
       {/* Top Configuration Card */}
       <div className="bg-slate-800/90 border border-slate-700/80 rounded-2xl p-4 shadow-sm space-y-3.5">
         {/* Servings Segmented Control */}

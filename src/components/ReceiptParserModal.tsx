@@ -3,6 +3,7 @@ import { X, Receipt, Upload, Check, Sparkles, Plus, CheckSquare, Square, FileTex
 import { PantryItem, ReceiptParsedItem } from '../types';
 import { SAMPLE_RECEIPTS } from '../data/mockData';
 import { parseReceiptText, formatCurrency, formatQuantity } from '../utils/helpers';
+import { analyzeReceiptWithGemini } from '../utils/receiptOcr';
 
 interface ReceiptParserModalProps {
   isOpen: boolean;
@@ -24,6 +25,7 @@ export const ReceiptParserModal: React.FC<ReceiptParserModalProps> = ({
   );
   const [hasParsed, setHasParsed] = useState<boolean>(true);
   const [isPhotoSimulated, setIsPhotoSimulated] = useState<boolean>(false);
+  const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
 
   if (!isOpen) return null;
 
@@ -111,21 +113,75 @@ export const ReceiptParserModal: React.FC<ReceiptParserModalProps> = ({
             </div>
           </div>
 
-          {/* Quick Photo Upload Simulation button */}
-          <div className="flex items-center justify-between p-2.5 bg-slate-800/60 rounded-xl border border-slate-700/70 text-xs">
-            <div className="flex items-center gap-2 text-slate-300">
-              <FileText className="w-4 h-4 text-emerald-400" />
-              <span>Kassenbon Foto OCR-Simulation</span>
+          {/* Real Photo Upload & Gemini Vision OCR */}
+          <div className="flex items-center justify-between p-3 bg-slate-800/80 rounded-xl border border-slate-700/80 text-xs">
+            <div className="flex items-center gap-2.5 text-slate-200">
+              <Upload className="w-4 h-4 text-emerald-400" />
+              <div>
+                <span className="font-semibold block">Echtes Bon-Foto hochladen</span>
+                <span className="text-[10px] text-slate-400">Gemini Vision OCR analysiert den Beleg automatisch</span>
+              </div>
             </div>
-            <button
-              onClick={() => {
-                setIsPhotoSimulated(true);
-                handleSelectPreset(0);
-              }}
-              className="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded-lg text-emerald-300 font-medium text-[11px] transition-colors"
-            >
-              Foto simulieren
-            </button>
+            <label className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-white font-semibold text-xs cursor-pointer transition-colors shadow-sm">
+              {isAnalyzing ? 'Analysiert...' : 'Foto wählen'}
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                disabled={isAnalyzing}
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  setIsAnalyzing(true);
+                  const reader = new FileReader();
+                  reader.onload = async (ev) => {
+                    const dataUrl = ev.target?.result as string;
+                    try {
+                      const items = await analyzeReceiptWithGemini({
+                        imageBase64: dataUrl,
+                        mimeType: file.type || 'image/jpeg',
+                      });
+                      if (items.length > 0) {
+                        const categoryMap: Record<string, any> = {
+                          Kühl: 'Kühlschrank',
+                          Trocken: 'Vorratsschrank',
+                          Saucen: 'Gewürze & Saucen',
+                          Tiefkühl: 'Tiefkühl',
+                        };
+                        const unitMap: Record<string, any> = {
+                          g: 'g',
+                          ml: 'ml',
+                          'Stk.': 'stk',
+                          Stk: 'stk',
+                        };
+                        setParsedItems(
+                          items.map((it) => ({
+                            id: it.id,
+                            rawText: `${it.name} ${it.price} €`,
+                            name: it.name,
+                            rawName: it.name,
+                            cleanName: it.name,
+                            quantity: it.amount,
+                            amount: it.amount,
+                            unit: (unitMap[it.unit] || 'g') as any,
+                            price: it.price,
+                            category: categoryMap[it.category] || 'Vorratsschrank',
+                            selected: true,
+                          }))
+                        );
+                        setHasParsed(true);
+                      }
+                    } catch (err) {
+                      console.error('OCR Error:', err);
+                    } finally {
+                      setIsAnalyzing(false);
+                    }
+                  };
+                  reader.readAsDataURL(file);
+                }}
+              />
+            </label>
           </div>
 
           {/* Receipt raw text view / collapsible */}

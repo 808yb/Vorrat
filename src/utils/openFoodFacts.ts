@@ -258,6 +258,150 @@ export const LOCAL_OFF_DATABASE: Record<string, OFFProduct> = {
     carbs: 7.3,
     fat: 0.2,
   },
+  // Nutella 450g / 750g
+  "80133553": {
+    code: "80133553",
+    name: "Nutella Nuss-Nugat-Creme (450g)",
+    brand: "Ferrero",
+    category: "Trocken",
+    amount: 450,
+    total: 450,
+    unit: "g",
+    tone: "sauce",
+    nutriScore: "E",
+    calories: 539,
+    protein: 6.3,
+    carbs: 57.5,
+    fat: 30.9,
+  },
+  // Weihenstephan Frische Milch 3.5%
+  "40084520": {
+    code: "40084520",
+    name: "Weihenstephan Frische Milch 3,5% (1L)",
+    brand: "Weihenstephan",
+    category: "Kühl",
+    amount: 1000,
+    total: 1000,
+    unit: "ml",
+    tone: "milk",
+    nutriScore: "B",
+    calories: 64,
+    protein: 3.4,
+    carbs: 4.8,
+    fat: 3.5,
+  },
+  // Ja! Passierte Tomaten
+  "4388844084795": {
+    code: "4388844084795",
+    name: "Ja! Passierte Tomaten (500g)",
+    brand: "REWE Ja!",
+    category: "Trocken",
+    amount: 500,
+    total: 500,
+    unit: "g",
+    tone: "tomato",
+    nutriScore: "A",
+    calories: 21,
+    protein: 1.2,
+    carbs: 3.5,
+    fat: 0.2,
+  },
+  // Ja! Reine Pflanzenöl / Sonnenblumenöl
+  "4388844073355": {
+    code: "4388844073355",
+    name: "Ja! Sonnenblumenöl (1L)",
+    brand: "REWE Ja!",
+    category: "Saucen",
+    amount: 1000,
+    total: 1000,
+    unit: "ml",
+    tone: "sauce",
+    nutriScore: "C",
+    calories: 828,
+    protein: 0.0,
+    carbs: 0.0,
+    fat: 92.0,
+  },
+  // Barilla Spaghetti n.5
+  "8076802085738": {
+    code: "8076802085738",
+    name: "Barilla Spaghetti n.5 (500g)",
+    brand: "Barilla",
+    category: "Trocken",
+    amount: 500,
+    total: 500,
+    unit: "g",
+    tone: "pasta",
+    nutriScore: "A",
+    calories: 359,
+    protein: 12.0,
+    carbs: 71.2,
+    fat: 2.0,
+  },
+  // Alnatura Bio Hafermilch
+  "4104420216440": {
+    code: "4104420216440",
+    name: "Alnatura Bio Haferdrink Natur (1L)",
+    brand: "Alnatura",
+    category: "Kühl",
+    amount: 1000,
+    total: 1000,
+    unit: "ml",
+    tone: "milk",
+    nutriScore: "B",
+    calories: 45,
+    protein: 1.0,
+    carbs: 7.5,
+    fat: 1.2,
+  },
+  // Dr. Oetker Ristorante Pizza Salame
+  "4001724819706": {
+    code: "4001724819706",
+    name: "Dr. Oetker Ristorante Pizza Salame (320g)",
+    brand: "Dr. Oetker",
+    category: "Tiefkühl",
+    amount: 320,
+    total: 320,
+    unit: "g",
+    tone: "generic",
+    nutriScore: "D",
+    calories: 260,
+    protein: 9.8,
+    carbs: 27.0,
+    fat: 12.0,
+  },
+  // Coca-Cola Original Taste 1L
+  "5449000000996": {
+    code: "5449000000996",
+    name: "Coca-Cola Original Taste (1L)",
+    brand: "Coca-Cola",
+    category: "Trocken",
+    amount: 1000,
+    total: 1000,
+    unit: "ml",
+    tone: "generic",
+    nutriScore: "E",
+    calories: 42,
+    protein: 0.0,
+    carbs: 10.6,
+    fat: 0.0,
+  },
+  // Heinz Tomato Ketchup
+  "8715700421377": {
+    code: "8715700421377",
+    name: "Heinz Tomato Ketchup (500ml)",
+    brand: "Heinz",
+    category: "Saucen",
+    amount: 500,
+    total: 500,
+    unit: "ml",
+    tone: "tomato",
+    nutriScore: "D",
+    calories: 102,
+    protein: 1.2,
+    carbs: 23.2,
+    fat: 0.1,
+  },
 };
 
 // Helper: Map tone and category from API raw food data
@@ -456,22 +600,15 @@ export async function lookupBarcodeFromOFF(rawBarcode: string): Promise<BarcodeL
     };
   }
 
-  // 2. Try online Open Food Facts APIs with timeout
+  // 2. Try online Open Food Facts APIs directly (CORS supported)
   const candidateUrls = [
-    `/api/off/api/v2/product/${cleanCode}.json`,
     `https://world.openfoodfacts.org/api/v2/product/${cleanCode}.json`,
     `https://de.openfoodfacts.org/api/v2/product/${cleanCode}.json`,
   ];
 
   for (const url of candidateUrls) {
     try {
-      const res = await fetchWithTimeout(url, 3500);
-
-      // If HTTP 404, product is definitely not in Open Food Facts
-      if (res.status === 404) {
-        break; // Stop querying, proceed to fallback/not-found
-      }
-
+      const res = await fetchWithTimeout(url, 4000);
       if (res.ok) {
         const data = await res.json();
         if (data.status === 1 && data.product) {
@@ -484,25 +621,35 @@ export async function lookupBarcodeFromOFF(rawBarcode: string): Promise<BarcodeL
         }
       }
     } catch {
-      // Continue to next endpoint or fallback
+      // Continue to next endpoint or Gemini fallback
     }
   }
 
-  // 3. Fallback for valid barcode format: Smart generic template so user is NEVER blocked
+  // 3. Smart Gemini AI Fallback for unknown barcodes or missing database items
+  const geminiProduct = await lookupProductWithGemini(cleanCode);
+  if (geminiProduct) {
+    return {
+      success: true,
+      product: geminiProduct,
+      source: "generated",
+    };
+  }
+
+  // 4. Fallback for valid barcode format: Smart generic template so user is NEVER blocked
   if (/^\d{8,14}$/.test(cleanCode)) {
     const fallbackProduct: OFFProduct = {
       code: cleanCode,
-      name: `Neuer Artikel (${cleanCode.slice(-4)})`,
+      name: `Gescannter Artikel (${cleanCode.slice(-4)})`,
       brand: "Eigenmarke / EAN",
       category: "Trocken",
       amount: 500,
       total: 500,
       unit: "g",
-      tone: "rice",
+      tone: "generic",
       nutriScore: "A",
-      calories: 220,
+      calories: 210,
       protein: 7.5,
-      carbs: 40.0,
+      carbs: 35.0,
       fat: 3.0,
       isCustom: true,
     };
@@ -525,10 +672,79 @@ export async function lookupBarcodeFromOFF(rawBarcode: string): Promise<BarcodeL
 }
 
 /**
+ * Intelligent Gemini AI product detection for unknown barcodes or exotic items
+ */
+export async function lookupProductWithGemini(queryOrBarcode: string): Promise<OFFProduct | null> {
+  const apiKey =
+    (import.meta as any).env?.VITE_GEMINI_API_KEY ||
+    (typeof process !== "undefined" && process.env?.GEMINI_API_KEY) ||
+    "";
+  if (!apiKey) return null;
+
+  try {
+    const prompt = `Analysiere das folgende Lebensmittel oder den Barcode: "${queryOrBarcode}".
+Ermittle realistische deutsche Produktdaten für eine Lebensmittel-Vorrats-App.
+Antworte NUR mit reinem JSON im folgenden Schema:
+{
+  "name": "Prägnanter Produktname mit Mengenangabe (z. B. 'Ja! Passierte Tomaten (500g)')",
+  "brand": "Marke oder Supermarkt (z. B. 'Rewe Ja!', 'Edeka', 'Barilla', 'Bio')",
+  "category": "Kühl" | "Trocken" | "Saucen" | "Tiefkühl",
+  "amount": 500,
+  "unit": "g" | "ml" | "Stk.",
+  "tone": "rice" | "egg" | "sauce" | "peas" | "onion" | "chicken" | "pasta" | "oats" | "milk" | "cheese" | "tomato" | "generic",
+  "nutriScore": "A" | "B" | "C" | "D" | "E",
+  "calories": 150,
+  "protein": 5.0,
+  "carbs": 20.0,
+  "fat": 2.0
+}`;
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { responseMimeType: "application/json" },
+      }),
+    });
+
+    if (!res.ok) return null;
+    const data = await res.json();
+    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!rawText) return null;
+
+    const parsed = JSON.parse(rawText.replace(/^```json/i, "").replace(/^```/, "").replace(/```$/, "").trim());
+    if (parsed && parsed.name) {
+      return {
+        code: queryOrBarcode,
+        name: parsed.name,
+        brand: parsed.brand || "Markenprodukt",
+        category: parsed.category || "Trocken",
+        amount: Number(parsed.amount) || 500,
+        total: Number(parsed.amount) || 500,
+        unit: parsed.unit || "g",
+        tone: parsed.tone || "generic",
+        nutriScore: parsed.nutriScore || "A",
+        calories: Number(parsed.calories) || 180,
+        protein: Number(parsed.protein) || 5,
+        carbs: Number(parsed.carbs) || 25,
+        fat: Number(parsed.fat) || 2,
+        isCustom: false,
+      };
+    }
+  } catch (err) {
+    console.warn("[Gemini Product Lookup] Fehler:", err);
+  }
+  return null;
+}
+
+/**
  * Robust Name Search:
  * 1. Matches local database items instantly.
  * 2. Queries Open Food Facts live search with timeout.
- * 3. Merges results, eliminating duplicates.
+ * 3. Gemini fallback for unknown searches.
+ * 4. Merges results, eliminating duplicates.
  */
 export async function searchProductsInOFF(query: string): Promise<OFFProduct[]> {
   const q = query.trim().toLowerCase();
@@ -545,9 +761,8 @@ export async function searchProductsInOFF(query: string): Promise<OFFProduct[]> 
   // 2. Online search attempt
   let onlineMatches: OFFProduct[] = [];
   const searchUrls = [
-    `/api/off/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=6`,
-    `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=6`,
-    `https://de.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=6`,
+    `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=8`,
+    `https://de.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(query)}&search_simple=1&action=process&json=1&page_size=8`,
   ];
 
   for (const url of searchUrls) {
@@ -575,7 +790,15 @@ export async function searchProductsInOFF(query: string): Promise<OFFProduct[]> 
     }
   }
 
-  // If still completely empty, generate a helpful instant suggestion
+  // 3. If still empty, try Gemini product lookup
+  if (combined.length === 0 && query.trim().length >= 2) {
+    const aiItem = await lookupProductWithGemini(query);
+    if (aiItem) {
+      combined.push(aiItem);
+    }
+  }
+
+  // 4. If still completely empty, generate a helpful instant suggestion
   if (combined.length === 0 && query.trim().length >= 2) {
     const { category, tone } = mapOffCategoriesToApp("", query);
     combined.push({

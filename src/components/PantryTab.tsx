@@ -79,7 +79,7 @@ export const PantryTab: React.FC<PantryTabProps> = ({
   };
 
   return (
-    <div className="space-y-4 pb-20">
+    <div className="space-y-4 pb-32">
       {/* Action Buttons Hub */}
       <div className="grid grid-cols-3 gap-2">
         <button
