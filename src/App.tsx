@@ -593,13 +593,9 @@ const defaultGroceries: GroceryItem[] = [
 function AppHeader({
   onOpenHousehold,
   onOpenCoach,
-  onResetDemo,
-  onOpenReset,
 }: {
   onOpenHousehold: () => void;
   onOpenCoach?: () => void;
-  onResetDemo?: () => void;
-  onOpenReset?: () => void;
 }) {
   return (
     <header className="app-header">
@@ -628,23 +624,6 @@ function AppHeader({
           <span />
           <Icon name="sync" size={14} /> Synced
         </div>
-        {onOpenReset && (
-          <button
-            type="button"
-            className="coach-header-btn"
-            onClick={onOpenReset}
-            title="Vorrat verwalten / Duplikate fixen / Reset"
-            style={{
-              background: "#fff1f2",
-              borderColor: "#fecdd3",
-              color: "#e11d48",
-              padding: "4px 8px",
-            }}
-          >
-            <Icon name="trash" size={13} />
-            <span>Reset</span>
-          </button>
-        )}
       </div>
     </header>
   );
@@ -2679,8 +2658,6 @@ export default function App() {
       <AppHeader
         onOpenHousehold={() => setIsHouseholdModalOpen(true)}
         onOpenCoach={() => setIsCoachModalOpen(true)}
-        onResetDemo={handleResetDemo}
-        onOpenReset={() => setIsResetModalOpen(true)}
       />
 
       {activeTab === "pantry" && (
