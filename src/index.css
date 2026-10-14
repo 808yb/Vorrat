@@ -645,6 +645,25 @@ h2 {
   background: #ecfdf5;
 }
 
+.product-delete-icon-btn {
+  background: transparent;
+  border: 0;
+  padding: 2px 4px;
+  cursor: pointer;
+  color: #94a3b8;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 140ms ease;
+}
+
+.product-delete-icon-btn:hover {
+  color: #dc2626;
+  background: #fef2f2;
+}
+
 .product-sub-row {
   display: flex;
   align-items: center;

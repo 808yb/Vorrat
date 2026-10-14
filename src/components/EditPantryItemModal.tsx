@@ -7,7 +7,7 @@ interface EditPantryItemModalProps {
   item: PantryItem | null;
   onClose: () => void;
   onSave: (updatedItem: PantryItem) => void;
-  onDelete: (id: number) => void;
+  onDelete: (id: number | string) => void;
 }
 
 export function EditPantryItemModal({

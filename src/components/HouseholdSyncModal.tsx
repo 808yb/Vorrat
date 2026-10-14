@@ -7,6 +7,7 @@ interface HouseholdSyncModalProps {
   onNotify?: (msg: string) => void;
   pantryCount: number;
   shoppingCount: number;
+  onOpenReset?: () => void;
 }
 
 export function HouseholdSyncModal({
@@ -15,6 +16,7 @@ export function HouseholdSyncModal({
   onNotify,
   pantryCount,
   shoppingCount,
+  onOpenReset,
 }: HouseholdSyncModalProps) {
   const [householdName, setHouseholdName] = useState(() => {
     try {
@@ -361,6 +363,36 @@ export function HouseholdSyncModal({
               {isSyncing ? "Gleicht ab..." : "Jetzt abgleichen"}
             </button>
           </div>
+
+          {onOpenReset && (
+            <div style={{ paddingTop: "4px", borderTop: "1px dashed #e2e8f0" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenReset();
+                }}
+                style={{
+                  width: "100%",
+                  padding: "9px 12px",
+                  background: "#fef2f2",
+                  border: "1px solid #fecaca",
+                  borderRadius: "12px",
+                  fontSize: "12px",
+                  fontWeight: 700,
+                  color: "#dc2626",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "6px",
+                  transition: "background 150ms ease",
+                }}
+              >
+                <span>⚙️ Vorrat verwalten / Duplikate fixen / Reset</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

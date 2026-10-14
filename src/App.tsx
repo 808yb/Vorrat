@@ -14,6 +14,7 @@ import { HouseholdSyncModal } from "./components/HouseholdSyncModal";
 import { PwaInstallBanner } from "./components/PwaInstallBanner";
 import { RecipeImportModal } from "./components/RecipeImportModal";
 import { NutritionCoachModal } from "./components/NutritionCoachModal";
+import { AccountResetModal } from "./components/AccountResetModal";
 import {
   WeeklyMealPlannerScreen,
   type PlannedMeal,
@@ -262,7 +263,7 @@ function Button({ children, className = "", icon, onClick, title, style, disable
 
 
 export interface PantryItem {
-  id: number;
+  id: number | string;
   name: string;
   category: string;
   amount: number;
@@ -276,6 +277,43 @@ export interface PantryItem {
   carbsPer100g?: number;
   fatPer100g?: number;
   isUnlimited?: boolean;
+}
+
+export function deduplicatePantry(items: PantryItem[]): PantryItem[] {
+  const map = new Map<string, PantryItem>();
+  for (const item of items) {
+    if (!item || !item.name) continue;
+    const key = item.name.trim().toLowerCase();
+    if (map.has(key)) {
+      const existing = map.get(key)!;
+      const isUnlimited = Boolean(
+        existing.isUnlimited ||
+        item.isUnlimited ||
+        key.includes("wasser") ||
+        existing.amount >= 99999 ||
+        item.amount >= 99999
+      );
+      const newAmount = isUnlimited ? 999999 : (Number(existing.amount) || 0) + (Number(item.amount) || 0);
+      const newTotal = isUnlimited ? 999999 : Math.max(Number(existing.total) || 1, newAmount);
+      const mhd = existing.mhd || item.mhd;
+      map.set(key, {
+        ...existing,
+        amount: newAmount,
+        total: newTotal,
+        isUnlimited,
+        mhd,
+      });
+    } else {
+      map.set(key, {
+        ...item,
+        id: item.id !== undefined ? item.id : Date.now() + Math.floor(Math.random() * 1000000),
+      });
+    }
+  }
+  return Array.from(map.values()).map((item, idx) => ({
+    ...item,
+    id: item.id !== undefined ? item.id : idx + 1000,
+  }));
 }
 
 export function formatMhdDisplay(mhd?: string): string {
@@ -556,10 +594,12 @@ function AppHeader({
   onOpenHousehold,
   onOpenCoach,
   onResetDemo,
+  onOpenReset,
 }: {
   onOpenHousehold: () => void;
   onOpenCoach?: () => void;
-  onResetDemo: () => void;
+  onResetDemo?: () => void;
+  onOpenReset?: () => void;
 }) {
   return (
     <header className="app-header">
@@ -588,6 +628,23 @@ function AppHeader({
           <span />
           <Icon name="sync" size={14} /> Synced
         </div>
+        {onOpenReset && (
+          <button
+            type="button"
+            className="coach-header-btn"
+            onClick={onOpenReset}
+            title="Vorrat verwalten / Duplikate fixen / Reset"
+            style={{
+              background: "#fff1f2",
+              borderColor: "#fecdd3",
+              color: "#e11d48",
+              padding: "4px 8px",
+            }}
+          >
+            <Icon name="trash" size={13} />
+            <span>Reset</span>
+          </button>
+        )}
         <Button className="avatar" title="Haushalt & Profil öffnen" onClick={onOpenHousehold}>
           <Icon name="user" size={18} />
         </Button>
@@ -601,13 +658,19 @@ function PantryScreen({
   updateAmount,
   onOpenAddModal,
   onEditItem,
+  onDeleteItem,
+  onOpenReset,
   onCookFromExpiring,
+  onResetDemo,
 }: {
   pantry: PantryItem[];
-  updateAmount: (id: number, delta: number) => void;
+  updateAmount: (id: number | string, delta: number) => void;
   onOpenAddModal: () => void;
   onEditItem: (item: PantryItem) => void;
+  onDeleteItem: (id: number | string) => void;
+  onOpenReset?: () => void;
   onCookFromExpiring?: (urgentItemNames: string[]) => void;
+  onResetDemo?: () => void;
 }) {
   const [filter, setFilter] = useState("Alle");
   const [search, setSearch] = useState("");
@@ -721,7 +784,19 @@ function PantryScreen({
 
       <div className="section-heading">
         <div><h2>Lebensmittel</h2><p>Nach Füllstand sortiert</p></div>
-        <Button className="text-button">Sortieren <Icon name="chevron" size={14} /></Button>
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          {onOpenReset && (
+            <Button
+              className="text-button"
+              onClick={onOpenReset}
+              title="Vorrat verwalten / Duplikate fixen / Reset"
+              style={{ fontSize: "11px", color: "#64748b" }}
+            >
+              <Icon name="sync" size={13} /> Reset
+            </Button>
+          )}
+          <Button className="text-button">Sortieren <Icon name="chevron" size={14} /></Button>
+        </div>
       </div>
 
       <div className="inventory-list">
@@ -743,17 +818,30 @@ function PantryScreen({
                   <div>
                     <div className="product-title-row">
                       <h3>{item.name}</h3>
-                      <button
-                        type="button"
-                        className="product-edit-icon-btn"
-                        title="Vorrat bearbeiten"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onEditItem(item);
-                        }}
-                      >
-                        <Icon name="pencil" size={12} />
-                      </button>
+                      <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
+                        <button
+                          type="button"
+                          className="product-edit-icon-btn"
+                          title="Vorrat bearbeiten"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onEditItem(item);
+                          }}
+                        >
+                          <Icon name="pencil" size={12} />
+                        </button>
+                        <button
+                          type="button"
+                          className="product-delete-icon-btn"
+                          title="Aus Vorrat löschen"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteItem(item.id);
+                          }}
+                        >
+                          <Icon name="trash" size={12} />
+                        </button>
+                      </div>
                     </div>
                     <div className="product-sub-row">
                       <span className="product-cat-pill">{item.category}</span>
@@ -810,6 +898,51 @@ function PantryScreen({
             </article>
           );
         })}
+
+        {visible.length === 0 && (
+          <div
+            style={{
+              padding: "36px 20px",
+              textAlign: "center",
+              background: "#ffffff",
+              borderRadius: "18px",
+              border: "1.5px dashed #cbd5e1",
+              margin: "12px 0",
+            }}
+          >
+            <div
+              style={{
+                width: "48px",
+                height: "48px",
+                borderRadius: "50%",
+                background: "#f1f5f9",
+                color: "#64748b",
+                display: "grid",
+                placeItems: "center",
+                margin: "0 auto 12px",
+              }}
+            >
+              <Icon name="archive" size={24} />
+            </div>
+            <h3 style={{ margin: "0 0 6px", fontSize: "15px", color: "#0f172a", fontWeight: 750 }}>
+              {pantry.length === 0 ? "Keine Lebensmittel im Vorrat" : "Keine Treffer gefunden"}
+            </h3>
+            <p style={{ margin: "0 auto 14px", fontSize: "12.5px", color: "#64748b", maxWidth: "280px" }}>
+              {pantry.length === 0
+                ? "Füge Vorräte über den grünen Plus-Button hinzu oder stelle die Standard-Demo wieder her."
+                : `Keine Vorräte für den Filter «${filter}» vorhanden.`}
+            </p>
+            {pantry.length === 0 && onResetDemo && (
+              <Button
+                className="primary-button"
+                onClick={onResetDemo}
+                style={{ padding: "8px 18px", fontSize: "12.5px", margin: "0 auto", display: "inline-flex" }}
+              >
+                Standard-Demo laden
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
       <Button className="fab" title="Produkt hinzufügen" onClick={onOpenAddModal}>
@@ -1967,6 +2100,8 @@ export default function App() {
     } catch {}
   }, [favorites]);
 
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+
   const [pantry, setPantry] = useState<PantryItem[]>(() => {
     try {
       const saved = localStorage.getItem("forret_design_pantry");
@@ -1974,7 +2109,7 @@ export default function App() {
         const parsed = JSON.parse(saved);
         const hasWater = parsed.some((p: any) => p.name.toLowerCase().includes("wasser"));
         const base = hasWater ? parsed : [...parsed, defaultPantry[6]];
-        return base.map((item: any) => {
+        const enhanced = base.map((item: any) => {
           const specs = getItemNutrientSpecs(item);
           return {
             ...item,
@@ -1985,6 +2120,7 @@ export default function App() {
             fatPer100g: item.fatPer100g !== undefined ? item.fatPer100g : specs.fatPer100g,
           };
         });
+        return deduplicatePantry(enhanced);
       }
     } catch {}
     return defaultPantry;
@@ -2021,13 +2157,14 @@ export default function App() {
   const [editingPantryItem, setEditingPantryItem] = useState<PantryItem | null>(null);
 
   const handleUpdatePantryItem = (updated: PantryItem) => {
-    setPantry((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+    setPantry((prev) => prev.map((item) => (String(item.id) === String(updated.id) ? updated : item)));
     notify(`«${updated.name}» aktualisiert`);
   };
 
-  const handleDeletePantryItem = (id: number) => {
-    const itemToDelete = pantry.find((p) => p.id === id);
-    setPantry((prev) => prev.filter((item) => item.id !== id));
+  const handleDeletePantryItem = (id: number | string) => {
+    const itemToDelete = pantry.find((p) => String(p.id) === String(id));
+    setPantry((prev) => prev.filter((item) => String(item.id) !== String(id)));
+    setEditingPantryItem(null);
     notify(itemToDelete ? `«${itemToDelete.name}» gelöscht` : "Produkt gelöscht");
   };
 
@@ -2170,10 +2307,10 @@ export default function App() {
     } catch {}
   }, [groceries]);
 
-  const updateAmount = (id: number, delta: number) => {
+  const updateAmount = (id: number | string, delta: number) => {
     setPantry((items) =>
       items.map((item) => {
-        if (item.id === id) {
+        if (String(item.id) === String(id)) {
           if (item.isUnlimited || item.name.toLowerCase().includes("wasser")) return item;
           const next = Math.max(0, Math.min(item.total, item.amount + delta));
           return { ...item, amount: next };
@@ -2311,7 +2448,7 @@ export default function App() {
         const match = findMatchingPantryItem(grocery.name, updatedPantry);
 
         if (match) {
-          const matchIdx = updatedPantry.findIndex((p) => p.id === match.id);
+          const matchIdx = updatedPantry.findIndex((p) => String(p.id) === String(match.id));
           if (matchIdx >= 0) {
             const existing = updatedPantry[matchIdx];
             const newAmount = existing.amount + parsed.amount;
@@ -2420,14 +2557,66 @@ export default function App() {
   };
 
   const handleAddProduct = (item: Omit<PantryItem, "id">) => {
-    setPantry((prev) => [...prev, { ...item, id: Date.now() }]);
-    notify(`${item.name} zum Vorrat hinzugefügt`);
+    const normName = item.name.trim().toLowerCase();
+    setPantry((prev) => {
+      const existingIdx = prev.findIndex((p) => p.name.trim().toLowerCase() === normName);
+      if (existingIdx >= 0) {
+        const updated = [...prev];
+        const existing = updated[existingIdx];
+        const newAmount = (Number(existing.amount) || 0) + (Number(item.amount) || 0);
+        updated[existingIdx] = {
+          ...existing,
+          amount: newAmount,
+          total: Math.max(Number(existing.total) || 0, newAmount),
+          unit: item.unit || existing.unit,
+          mhd: item.mhd || existing.mhd,
+        };
+        return updated;
+      }
+      const uniqueId = Date.now() + Math.floor(Math.random() * 1000000);
+      return [...prev, { ...item, id: uniqueId }];
+    });
+    notify(`«${item.name}» im Vorrat erfasst`);
   };
 
   const handleResetDemo = () => {
     setPantry(defaultPantry);
     setGroceries(defaultGroceries);
-    notify("Demo-Bestände zurückgesetzt");
+    try {
+      localStorage.setItem("forret_design_pantry", JSON.stringify(defaultPantry));
+      localStorage.setItem("forret_design_groceries", JSON.stringify(defaultGroceries));
+    } catch {}
+    notify("Standard-Demo Vorrat & Einkaufsliste wiederhergestellt!");
+  };
+
+  const handleClearPantry = () => {
+    setPantry([]);
+    try {
+      localStorage.setItem("forret_design_pantry", JSON.stringify([]));
+    } catch {}
+    notify("Vorrat komplett geleert (0 Produkte)");
+  };
+
+  const handleDeduplicatePantry = () => {
+    setPantry((prev) => {
+      const cleaned = deduplicatePantry(prev);
+      try {
+        localStorage.setItem("forret_design_pantry", JSON.stringify(cleaned));
+      } catch {}
+      return cleaned;
+    });
+    notify("Duplikate erfolgreich zusammengeführt & bereinigt!");
+  };
+
+  const handleFullReset = () => {
+    setPantry(defaultPantry);
+    setGroceries(defaultGroceries);
+    try {
+      localStorage.clear();
+      localStorage.setItem("forret_design_pantry", JSON.stringify(defaultPantry));
+      localStorage.setItem("forret_design_groceries", JSON.stringify(defaultGroceries));
+    } catch {}
+    notify("Gesamter App-Speicher zurückgesetzt!");
   };
 
   const toggleFavorite = (recipeId: string, recipeTitle: string) => {
@@ -2491,6 +2680,7 @@ export default function App() {
         onOpenHousehold={() => setIsHouseholdModalOpen(true)}
         onOpenCoach={() => setIsCoachModalOpen(true)}
         onResetDemo={handleResetDemo}
+        onOpenReset={() => setIsResetModalOpen(true)}
       />
 
       {activeTab === "pantry" && (
@@ -2499,7 +2689,10 @@ export default function App() {
           updateAmount={updateAmount}
           onOpenAddModal={() => setIsAddModalOpen(true)}
           onEditItem={(item) => setEditingPantryItem(item)}
+          onDeleteItem={handleDeletePantryItem}
+          onOpenReset={() => setIsResetModalOpen(true)}
           onCookFromExpiring={handleCookFromExpiring}
+          onResetDemo={handleResetDemo}
         />
       )}
 
@@ -2596,6 +2789,20 @@ export default function App() {
         onNotify={notify}
         pantryCount={pantry.length}
         shoppingCount={groceries.length}
+        onOpenReset={() => setIsResetModalOpen(true)}
+      />
+
+      {/* Account / Pantry Reset & Deduplication Modal */}
+      <AccountResetModal
+        isOpen={isResetModalOpen}
+        onClose={() => setIsResetModalOpen(false)}
+        pantryCount={pantry.length}
+        shoppingCount={groceries.length}
+        onResetDemo={handleResetDemo}
+        onClearPantry={handleClearPantry}
+        onDeduplicate={handleDeduplicatePantry}
+        onFullReset={handleFullReset}
+        onNotify={notify}
       />
 
       {/* Unified Add Modal (Plus Button: Kamera, Bon, DB-Suche oder Manuell) */}
