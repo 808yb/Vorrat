@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { Users, Cloud, CloudUpload, CloudDownload, LogIn, UserPlus, LogOut, Database, AlertCircle, CheckCircle2, RefreshCw } from "lucide-react";
+import { Users, Cloud, CloudUpload, CloudDownload, LogIn, UserPlus, LogOut, Database, AlertCircle, CheckCircle2, RefreshCw, Key } from "lucide-react";
 import {
   getSupabaseConfig,
+  saveSupabaseConfig,
   getCurrentUser,
   signInWithEmail,
   signUpWithEmail,
@@ -10,6 +11,7 @@ import {
   fetchUserDataFromSupabase,
   SUPABASE_SQL_SETUP,
   DEFAULT_SUPABASE_PROJECT_ID,
+  DEFAULT_SUPABASE_URL,
   type VorratSyncPayload,
 } from "../utils/supabaseClient";
 
@@ -68,7 +70,8 @@ export function HouseholdSyncModal({
   const [lastSyncTime, setLastSyncTime] = useState("Gerade eben");
 
   // Supabase State
-  const [supabaseConfig] = useState(getSupabaseConfig());
+  const [supabaseConfig, setSupabaseConfig] = useState(getSupabaseConfig());
+  const [anonKeyInput, setAnonKeyInput] = useState(supabaseConfig.anonKey || "");
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [authMode, setAuthMode] = useState<"login" | "signup">("login");
   const [authEmail, setAuthEmail] = useState("");
@@ -123,12 +126,42 @@ export function HouseholdSyncModal({
     } catch {}
   };
 
+  const handleSaveAnonKey = (keyToSave?: string) => {
+    const key = (keyToSave || anonKeyInput).trim();
+    if (!key) {
+      setAuthError("Bitte füge deinen Supabase Anon Key ein.");
+      return;
+    }
+    saveSupabaseConfig(DEFAULT_SUPABASE_URL, key);
+    const updated = getSupabaseConfig();
+    setSupabaseConfig(updated);
+    setAnonKeyInput(updated.anonKey);
+    setAuthError(null);
+    if (onNotify) onNotify("✓ Supabase Anon Key gespeichert & aktiviert!");
+  };
+
   // Supabase Auth Handlers
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!authEmail.trim() || !authPassword.trim()) {
       setAuthError("Bitte E-Mail und Passwort eingeben.");
       return;
+    }
+
+    // Auto-save key if entered in the modal
+    if (!supabaseConfig.isConfigured) {
+      if (anonKeyInput.trim()) {
+        saveSupabaseConfig(DEFAULT_SUPABASE_URL, anonKeyInput.trim());
+        const updated = getSupabaseConfig();
+        setSupabaseConfig(updated);
+        if (!updated.isConfigured) {
+          setAuthError("Ungültiger Anon Key. Bitte überprüfe den Key aus deinem Supabase Dashboard.");
+          return;
+        }
+      } else {
+        setAuthError("Bitte füge unten deinen Supabase Anon Key (aus dem Supabase Dashboard) ein.");
+        return;
+      }
     }
 
     setAuthLoading(true);
@@ -513,8 +546,8 @@ export function HouseholdSyncModal({
                 </form>
               )}
 
-              {/* Pre-configured Supabase Direct Status */}
-              <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "14px", padding: "13px 14px" }}>
+              {/* Pre-configured Supabase Direct Status & Key Input */}
+              <div style={{ background: "#ffffff", border: `1px solid ${supabaseConfig.isConfigured ? "#e2e8f0" : "#fcd34d"}`, borderRadius: "14px", padding: "13px 14px" }}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "9px" }}>
                     <div
@@ -522,8 +555,8 @@ export function HouseholdSyncModal({
                         width: "28px",
                         height: "28px",
                         borderRadius: "8px",
-                        background: "#ecfdf5",
-                        color: "#059669",
+                        background: supabaseConfig.isConfigured ? "#ecfdf5" : "#fef3c7",
+                        color: supabaseConfig.isConfigured ? "#059669" : "#d97706",
                         display: "grid",
                         placeItems: "center",
                       }}
@@ -533,7 +566,7 @@ export function HouseholdSyncModal({
                     <div>
                       <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                         <span style={{ fontSize: "12px", fontWeight: 750, color: "#0f172a" }}>
-                          Supabase Cloud direkt aktiv
+                          {supabaseConfig.isConfigured ? "Supabase Cloud direkt aktiv" : "Anon Key erforderlich"}
                         </span>
                         <span
                           style={{
@@ -541,14 +574,20 @@ export function HouseholdSyncModal({
                             fontWeight: 750,
                             padding: "1px 6px",
                             borderRadius: "5px",
-                            background: "#dcfce7",
-                            color: "#15803d",
+                            background: supabaseConfig.isConfigured ? "#dcfce7" : "#fef08a",
+                            color: supabaseConfig.isConfigured ? "#15803d" : "#854d0e",
                             display: "inline-flex",
                             alignItems: "center",
                             gap: "3px",
                           }}
                         >
-                          <CheckCircle2 size={10} /> Direkt eingerichtet
+                          {supabaseConfig.isConfigured ? (
+                            <>
+                              <CheckCircle2 size={10} /> Direkt eingerichtet
+                            </>
+                          ) : (
+                            "Key einfügen"
+                          )}
                         </span>
                       </div>
                       <div style={{ fontSize: "10.5px", color: "#64748b", fontFamily: "monospace", marginTop: "1px" }}>
@@ -574,6 +613,52 @@ export function HouseholdSyncModal({
                     {showSqlDetails ? "SQL Info ▲" : "SQL Info ▼"}
                   </button>
                 </div>
+
+                {/* If anon key is missing, show convenient 1-tap paste & activate box */}
+                {!supabaseConfig.isConfigured && (
+                  <div style={{ marginTop: "10px", paddingTop: "10px", borderTop: "1px solid #fef3c7" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "5px", marginBottom: "4px" }}>
+                      <Key size={12} style={{ color: "#d97706" }} />
+                      <label style={{ fontSize: "10.5px", fontWeight: 750, color: "#92400e" }}>
+                        Anon Public Key hier einfügen (aus Supabase Settings ➔ API):
+                      </label>
+                    </div>
+                    <div style={{ display: "flex", gap: "6px" }}>
+                      <input
+                        type="password"
+                        value={anonKeyInput}
+                        onChange={(e) => setAnonKeyInput(e.target.value)}
+                        placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                        style={{
+                          flex: 1,
+                          padding: "7px 10px",
+                          borderRadius: "8px",
+                          border: "1px solid #cbd5e1",
+                          fontSize: "11px",
+                          outline: "none",
+                          background: "#ffffff",
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleSaveAnonKey()}
+                        style={{
+                          padding: "7px 12px",
+                          background: "#059669",
+                          color: "white",
+                          border: "none",
+                          borderRadius: "8px",
+                          fontSize: "11.5px",
+                          fontWeight: 750,
+                          cursor: "pointer",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        Aktivieren
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {showSqlDetails && (
                   <div style={{ marginTop: "10px", paddingTop: "10px", borderTop: "1px solid #f1f5f9", display: "flex", flexDirection: "column", gap: "8px" }}>

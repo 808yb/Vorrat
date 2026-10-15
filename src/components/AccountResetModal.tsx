@@ -162,9 +162,6 @@ export function AccountResetModal({
                   <strong style={{ fontSize: "13.5px", color: "#7f1d1d", fontWeight: 800 }}>
                     Kompletten Account leeren (Alles auf 0)
                   </strong>
-                  <span style={{ fontSize: "9px", fontWeight: 800, background: "#fee2e2", color: "#991b1b", padding: "1px 6px", borderRadius: "4px" }}>
-                    Kompletter Neustart
-                  </span>
                 </div>
                 <p style={{ margin: "3px 0 8px", fontSize: "11.5px", color: "#991b1b", lineHeight: 1.4 }}>
                   Löscht <strong>alle Vorräte, alle eigenen Rezepte, die gesamte Einkaufsliste, den Wochenplan</strong> und den Coach-Verlauf. Startet mit einer absolut frischen, leeren Küche.
