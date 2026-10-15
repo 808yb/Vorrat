@@ -84,6 +84,21 @@ export interface VorratSyncPayload {
   favorites?: unknown[];
 }
 
+export function normalizeUsernameToEmail(input: string): string {
+  const trimmed = input.trim().toLowerCase();
+  if (trimmed.includes("@")) return trimmed;
+  const clean = trimmed.replace(/[^a-z0-9._-]/g, "");
+  return `${clean || "kueche"}@vorrat.internal`;
+}
+
+export function displayUsernameFromEmail(emailOrUser?: string | null): string {
+  if (!emailOrUser) return "";
+  if (emailOrUser.endsWith("@vorrat.internal")) {
+    return emailOrUser.replace("@vorrat.internal", "");
+  }
+  return emailOrUser;
+}
+
 export async function getCurrentUser(): Promise<User | null> {
   const supabase = getSupabaseClient();
   if (!supabase) return null;
@@ -91,22 +106,24 @@ export async function getCurrentUser(): Promise<User | null> {
   return data.user;
 }
 
-export async function signInWithEmail(email: string, pass: string) {
+export async function signInWithEmail(usernameOrEmail: string, pass: string) {
   const supabase = getSupabaseClient();
   if (!supabase) throw new Error("Supabase ist noch nicht konfiguriert.");
+  const email = normalizeUsernameToEmail(usernameOrEmail);
   const { data, error } = await supabase.auth.signInWithPassword({
-    email: email.trim(),
+    email,
     password: pass,
   });
   if (error) throw error;
   return data;
 }
 
-export async function signUpWithEmail(email: string, pass: string) {
+export async function signUpWithEmail(usernameOrEmail: string, pass: string) {
   const supabase = getSupabaseClient();
   if (!supabase) throw new Error("Supabase ist noch nicht konfiguriert.");
+  const email = normalizeUsernameToEmail(usernameOrEmail);
   const { data, error } = await supabase.auth.signUp({
-    email: email.trim(),
+    email,
     password: pass,
   });
   if (error) throw error;

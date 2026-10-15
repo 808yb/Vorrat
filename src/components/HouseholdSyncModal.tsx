@@ -12,6 +12,7 @@ import {
   SUPABASE_SQL_SETUP,
   DEFAULT_SUPABASE_PROJECT_ID,
   DEFAULT_SUPABASE_URL,
+  displayUsernameFromEmail,
   type VorratSyncPayload,
 } from "../utils/supabaseClient";
 
@@ -144,7 +145,7 @@ export function HouseholdSyncModal({
   const handleAuthSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!authEmail.trim() || !authPassword.trim()) {
-      setAuthError("Bitte E-Mail und Passwort eingeben.");
+      setAuthError("Bitte Benutzername und Passwort eingeben.");
       return;
     }
 
@@ -170,12 +171,14 @@ export function HouseholdSyncModal({
     try {
       if (authMode === "login") {
         const { user } = await signInWithEmail(authEmail, authPassword);
-        setCurrentUserEmail(user?.email || authEmail);
-        if (onNotify) onNotify(`Eingeloggt als ${user?.email || authEmail}!`);
+        const email = user?.email || authEmail;
+        setCurrentUserEmail(email);
+        if (onNotify) onNotify(`Eingeloggt als ${displayUsernameFromEmail(email)}!`);
       } else {
         const { user } = await signUpWithEmail(authEmail, authPassword);
-        setCurrentUserEmail(user?.email || authEmail);
-        if (onNotify) onNotify("Account erfolgreich erstellt!");
+        const email = user?.email || authEmail;
+        setCurrentUserEmail(email);
+        if (onNotify) onNotify(`Account «${displayUsernameFromEmail(email)}» erfolgreich erstellt!`);
       }
       setAuthEmail("");
       setAuthPassword("");
@@ -279,7 +282,7 @@ export function HouseholdSyncModal({
                   }}
                 />
                 <span style={{ fontSize: "11px", color: currentUserEmail ? "#059669" : "#64748b", fontWeight: 650 }}>
-                  {currentUserEmail ? `Verbunden: ${currentUserEmail}` : "Supabase PostgreSQL Sync"}
+                  {currentUserEmail ? `Verbunden: ${displayUsernameFromEmail(currentUserEmail)}` : "Supabase PostgreSQL Sync"}
                 </span>
               </div>
             </div>
@@ -359,7 +362,7 @@ export function HouseholdSyncModal({
                         Eingeloggter Account
                       </span>
                       <strong style={{ display: "block", fontSize: "14px", color: "#0f172a", marginTop: "2px" }}>
-                        {currentUserEmail}
+                        {displayUsernameFromEmail(currentUserEmail)}
                       </strong>
                     </div>
                     <button
@@ -479,10 +482,12 @@ export function HouseholdSyncModal({
 
                   <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                     <input
-                      type="email"
+                      type="text"
                       value={authEmail}
                       onChange={(e) => setAuthEmail(e.target.value)}
-                      placeholder="E-Mail-Adresse"
+                      placeholder="Benutzername (z. B. ldaisys oder unserekueche)"
+                      autoCapitalize="none"
+                      autoCorrect="off"
                       required
                       style={{
                         padding: "9px 12px",
@@ -539,7 +544,7 @@ export function HouseholdSyncModal({
                       {authLoading
                         ? "Verbinde..."
                         : authMode === "login"
-                        ? "Mit Supabase einloggen"
+                        ? "Mit Benutzername einloggen"
                         : "Account jetzt registrieren"}
                     </button>
                   </div>
