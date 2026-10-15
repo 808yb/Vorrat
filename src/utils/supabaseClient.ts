@@ -180,22 +180,32 @@ export async function fetchUserDataFromSupabase(): Promise<VorratSyncPayload | n
   };
 }
 
-export const SUPABASE_SQL_SETUP = `-- Supabase Table Setup für Vorrat
+export const SUPABASE_SQL_SETUP = `-- Supabase Table Setup & RLS für Vorrat (Projekt: auwrcldqfapejhdwjzbg)
+create extension if not exists "uuid-ossp";
+
 create table if not exists public.vorrat_user_data (
   user_id uuid primary key references auth.users(id) on delete cascade,
-  household_name text default 'Unsere Küche',
-  pantry jsonb default '[]'::jsonb,
-  groceries jsonb default '[]'::jsonb,
-  custom_recipes jsonb default '[]'::jsonb,
-  meal_plan jsonb default '[]'::jsonb,
-  favorites jsonb default '[]'::jsonb,
+  household_name text default 'Unsere Küche' not null,
+  pantry jsonb default '[]'::jsonb not null,
+  groceries jsonb default '[]'::jsonb not null,
+  custom_recipes jsonb default '[]'::jsonb not null,
+  meal_plan jsonb default '[]'::jsonb not null,
+  favorites jsonb default '[]'::jsonb not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
 -- Row Level Security (RLS)
 alter table public.vorrat_user_data enable row level security;
 
-create policy "Users can manage their own pantry data"
-  on public.vorrat_user_data
-  for all using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);`;
+create policy "Users can view their own vorrat data"
+  on public.vorrat_user_data for select using (auth.uid() = user_id);
+
+create policy "Users can insert their own vorrat data"
+  on public.vorrat_user_data for insert with check (auth.uid() = user_id);
+
+create policy "Users can update their own vorrat data"
+  on public.vorrat_user_data for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create policy "Users can delete their own vorrat data"
+  on public.vorrat_user_data for delete using (auth.uid() = user_id);`;
