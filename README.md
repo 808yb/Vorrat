@@ -49,25 +49,6 @@ Eine moderne Web-App zur intelligenten Vorratsverwaltung, Budgetplanung und Anti
 
 ---
 
-## Deployment (Online gehen)
-
-### Option A: Vercel (Empfohlen)
-1. Gehe auf [vercel.com](https://vercel.com) und verbinde deinen GitHub-Account.
-2. Wähle das Repository `808yb/Vorrat` aus.
-3. Füge unter **Environment Variables** folgende Variable hinzu:
-   - **Key:** `VITE_GEMINI_API_KEY`
-   - **Value:** `[Dein Gemini API Key]`
-4. Klicke auf **Deploy**. Vercel baut und hostet die Vite-App automatisch.
-
-### Option B: Netlify
-1. Gehe auf [netlify.com](https://netlify.com) und erstelle eine neue Site aus dem GitHub-Repo.
-2. Build Command: `npm run build`
-3. Publish Directory: `dist`
-4. Setze `VITE_GEMINI_API_KEY` in den Environment Variables.
-5. Klicke auf **Deploy**.
-
----
-
 ## Tech Stack
 
 - **Frontend:** React 19, TypeScript, Vite
