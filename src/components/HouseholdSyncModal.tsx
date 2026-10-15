@@ -28,6 +28,7 @@ interface HouseholdSyncModalProps {
   mealPlanData?: unknown[];
   onRestoreData?: (payload: VorratSyncPayload) => void;
   onOpenReset?: () => void;
+  onAuthChange?: (isLoggedIn: boolean) => void;
 }
 
 export function HouseholdSyncModal({
@@ -42,6 +43,7 @@ export function HouseholdSyncModal({
   mealPlanData = [],
   onRestoreData,
   onOpenReset,
+  onAuthChange,
 }: HouseholdSyncModalProps) {
   const [activeTab, setActiveTab] = useState<"link" | "cloud">("cloud");
 
@@ -90,9 +92,12 @@ export function HouseholdSyncModal({
   const checkUser = async () => {
     try {
       const user = await getCurrentUser();
-      setCurrentUserEmail(user?.email || null);
+      const email = user?.email || null;
+      setCurrentUserEmail(email);
+      onAuthChange?.(Boolean(email));
     } catch {
       setCurrentUserEmail(null);
+      onAuthChange?.(false);
     }
   };
 
@@ -177,12 +182,36 @@ export function HouseholdSyncModal({
         const { user } = await signInWithEmail(authEmail, authPassword);
         const email = user?.email || authEmail;
         setCurrentUserEmail(email);
-        if (onNotify) onNotify(`Eingeloggt als ${displayUsernameFromEmail(email)}!`);
+        try {
+          const cloudData = await fetchUserDataFromSupabase();
+          if (cloudData && onRestoreData) {
+            onRestoreData(cloudData);
+            if (cloudData.householdName) {
+              handleSaveName(cloudData.householdName);
+            }
+          }
+        } catch (fetchErr) {
+          console.warn("Auto-restore after login:", fetchErr);
+        }
+        onAuthChange?.(true);
+        if (onNotify) onNotify(`✓ Eingeloggt als ${displayUsernameFromEmail(email)} – Vorrat synchronisiert!`);
       } else {
         const { user } = await signUpWithEmail(authEmail, authPassword);
         const email = user?.email || authEmail;
         setCurrentUserEmail(email);
-        if (onNotify) onNotify(`Account «${displayUsernameFromEmail(email)}» erfolgreich erstellt!`);
+        try {
+          await backupUserDataToSupabase({
+            householdName,
+            pantry: pantryData,
+            groceries: groceriesData,
+            customRecipes: customRecipesData,
+            mealPlan: mealPlanData,
+          });
+        } catch (saveErr) {
+          console.warn("Auto-save on signup:", saveErr);
+        }
+        onAuthChange?.(true);
+        if (onNotify) onNotify(`✓ Account «${displayUsernameFromEmail(email)}» erstellt & synchronisiert!`);
       }
       setAuthEmail("");
       setAuthPassword("");
@@ -198,6 +227,7 @@ export function HouseholdSyncModal({
   const handleSignOut = async () => {
     await signOut();
     setCurrentUserEmail(null);
+    onAuthChange?.(false);
     if (onNotify) onNotify("Erfolgreich abgemeldet.");
   };
 
@@ -391,8 +421,40 @@ export function HouseholdSyncModal({
                     </button>
                   </div>
 
+                  {/* Auto-Sync Live Status */}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      background: "rgba(16, 185, 129, 0.08)",
+                      border: "1px solid rgba(16, 185, 129, 0.2)",
+                      borderRadius: "10px",
+                      padding: "8px 12px",
+                      fontSize: "11.5px",
+                      color: "#047857",
+                      fontWeight: 650,
+                      marginTop: "6px",
+                      marginBottom: "12px",
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: "8px",
+                        height: "8px",
+                        borderRadius: "50%",
+                        background: "#10b981",
+                        boxShadow: "0 0 6px rgba(16,185,129,0.8)",
+                        flexShrink: 0,
+                      }}
+                    />
+                    <span>
+                      <strong>Automatischer Cloud-Sync aktiv:</strong> Jede Änderung an Vorrat & Einkaufsliste wird automatisch in Echtzeit gesichert.
+                    </span>
+                  </div>
+
                   {/* Backup & Restore Controls */}
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginTop: "12px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
                     <button
                       type="button"
                       disabled={isSyncing}

@@ -11,6 +11,11 @@ import { UnifiedAddModal } from "./components/UnifiedAddModal";
 import { EditPantryItemModal } from "./components/EditPantryItemModal";
 import { SavedMealsScreen } from "./components/SavedMealsScreen";
 import { HouseholdSyncModal } from "./components/HouseholdSyncModal";
+import {
+  backupUserDataToSupabase,
+  fetchUserDataFromSupabase,
+  getCurrentUser,
+} from "./utils/supabaseClient";
 import { PwaInstallBanner } from "./components/PwaInstallBanner";
 import { RecipeImportModal } from "./components/RecipeImportModal";
 import { NutritionCoachModal } from "./components/NutritionCoachModal";
@@ -593,9 +598,13 @@ const defaultGroceries: GroceryItem[] = [
 function AppHeader({
   onOpenHousehold,
   onOpenCoach,
+  isCloudSyncing = false,
+  hasCloudUser = false,
 }: {
   onOpenHousehold: () => void;
   onOpenCoach?: () => void;
+  isCloudSyncing?: boolean;
+  hasCloudUser?: boolean;
 }) {
   return (
     <header className="app-header">
@@ -616,13 +625,20 @@ function AppHeader({
           </button>
         )}
         <div
-          className="sync-state"
+          className={`sync-state ${hasCloudUser ? "cloud-live" : ""} ${isCloudSyncing ? "syncing" : ""}`}
           onClick={onOpenHousehold}
-          title="Haushalt & Mitbewohner einladen (Cloud-Sync)"
+          title={
+            hasCloudUser
+              ? isCloudSyncing
+                ? "Synchronisiere mit Supabase Cloud..."
+                : "Live Cloud-Sync aktiv (Supabase)"
+              : "Haushalt & Cloud-Sync einrichten"
+          }
           style={{ cursor: "pointer" }}
         >
           <span />
-          <Icon name="sync" size={14} /> Synced
+          <Icon name="sync" size={14} className={isCloudSyncing ? "spin-sync" : ""} />
+          {hasCloudUser ? (isCloudSyncing ? "Sync..." : "Live") : "Synced"}
         </div>
       </div>
     </header>
@@ -2254,6 +2270,77 @@ export default function App() {
   const [isCoachModalOpen, setIsCoachModalOpen] = useState(false);
   const [toast, setToast] = useState("");
 
+  // Supabase Auto-Sync State
+  const [hasCloudUser, setHasCloudUser] = useState(false);
+  const [isCloudSyncing, setIsCloudSyncing] = useState(false);
+  const isInitialCloudLoadedRef = useRef(false);
+
+  // Auto-fetch from Supabase on mount if user is logged in
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const user = await getCurrentUser();
+        if (user && isMounted) {
+          setHasCloudUser(true);
+          setIsCloudSyncing(true);
+          const cloudData = await fetchUserDataFromSupabase();
+          if (cloudData && isMounted) {
+            if (Array.isArray(cloudData.pantry) && cloudData.pantry.length > 0) {
+              setPantry(cloudData.pantry as PantryItem[]);
+            }
+            if (Array.isArray(cloudData.groceries)) {
+              setGroceries(cloudData.groceries as GroceryItem[]);
+            }
+            if (Array.isArray(cloudData.customRecipes)) {
+              setCustomRecipes(cloudData.customRecipes as CatalogRecipe[]);
+            }
+            if (Array.isArray(cloudData.mealPlan)) {
+              setPlannedMeals(cloudData.mealPlan as PlannedMeal[]);
+            }
+            if (Array.isArray(cloudData.favorites)) {
+              setFavorites(cloudData.favorites as string[]);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Auto-sync fetch on mount error:", err);
+      } finally {
+        if (isMounted) {
+          setIsCloudSyncing(false);
+          isInitialCloudLoadedRef.current = true;
+        }
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Debounced auto-save to Supabase when inventory/planner/recipes change
+  useEffect(() => {
+    if (!hasCloudUser || !isInitialCloudLoadedRef.current) return;
+
+    const timer = setTimeout(async () => {
+      setIsCloudSyncing(true);
+      try {
+        await backupUserDataToSupabase({
+          pantry,
+          groceries,
+          customRecipes,
+          mealPlan: plannedMeals,
+          favorites,
+        });
+      } catch (err) {
+        console.warn("Auto-save to Supabase error:", err);
+      } finally {
+        setIsCloudSyncing(false);
+      }
+    }, 2000);
+
+    return () => clearTimeout(timer);
+  }, [pantry, groceries, customRecipes, plannedMeals, favorites, hasCloudUser]);
+
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
   const handleCookFromExpiring = (urgentItemNames: string[]) => {
@@ -2676,6 +2763,8 @@ export default function App() {
       <AppHeader
         onOpenHousehold={() => setIsHouseholdModalOpen(true)}
         onOpenCoach={() => setIsCoachModalOpen(true)}
+        isCloudSyncing={isCloudSyncing}
+        hasCloudUser={hasCloudUser}
       />
 
       {activeTab === "pantry" && (
@@ -2788,6 +2877,7 @@ export default function App() {
         groceriesData={groceries}
         customRecipesData={customRecipes}
         mealPlanData={plannedMeals}
+        onAuthChange={(isLoggedIn) => setHasCloudUser(isLoggedIn)}
         onRestoreData={(cloud) => {
           if (Array.isArray(cloud.pantry)) setPantry(cloud.pantry as PantryItem[]);
           if (Array.isArray(cloud.groceries)) setGroceries(cloud.groceries as GroceryItem[]);
