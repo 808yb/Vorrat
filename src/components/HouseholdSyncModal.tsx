@@ -485,7 +485,7 @@ export function HouseholdSyncModal({
                       type="text"
                       value={authEmail}
                       onChange={(e) => setAuthEmail(e.target.value)}
-                      placeholder="Benutzername (z. B. ldaisys oder unserekueche)"
+                      placeholder="Benutzername (z. B. wg-mitte oder unserekueche)"
                       autoCapitalize="none"
                       autoCorrect="off"
                       required
