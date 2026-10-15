@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Users, Cloud, CloudUpload, CloudDownload, LogIn, UserPlus, LogOut, Database, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Users, Cloud, CloudUpload, CloudDownload, LogIn, UserPlus, LogOut, Database, AlertCircle, CheckCircle2, RefreshCw } from "lucide-react";
 import {
   getSupabaseConfig,
   getCurrentUser,
