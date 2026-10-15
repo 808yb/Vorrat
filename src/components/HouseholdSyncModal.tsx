@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { RefreshCw, Users, Check, Copy, X, Cloud, CloudUpload, CloudDownload, LogIn, UserPlus, LogOut, Key, ShieldCheck, Database, AlertCircle } from "lucide-react";
+import { Users, Cloud, CloudUpload, CloudDownload, LogIn, UserPlus, LogOut, Database, AlertCircle, CheckCircle2 } from "lucide-react";
 import {
   getSupabaseConfig,
-  saveSupabaseConfig,
   getCurrentUser,
   signInWithEmail,
   signUpWithEmail,
@@ -10,6 +9,7 @@ import {
   backupUserDataToSupabase,
   fetchUserDataFromSupabase,
   SUPABASE_SQL_SETUP,
+  DEFAULT_SUPABASE_PROJECT_ID,
   type VorratSyncPayload,
 } from "../utils/supabaseClient";
 
@@ -68,17 +68,15 @@ export function HouseholdSyncModal({
   const [lastSyncTime, setLastSyncTime] = useState("Gerade eben");
 
   // Supabase State
-  const [supabaseConfig, setSupabaseConfig] = useState(getSupabaseConfig());
+  const [supabaseConfig] = useState(getSupabaseConfig());
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [authMode, setAuthMode] = useState<"login" | "signup">("login");
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [showConfigDrawer, setShowConfigDrawer] = useState(false);
-  const [configUrl, setConfigUrl] = useState(supabaseConfig.url);
-  const [configAnonKey, setConfigAnonKey] = useState(supabaseConfig.anonKey);
   const [sqlCopied, setSqlCopied] = useState(false);
+  const [showSqlDetails, setShowSqlDetails] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -137,15 +135,6 @@ export function HouseholdSyncModal({
     setAuthError(null);
 
     try {
-      if (!supabaseConfig.isConfigured) {
-        // Automatically save default mock config if empty or prompt user
-        saveSupabaseConfig(
-          "https://your-project.supabase.co",
-          "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.dummy_anon_key"
-        );
-        setSupabaseConfig(getSupabaseConfig());
-      }
-
       if (authMode === "login") {
         const { user } = await signInWithEmail(authEmail, authPassword);
         setCurrentUserEmail(user?.email || authEmail);
@@ -217,16 +206,6 @@ export function HouseholdSyncModal({
     }
   };
 
-  const handleSaveCustomConfig = () => {
-    if (!configUrl.trim() || !configAnonKey.trim()) {
-      if (onNotify) onNotify("Bitte URL und Anon Key ausfüllen.");
-      return;
-    }
-    saveSupabaseConfig(configUrl, configAnonKey);
-    setSupabaseConfig(getSupabaseConfig());
-    setShowConfigDrawer(false);
-    if (onNotify) onNotify("Supabase-Verbindung gespeichert!");
-  };
 
   return (
     <div className="modal-overlay" onClick={onClose} style={{ zIndex: 60 }}>
@@ -534,89 +513,97 @@ export function HouseholdSyncModal({
                 </form>
               )}
 
-              {/* Custom Supabase Config Drawer */}
-              <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "14px", padding: "12px" }}>
-                <div
-                  onClick={() => setShowConfigDrawer((prev) => !prev)}
-                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <Key size={15} className="text-slate-500" />
-                    <span style={{ fontSize: "12px", fontWeight: 700, color: "#334155" }}>
-                      Eigene Supabase-Verbindung (URL & Key)
-                    </span>
+              {/* Pre-configured Supabase Direct Status */}
+              <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "14px", padding: "13px 14px" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "9px" }}>
+                    <div
+                      style={{
+                        width: "28px",
+                        height: "28px",
+                        borderRadius: "8px",
+                        background: "#ecfdf5",
+                        color: "#059669",
+                        display: "grid",
+                        placeItems: "center",
+                      }}
+                    >
+                      <Database size={15} />
+                    </div>
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span style={{ fontSize: "12px", fontWeight: 750, color: "#0f172a" }}>
+                          Supabase Cloud direkt aktiv
+                        </span>
+                        <span
+                          style={{
+                            fontSize: "9.5px",
+                            fontWeight: 750,
+                            padding: "1px 6px",
+                            borderRadius: "5px",
+                            background: "#dcfce7",
+                            color: "#15803d",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "3px",
+                          }}
+                        >
+                          <CheckCircle2 size={10} /> Direkt eingerichtet
+                        </span>
+                      </div>
+                      <div style={{ fontSize: "10.5px", color: "#64748b", fontFamily: "monospace", marginTop: "1px" }}>
+                        Projekt: <strong>{DEFAULT_SUPABASE_PROJECT_ID}</strong>
+                      </div>
+                    </div>
                   </div>
-                  <span style={{ fontSize: "11px", color: "#059669", fontWeight: 700 }}>
-                    {showConfigDrawer ? "Schließen ▲" : "Konfigurieren ▼"}
-                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowSqlDetails((prev) => !prev)}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      color: "#64748b",
+                      fontSize: "11px",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      padding: "4px 8px",
+                      borderRadius: "6px",
+                    }}
+                  >
+                    {showSqlDetails ? "SQL Info ▲" : "SQL Info ▼"}
+                  </button>
                 </div>
 
-                {showConfigDrawer && (
-                  <div style={{ marginTop: "12px", display: "flex", flexDirection: "column", gap: "8px", paddingTop: "10px", borderTop: "1px solid #f1f5f9" }}>
-                    <div>
-                      <label style={{ fontSize: "10.5px", fontWeight: 700, color: "#64748b", display: "block", marginBottom: "3px" }}>
-                        Supabase Project URL
-                      </label>
-                      <input
-                        type="url"
-                        value={configUrl}
-                        onChange={(e) => setConfigUrl(e.target.value)}
-                        placeholder="https://xyzcompany.supabase.co"
-                        style={{ width: "100%", padding: "7px 10px", border: "1px solid #cbd5e1", borderRadius: "8px", fontSize: "11.5px", outline: "none" }}
-                      />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: "10.5px", fontWeight: 700, color: "#64748b", display: "block", marginBottom: "3px" }}>
-                        Supabase Anon Key
-                      </label>
-                      <input
-                        type="password"
-                        value={configAnonKey}
-                        onChange={(e) => setConfigAnonKey(e.target.value)}
-                        placeholder="eyJhbGciOi..."
-                        style={{ width: "100%", padding: "7px 10px", border: "1px solid #cbd5e1", borderRadius: "8px", fontSize: "11.5px", outline: "none" }}
-                      />
-                    </div>
-
-                    <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
-                      <button
-                        type="button"
-                        onClick={handleSaveCustomConfig}
-                        style={{
-                          padding: "6px 12px",
-                          background: "#059669",
-                          color: "white",
-                          border: "none",
-                          borderRadius: "8px",
-                          fontSize: "11.5px",
-                          fontWeight: 700,
-                          cursor: "pointer",
-                        }}
-                      >
-                        Speichern
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText(SUPABASE_SQL_SETUP);
-                          setSqlCopied(true);
-                          setTimeout(() => setSqlCopied(false), 2500);
-                        }}
-                        style={{
-                          padding: "6px 12px",
-                          background: "#f1f5f9",
-                          color: "#334155",
-                          border: "1px solid #cbd5e1",
-                          borderRadius: "8px",
-                          fontSize: "11.5px",
-                          fontWeight: 700,
-                          cursor: "pointer",
-                        }}
-                      >
-                        {sqlCopied ? "✓ SQL kopiert!" : "SQL Table Schema kopieren"}
-                      </button>
-                    </div>
+                {showSqlDetails && (
+                  <div style={{ marginTop: "10px", paddingTop: "10px", borderTop: "1px solid #f1f5f9", display: "flex", flexDirection: "column", gap: "8px" }}>
+                    <p style={{ margin: 0, fontSize: "11px", color: "#64748b", lineHeight: 1.4 }}>
+                      Falls du die Tabelle im Supabase SQL Editor noch anlegen möchtest, kannst du hier das Schema kopieren:
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(SUPABASE_SQL_SETUP);
+                        setSqlCopied(true);
+                        setTimeout(() => setSqlCopied(false), 2500);
+                      }}
+                      style={{
+                        padding: "7px 12px",
+                        background: "#f1f5f9",
+                        color: "#334155",
+                        border: "1px solid #cbd5e1",
+                        borderRadius: "8px",
+                        fontSize: "11px",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "6px",
+                      }}
+                    >
+                      {sqlCopied ? "✓ SQL Table Schema kopiert!" : "SQL Table Schema kopieren"}
+                    </button>
                   </div>
                 )}
               </div>

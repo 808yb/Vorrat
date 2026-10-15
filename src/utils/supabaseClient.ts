@@ -4,26 +4,44 @@ import { createClient, type SupabaseClient, type User } from "@supabase/supabase
 const SUPABASE_URL_KEY = "vorrat_supabase_url";
 const SUPABASE_ANON_KEY = "vorrat_supabase_anon_key";
 
+export const DEFAULT_SUPABASE_PROJECT_ID = "auwrcldqfapejhdwjzbg";
+export const DEFAULT_SUPABASE_URL = "https://auwrcldqfapejhdwjzbg.supabase.co";
+
 export interface SupabaseConfig {
   url: string;
   anonKey: string;
   isConfigured: boolean;
+  projectId: string;
 }
 
 export function getSupabaseConfig(): SupabaseConfig {
   try {
-    const envUrl = import.meta.env.VITE_SUPABASE_URL || "";
-    const envKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
-    const storedUrl = localStorage.getItem(SUPABASE_URL_KEY) || envUrl;
-    const storedKey = localStorage.getItem(SUPABASE_ANON_KEY) || envKey;
+    const envUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim() || DEFAULT_SUPABASE_URL;
+    const envKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim() || "";
+    const storedUrl = localStorage.getItem(SUPABASE_URL_KEY)?.trim();
+    const storedKey = localStorage.getItem(SUPABASE_ANON_KEY)?.trim();
+
+    // Ignore placeholder values if stored previously
+    const effectiveUrl = (storedUrl && !storedUrl.includes("your-project.supabase.co"))
+      ? storedUrl
+      : envUrl;
+    const effectiveKey = (storedKey && !storedKey.includes("dummy_anon_key"))
+      ? storedKey
+      : envKey;
 
     return {
-      url: storedUrl.trim(),
-      anonKey: storedKey.trim(),
-      isConfigured: Boolean(storedUrl.trim() && storedKey.trim()),
+      url: effectiveUrl,
+      anonKey: effectiveKey,
+      isConfigured: Boolean(effectiveUrl && effectiveKey),
+      projectId: DEFAULT_SUPABASE_PROJECT_ID,
     };
   } catch {
-    return { url: "", anonKey: "", isConfigured: false };
+    return {
+      url: DEFAULT_SUPABASE_URL,
+      anonKey: "",
+      isConfigured: false,
+      projectId: DEFAULT_SUPABASE_PROJECT_ID,
+    };
   }
 }
 
