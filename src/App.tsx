@@ -2587,6 +2587,24 @@ export default function App() {
     notify("Duplikate erfolgreich zusammengeführt & bereinigt!");
   };
 
+  const handleWipeEverything = () => {
+    setPantry([]);
+    setGroceries([]);
+    setCustomRecipes([]);
+    setFavorites([]);
+    setPlannedMeals([]);
+    try {
+      localStorage.removeItem("forret_design_pantry");
+      localStorage.removeItem("forret_design_groceries");
+      localStorage.removeItem("vorrat_custom_recipes");
+      localStorage.removeItem("forret_weekly_plan");
+      localStorage.removeItem("forret_favorites");
+      localStorage.removeItem("vorrat_coach_chat_history");
+      localStorage.removeItem("forret_household_code");
+    } catch {}
+    notify("✓ Account komplett geleert: Vorrat, Rezepte, Einkauf & Wochenplan auf 0!");
+  };
+
   const handleFullReset = () => {
     setPantry(defaultPantry);
     setGroceries(defaultGroceries);
@@ -2759,13 +2777,24 @@ export default function App() {
         </div>
       )}
 
-      {/* Household Sync & Sharing Modal (WG / Familie Einladungslink) */}
+      {/* Household Sync & Sharing Modal (WG / Familie Einladungslink & Supabase Cloud) */}
       <HouseholdSyncModal
         isOpen={isHouseholdModalOpen}
         onClose={() => setIsHouseholdModalOpen(false)}
         onNotify={notify}
         pantryCount={pantry.length}
         shoppingCount={groceries.length}
+        pantryData={pantry}
+        groceriesData={groceries}
+        customRecipesData={customRecipes}
+        mealPlanData={plannedMeals}
+        onRestoreData={(cloud) => {
+          if (Array.isArray(cloud.pantry)) setPantry(cloud.pantry as PantryItem[]);
+          if (Array.isArray(cloud.groceries)) setGroceries(cloud.groceries as GroceryItem[]);
+          if (Array.isArray(cloud.customRecipes)) setCustomRecipes(cloud.customRecipes as CatalogRecipe[]);
+          if (Array.isArray(cloud.mealPlan)) setPlannedMeals(cloud.mealPlan as PlannedMeal[]);
+          if (Array.isArray(cloud.favorites)) setFavorites(cloud.favorites as string[]);
+        }}
         onOpenReset={() => setIsResetModalOpen(true)}
       />
 
@@ -2775,10 +2804,13 @@ export default function App() {
         onClose={() => setIsResetModalOpen(false)}
         pantryCount={pantry.length}
         shoppingCount={groceries.length}
+        recipesCount={customRecipes.length}
+        plannedCount={plannedMeals.length}
         onResetDemo={handleResetDemo}
         onClearPantry={handleClearPantry}
         onDeduplicate={handleDeduplicatePantry}
         onFullReset={handleFullReset}
+        onWipeEverything={handleWipeEverything}
         onNotify={notify}
       />
 

@@ -1,15 +1,18 @@
 import React, { useState } from "react";
-import { RotateCcw, Trash2, Layers, AlertTriangle, CheckCircle2, X } from "lucide-react";
+import { RotateCcw, Trash2, Layers, AlertTriangle, CheckCircle2, X, Utensils, Calendar, ShoppingBag, Bot } from "lucide-react";
 
 interface AccountResetModalProps {
   isOpen: boolean;
   onClose: () => void;
   pantryCount: number;
   shoppingCount: number;
+  recipesCount?: number;
+  plannedCount?: number;
   onResetDemo: () => void;
   onClearPantry: () => void;
   onDeduplicate: () => void;
   onFullReset: () => void;
+  onWipeEverything?: () => void;
   onNotify?: (msg: string) => void;
 }
 
@@ -18,14 +21,17 @@ export function AccountResetModal({
   onClose,
   pantryCount,
   shoppingCount,
+  recipesCount = 0,
+  plannedCount = 0,
   onResetDemo,
   onClearPantry,
   onDeduplicate,
   onFullReset,
+  onWipeEverything,
   onNotify,
 }: AccountResetModalProps) {
-  const [confirmClear, setConfirmClear] = useState(false);
-  const [confirmFullReset, setConfirmFullReset] = useState(false);
+  const [confirmClearPantry, setConfirmClearPantry] = useState(false);
+  const [confirmWipeAll, setConfirmWipeAll] = useState(false);
 
   if (!isOpen) return null;
 
@@ -35,7 +41,7 @@ export function AccountResetModal({
         className="modal-content hide-scrollbar"
         onClick={(e) => e.stopPropagation()}
         style={{
-          maxWidth: "440px",
+          maxWidth: "460px",
           borderRadius: "24px",
           background: "#ffffff",
           overflow: "hidden",
@@ -69,10 +75,10 @@ export function AccountResetModal({
             </div>
             <div>
               <h2 style={{ margin: 0, fontSize: "17px", fontWeight: 800, color: "#0f172a" }}>
-                Vorrat & Account verwalten
+                Account & Daten verwalten
               </h2>
               <p style={{ margin: "2px 0 0", fontSize: "12px", color: "#64748b" }}>
-                Bereinigen, Duplikate fixen oder zurücksetzen
+                Vorrat, Rezepte, Einkauf & Planung zurücksetzen
               </p>
             </div>
           </div>
@@ -94,36 +100,45 @@ export function AccountResetModal({
           </button>
         </div>
 
-        {/* Current State Info */}
+        {/* Current State Grid */}
         <div style={{ padding: "18px 22px", display: "flex", flexDirection: "column", gap: "14px" }}>
           <div
             style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              padding: "10px 14px",
+              display: "grid",
+              gridTemplateColumns: "repeat(4, 1fr)",
+              gap: "8px",
+              padding: "12px",
               background: "#f8fafc",
               borderRadius: "14px",
               border: "1px solid #e2e8f0",
-              fontSize: "12px",
-              color: "#475569",
+              textAlign: "center",
             }}
           >
-            <span>Gespeicherte Daten:</span>
-            <div style={{ display: "flex", gap: "8px", fontWeight: 700 }}>
-              <span style={{ color: "#059669" }}>{pantryCount} Vorräte</span>
-              <span style={{ color: "#cbd5e1" }}>•</span>
-              <span style={{ color: "#0284c7" }}>{shoppingCount} Einkaufsartikel</span>
+            <div>
+              <span style={{ fontSize: "10px", color: "#64748b", display: "block" }}>Vorrat</span>
+              <strong style={{ fontSize: "13px", color: "#059669", fontWeight: 800 }}>{pantryCount}</strong>
+            </div>
+            <div>
+              <span style={{ fontSize: "10px", color: "#64748b", display: "block" }}>Einkauf</span>
+              <strong style={{ fontSize: "13px", color: "#0284c7", fontWeight: 800 }}>{shoppingCount}</strong>
+            </div>
+            <div>
+              <span style={{ fontSize: "10px", color: "#64748b", display: "block" }}>Rezepte</span>
+              <strong style={{ fontSize: "13px", color: "#7c3aed", fontWeight: 800 }}>{recipesCount}</strong>
+            </div>
+            <div>
+              <span style={{ fontSize: "10px", color: "#64748b", display: "block" }}>Geplant</span>
+              <strong style={{ fontSize: "13px", color: "#ea580c", fontWeight: 800 }}>{plannedCount}</strong>
             </div>
           </div>
 
-          {/* Option 1: Deduplicate (Safe clean) */}
+          {/* Option 1: Hard Reset / Wipe Everything (What User Requested) */}
           <div
             style={{
               padding: "14px",
               borderRadius: "16px",
-              border: "1.5px solid #e0e7ff",
-              background: "linear-gradient(135deg, #eef2ff 0%, #f8faff 100%)",
+              border: "1.5px solid #fecaca",
+              background: "linear-gradient(135deg, #fff5f5 0%, #fef2f2 100%)",
             }}
           >
             <div style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
@@ -132,7 +147,7 @@ export function AccountResetModal({
                   width: "32px",
                   height: "32px",
                   borderRadius: "10px",
-                  background: "#4f46e5",
+                  background: "#dc2626",
                   color: "#ffffff",
                   display: "grid",
                   placeItems: "center",
@@ -140,44 +155,61 @@ export function AccountResetModal({
                   marginTop: "2px",
                 }}
               >
-                <Layers size={17} />
+                <Trash2 size={17} />
               </div>
               <div style={{ flex: 1 }}>
-                <strong style={{ display: "block", fontSize: "13.5px", color: "#1e1b4b", fontWeight: 750 }}>
-                  Duplikate zusammenführen
-                </strong>
-                <p style={{ margin: "3px 0 8px", fontSize: "11.5px", color: "#4338ca", lineHeight: 1.4 }}>
-                  Führt mehrfach gespeicherte Produkte (z. B. 2x Reis) automatisch zu einem Eintrag zusammen und addiert die Bestände.
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  <strong style={{ fontSize: "13.5px", color: "#7f1d1d", fontWeight: 800 }}>
+                    Kompletten Account leeren (Alles auf 0)
+                  </strong>
+                  <span style={{ fontSize: "9px", fontWeight: 800, background: "#fee2e2", color: "#991b1b", padding: "1px 6px", borderRadius: "4px" }}>
+                    Tabula Rasa
+                  </span>
+                </div>
+                <p style={{ margin: "3px 0 8px", fontSize: "11.5px", color: "#991b1b", lineHeight: 1.4 }}>
+                  Löscht <strong>alle Vorräte, alle eigenen Rezepte, die gesamte Einkaufsliste, den Wochenplan</strong> und den Coach-Verlauf. Startet mit einer absolut frischen, leeren Küche.
                 </p>
                 <button
                   type="button"
                   onClick={() => {
-                    onDeduplicate();
+                    if (!confirmWipeAll) {
+                      setConfirmWipeAll(true);
+                      setTimeout(() => setConfirmWipeAll(false), 5000);
+                      return;
+                    }
+                    if (onWipeEverything) {
+                      onWipeEverything();
+                    } else {
+                      onFullReset();
+                    }
                     onClose();
                   }}
                   style={{
-                    background: "#4f46e5",
+                    background: confirmWipeAll ? "#991b1b" : "#dc2626",
                     color: "white",
                     border: "none",
                     borderRadius: "10px",
-                    padding: "7px 14px",
+                    padding: "8px 14px",
                     fontSize: "12px",
-                    fontWeight: 700,
+                    fontWeight: 800,
                     cursor: "pointer",
                     display: "inline-flex",
                     alignItems: "center",
                     gap: "6px",
-                    boxShadow: "0 2px 4px rgba(79, 70, 229, 0.2)",
+                    boxShadow: "0 2px 6px rgba(220, 38, 38, 0.25)",
+                    transition: "all 150ms ease",
                   }}
                 >
-                  <CheckCircle2 size={14} />
-                  Jetzt Duplikate bereinigen
+                  <Trash2 size={14} />
+                  {confirmWipeAll
+                    ? "⚠️ Wirklich bestätigen: ALLES AUF 0 LEEREN"
+                    : "Account & Alle Daten jetzt leeren"}
                 </button>
               </div>
             </div>
           </div>
 
-          {/* Option 2: Reset to Clean Demo (Recommended) */}
+          {/* Option 2: Reset to Clean Demo */}
           <div
             style={{
               padding: "14px",
@@ -204,10 +236,10 @@ export function AccountResetModal({
               </div>
               <div style={{ flex: 1 }}>
                 <strong style={{ display: "block", fontSize: "13.5px", color: "#064e3b", fontWeight: 750 }}>
-                  Standard-Demo wiederherstellen (Empfohlen)
+                  Standard-Demo wiederherstellen
                 </strong>
                 <p style={{ margin: "3px 0 8px", fontSize: "11.5px", color: "#047857", lineHeight: 1.4 }}>
-                  Setzt deinen Vorrat auf die sauberen 7 Standard-Grundzutaten (Reis, Eier, Sojasoße etc.) und 5 Einkaufsartikel zurück. Alle fehlerhaften Einträge werden entfernt.
+                  Setzt deinen Vorrat auf die sauberen 7 Standard-Grundzutaten (Reis, Eier, Sojasoße etc.) und 5 Einkaufsartikel zurück.
                 </p>
                 <button
                   type="button"
@@ -237,13 +269,13 @@ export function AccountResetModal({
             </div>
           </div>
 
-          {/* Option 3: Danger Zone - Empty Pantry / Full Reset */}
+          {/* Option 3: Deduplicate (Safe clean) */}
           <div
             style={{
               padding: "14px",
               borderRadius: "16px",
-              border: "1.5px solid #fee2e2",
-              background: "#fff5f5",
+              border: "1.5px solid #e0e7ff",
+              background: "linear-gradient(135deg, #eef2ff 0%, #f8faff 100%)",
             }}
           >
             <div style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
@@ -252,7 +284,7 @@ export function AccountResetModal({
                   width: "32px",
                   height: "32px",
                   borderRadius: "10px",
-                  background: "#dc2626",
+                  background: "#4f46e5",
                   color: "#ffffff",
                   display: "grid",
                   placeItems: "center",
@@ -260,71 +292,39 @@ export function AccountResetModal({
                   marginTop: "2px",
                 }}
               >
-                <Trash2 size={17} />
+                <Layers size={17} />
               </div>
               <div style={{ flex: 1 }}>
-                <strong style={{ display: "block", fontSize: "13.5px", color: "#7f1d1d", fontWeight: 750 }}>
-                  Vorrat komplett leeren (0 Produkte)
+                <strong style={{ display: "block", fontSize: "13.5px", color: "#1e1b4b", fontWeight: 750 }}>
+                  Duplikate zusammenführen
                 </strong>
-                <p style={{ margin: "3px 0 8px", fontSize: "11.5px", color: "#991b1b", lineHeight: 1.4 }}>
-                  Löscht alle Artikel aus deinem Vorrat, sodass du eine komplett frische, leere Küche hast.
+                <p style={{ margin: "3px 0 8px", fontSize: "11.5px", color: "#4338ca", lineHeight: 1.4 }}>
+                  Führt mehrfach gespeicherte Produkte (z. B. 2x Reis) automatisch zusammen und addiert die Bestände, ohne Daten zu löschen.
                 </p>
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!confirmClear) {
-                        setConfirmClear(true);
-                        setTimeout(() => setConfirmClear(false), 5000);
-                        return;
-                      }
-                      onClearPantry();
-                      onClose();
-                    }}
-                    style={{
-                      background: confirmClear ? "#b91c1c" : "#dc2626",
-                      color: "white",
-                      border: "none",
-                      borderRadius: "10px",
-                      padding: "7px 14px",
-                      fontSize: "12px",
-                      fontWeight: 700,
-                      cursor: "pointer",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "6px",
-                      boxShadow: "0 2px 4px rgba(220, 38, 38, 0.2)",
-                    }}
-                  >
-                    <Trash2 size={14} />
-                    {confirmClear ? "⚠️ Bestätigen: Vorrat jetzt leeren" : "Vorrat leeren"}
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!confirmFullReset) {
-                        setConfirmFullReset(true);
-                        setTimeout(() => setConfirmFullReset(false), 5000);
-                        return;
-                      }
-                      onFullReset();
-                      onClose();
-                    }}
-                    style={{
-                      background: "transparent",
-                      color: "#991b1b",
-                      border: "1px solid #fca5a5",
-                      borderRadius: "10px",
-                      padding: "6px 12px",
-                      fontSize: "11.5px",
-                      fontWeight: 700,
-                      cursor: "pointer",
-                    }}
-                  >
-                    {confirmFullReset ? "⚠️ Gesamte App zurücksetzen?" : "Komplett-Reset"}
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onDeduplicate();
+                    onClose();
+                  }}
+                  style={{
+                    background: "#4f46e5",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "10px",
+                    padding: "7px 14px",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    boxShadow: "0 2px 4px rgba(79, 70, 229, 0.2)",
+                  }}
+                >
+                  <CheckCircle2 size={14} />
+                  Duplikate bereinigen
+                </button>
               </div>
             </div>
           </div>
@@ -353,7 +353,7 @@ export function AccountResetModal({
               cursor: "pointer",
             }}
           >
-            Schließen
+            Abbrechen
           </button>
         </div>
       </div>

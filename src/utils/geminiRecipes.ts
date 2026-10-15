@@ -55,7 +55,7 @@ export function resolveRecipeFoodImage(title: string, keywords?: string): string
   return "https://images.unsplash.com/photo-1498837167922-ddd27525d352?auto=format&fit=crop&w=800&q=80";
 }
 
-interface RawGeminiIngredient {
+export interface RawGeminiIngredient {
   name: string;
   baseAmountPerPortion: number;
   unit: string;
@@ -699,6 +699,174 @@ Antworte AUSSCHLIESSLICH mit gültigem JSON im folgenden Schema ohne Markdown-Fo
     id: recipeId,
     title: parsed.title,
     subtitle: parsed.subtitle || "Aus dem Web / Social Media importiert",
+    time: parsed.time || "20 Min.",
+    difficulty: parsed.difficulty || "Einfach",
+    baseCal: Math.round(Number(parsed.baseCal) || 450),
+    baseProt: Math.round(Number(parsed.baseProt) || 20),
+    baseCarb: Math.round(Number(parsed.baseCarb) || 45),
+    baseCost: Number(parsed.baseCost) || 2.5,
+    tone: parsed.tone || "mint",
+    chefTip: parsed.chefTip || "Frisch zubereitet schmeckt es am besten!",
+    imageUrl,
+    isAiGenerated: true,
+    matchScore: calculatedMatchScore,
+    optional:
+      missingIngredients.length > 0
+        ? `Fehlt: ${missingIngredients.map((m) => m.name).slice(0, 3).join(", ")}`
+        : "Alles im Vorrat vorhanden",
+    available: (s: number) => {
+      if (inStockIngredients.length > 0) {
+        return inStockIngredients
+          .slice(0, 3)
+          .map((ing) => `${Math.round(ing.baseAmountPerPortion * s)} ${ing.unit} ${ing.name}`)
+          .join(" · ");
+      }
+      return parsed.ingredients
+        .slice(0, 3)
+        .map((ing) => `${Math.round(ing.baseAmountPerPortion * s)} ${ing.unit} ${ing.name}`)
+        .join(" · ");
+    },
+    ingredientsList: (s: number) => {
+      return parsed.ingredients.map((ing) => ({
+        name: ing.name,
+        amount: `${Math.round(ing.baseAmountPerPortion * s)} ${ing.unit}`,
+        optional: Boolean(ing.optional),
+      }));
+    },
+    steps: Array.isArray(parsed.steps)
+      ? parsed.steps.map((st, idx) => ({
+          stepNumber: st.stepNumber || idx + 1,
+          title: st.title || `Schritt ${idx + 1}`,
+          instruction: st.instruction || "",
+          duration: st.duration || "3 Min.",
+          tag: st.tag || "Kochen",
+        }))
+      : [],
+  };
+
+  saveCustomRecipe(recipe, parsed.ingredients);
+
+  return {
+    recipe,
+    missingIngredients,
+    rawIngredients: parsed.ingredients,
+  };
+}
+
+/**
+ * Multimodal Video Recipe Extraction (TikTok, Instagram Reels, MP4, WebM)
+ * Uses Gemini 3.8 Flash to analyze video frames, on-screen text overlays, and audio track.
+ */
+export async function importRecipeFromVideoWithGemini(
+  file: File,
+  pantryItems: Array<{ name: string; amount?: number }>
+): Promise<{ recipe: CatalogRecipe; missingIngredients: RawGeminiIngredient[]; rawIngredients: RawGeminiIngredient[] }> {
+  // Check file size (browsers support up to ~25MB in inline data base64)
+  if (file.size > 26 * 1024 * 1024) {
+    throw new Error("Das Video ist über 25 MB groß. Bitte wähle einen kürzeren Clip oder komprimiere das Video leicht für die Analyse.");
+  }
+
+  const apiKey = getGeminiApiKey();
+  if (!apiKey) {
+    throw new Error("Kein Gemini API-Schlüssel hinterlegt. Bitte erstelle einen Key in Google AI Studio.");
+  }
+
+  // Convert File to base64
+  const base64Data = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const res = reader.result as string;
+      const base64 = res.split(",")[1];
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
+  const ai = new GoogleGenAI({ apiKey });
+
+  const prompt = `Du bist ein erstklassiger KI-Chefkoch und multimodaler Video-Rezept-Analyst.
+Analysiere dieses Kochvideo (Reel, TikTok oder Video-Clip) ganzheitlich:
+1. Visuelle Erkennung: Welche Zutaten werden im Video vorbereitet, geschnitten, gewürzt, in Pfannen/Töpfe gegeben oder angerichtet? Achte genau auf Texteinblendungen im Bild.
+2. Tonspur & Sprache: Welche Zutaten, Mengen, Gewürze oder Garzeiten werden im Video erwähnt oder erklärt?
+3. Extrahiere daraus ein strukturiertes Rezept für EINE PORTION (Basisportionierung).
+4. Schätze realistische Nährwerte (Kalorien, Protein, Kohlenhydrate) und erstelle eine klare Schritt-für-Schritt-Anleitung.
+
+Antworte AUSSCHLIESSLICH mit gültigem JSON im folgenden Schema ohne Markdown-Formatierung:
+{
+  "title": "Prägnanter, ansprechender Rezeptname",
+  "subtitle": "Kurze, appetitliche Beschreibung (1 Satz)",
+  "time": "Zubereitungszeit (z.B. 15 Min.)",
+  "difficulty": "Einfach" | "Mittel",
+  "baseCal": 480,
+  "baseProt": 28,
+  "baseCarb": 45,
+  "baseCost": 3.20,
+  "chefTip": "Praktischer Profi-Tipp aus dem Video",
+  "imageKeywords": "z.B. wrap, chicken, tacos, bowl, pasta",
+  "tone": "mint" | "sage" | "amber",
+  "ingredients": [
+    {
+      "name": "Zutatenname (z.B. Hähnchenbrust, Tortilla Wraps, Avocado)",
+      "baseAmountPerPortion": 150,
+      "unit": "g" | "ml" | "Stk." | "TL" | "EL",
+      "optional": false
+    }
+  ],
+  "steps": [
+    {
+      "stepNumber": 1,
+      "title": "Vorbereitung",
+      "instruction": "Detaillierte Anweisung für diesen Schritt.",
+      "duration": "4 Min.",
+      "tag": "Prep"
+    }
+  ]
+}`;
+
+  const mimeType = file.type || "video/mp4";
+
+  const response = await ai.models.generateContent({
+    model: "gemini-3.8-flash",
+    contents: [
+      {
+        inlineData: {
+          data: base64Data,
+          mimeType,
+        },
+      },
+      {
+        text: prompt,
+      },
+    ],
+    config: {
+      temperature: 0.2,
+      responseMimeType: "application/json",
+    },
+  });
+
+  const responseText = response.text?.trim() || "";
+  const cleaned = responseText.replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
+  const parsed: RawGeminiRecipe = JSON.parse(cleaned);
+
+  const recipeId = "video-recipe-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6);
+  const imageUrl = resolveRecipeFoodImage(parsed.title, parsed.imageKeywords);
+
+  const pantryNames = pantryItems.map((p) => p.name.toLowerCase().trim());
+  const inStockIngredients = parsed.ingredients.filter((ing) => {
+    const iLower = ing.name.toLowerCase().trim();
+    return pantryNames.some((pLower) => pLower.includes(iLower) || iLower.includes(pLower));
+  });
+
+  const missingIngredients = parsed.ingredients.filter((ing) => !inStockIngredients.includes(ing));
+  const calculatedMatchScore = Math.round(
+    (inStockIngredients.length / Math.max(1, parsed.ingredients.length)) * 100
+  );
+
+  const recipe: CatalogRecipe = {
+    id: recipeId,
+    title: parsed.title,
+    subtitle: parsed.subtitle || "Aus Video / Reel analysiert",
     time: parsed.time || "20 Min.",
     difficulty: parsed.difficulty || "Einfach",
     baseCal: Math.round(Number(parsed.baseCal) || 450),

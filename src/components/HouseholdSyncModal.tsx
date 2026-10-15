@@ -1,5 +1,17 @@
-import React, { useState } from "react";
-import { RefreshCw, Users, Check, Copy, X } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { RefreshCw, Users, Check, Copy, X, Cloud, CloudUpload, CloudDownload, LogIn, UserPlus, LogOut, Key, ShieldCheck, Database, AlertCircle } from "lucide-react";
+import {
+  getSupabaseConfig,
+  saveSupabaseConfig,
+  getCurrentUser,
+  signInWithEmail,
+  signUpWithEmail,
+  signOut,
+  backupUserDataToSupabase,
+  fetchUserDataFromSupabase,
+  SUPABASE_SQL_SETUP,
+  type VorratSyncPayload,
+} from "../utils/supabaseClient";
 
 interface HouseholdSyncModalProps {
   isOpen: boolean;
@@ -7,6 +19,11 @@ interface HouseholdSyncModalProps {
   onNotify?: (msg: string) => void;
   pantryCount: number;
   shoppingCount: number;
+  pantryData?: unknown[];
+  groceriesData?: unknown[];
+  customRecipesData?: unknown[];
+  mealPlanData?: unknown[];
+  onRestoreData?: (payload: VorratSyncPayload) => void;
   onOpenReset?: () => void;
 }
 
@@ -16,8 +33,16 @@ export function HouseholdSyncModal({
   onNotify,
   pantryCount,
   shoppingCount,
+  pantryData = [],
+  groceriesData = [],
+  customRecipesData = [],
+  mealPlanData = [],
+  onRestoreData,
   onOpenReset,
 }: HouseholdSyncModalProps) {
+  const [activeTab, setActiveTab] = useState<"link" | "cloud">("cloud");
+
+  // Household Link State
   const [householdName, setHouseholdName] = useState(() => {
     try {
       return localStorage.getItem("forret_household_name") || "Unsere Küche (WG & Familie)";
@@ -41,6 +66,33 @@ export function HouseholdSyncModal({
   const [copied, setCopied] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState("Gerade eben");
+
+  // Supabase State
+  const [supabaseConfig, setSupabaseConfig] = useState(getSupabaseConfig());
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
+  const [authMode, setAuthMode] = useState<"login" | "signup">("login");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [showConfigDrawer, setShowConfigDrawer] = useState(false);
+  const [configUrl, setConfigUrl] = useState(supabaseConfig.url);
+  const [configAnonKey, setConfigAnonKey] = useState(supabaseConfig.anonKey);
+  const [sqlCopied, setSqlCopied] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    checkUser();
+  }, [isOpen]);
+
+  const checkUser = async () => {
+    try {
+      const user = await getCurrentUser();
+      setCurrentUserEmail(user?.email || null);
+    } catch {
+      setCurrentUserEmail(null);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -73,12 +125,115 @@ export function HouseholdSyncModal({
     } catch {}
   };
 
+  // Supabase Auth Handlers
+  const handleAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!authEmail.trim() || !authPassword.trim()) {
+      setAuthError("Bitte E-Mail und Passwort eingeben.");
+      return;
+    }
+
+    setAuthLoading(true);
+    setAuthError(null);
+
+    try {
+      if (!supabaseConfig.isConfigured) {
+        // Automatically save default mock config if empty or prompt user
+        saveSupabaseConfig(
+          "https://your-project.supabase.co",
+          "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.dummy_anon_key"
+        );
+        setSupabaseConfig(getSupabaseConfig());
+      }
+
+      if (authMode === "login") {
+        const { user } = await signInWithEmail(authEmail, authPassword);
+        setCurrentUserEmail(user?.email || authEmail);
+        if (onNotify) onNotify(`Eingeloggt als ${user?.email || authEmail}!`);
+      } else {
+        const { user } = await signUpWithEmail(authEmail, authPassword);
+        setCurrentUserEmail(user?.email || authEmail);
+        if (onNotify) onNotify("Account erfolgreich erstellt!");
+      }
+      setAuthEmail("");
+      setAuthPassword("");
+    } catch (err: unknown) {
+      console.error(err);
+      const msg = err instanceof Error ? err.message : "Authentifizierung fehlgeschlagen.";
+      setAuthError(msg);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
+    setCurrentUserEmail(null);
+    if (onNotify) onNotify("Erfolgreich abgemeldet.");
+  };
+
+  const handleCloudBackup = async () => {
+    setIsSyncing(true);
+    try {
+      await backupUserDataToSupabase({
+        householdName,
+        pantry: pantryData,
+        groceries: groceriesData,
+        customRecipes: customRecipesData,
+        mealPlan: mealPlanData,
+      });
+      setLastSyncTime("Gerade eben");
+      if (onNotify) onNotify("✓ Gesamter Vorrat erfolgreich in Supabase gesichert!");
+    } catch (err: unknown) {
+      console.error(err);
+      const msg = err instanceof Error ? err.message : "Fehler beim Cloud-Backup.";
+      if (onNotify) onNotify(msg);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleCloudRestore = async () => {
+    setIsSyncing(true);
+    try {
+      const data = await fetchUserDataFromSupabase();
+      if (!data) {
+        if (onNotify) onNotify("Keine gesicherten Cloud-Daten für diesen Account gefunden.");
+        return;
+      }
+      if (onRestoreData) {
+        onRestoreData(data);
+      }
+      if (data.householdName) {
+        handleSaveName(data.householdName);
+      }
+      if (onNotify) onNotify("✓ Vorrat & Rezepte aus Supabase Cloud wiederhergestellt!");
+    } catch (err: unknown) {
+      console.error(err);
+      const msg = err instanceof Error ? err.message : "Fehler beim Laden aus der Cloud.";
+      if (onNotify) onNotify(msg);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const handleSaveCustomConfig = () => {
+    if (!configUrl.trim() || !configAnonKey.trim()) {
+      if (onNotify) onNotify("Bitte URL und Anon Key ausfüllen.");
+      return;
+    }
+    saveSupabaseConfig(configUrl, configAnonKey);
+    setSupabaseConfig(getSupabaseConfig());
+    setShowConfigDrawer(false);
+    if (onNotify) onNotify("Supabase-Verbindung gespeichert!");
+  };
+
   return (
     <div className="modal-overlay" onClick={onClose} style={{ zIndex: 60 }}>
       <div
-        className="modal-content"
+        className="modal-content hide-scrollbar"
         onClick={(e) => e.stopPropagation()}
-        style={{ maxWidth: "420px", borderRadius: "24px" }}
+        style={{ maxWidth: "440px", borderRadius: "24px", maxHeight: "90vh", overflowY: "auto" }}
       >
         {/* Header */}
         <div className="modal-header" style={{ padding: "18px 20px 14px", borderBottom: "1px solid #f1f5f9" }}>
@@ -94,11 +249,11 @@ export function HouseholdSyncModal({
                 placeItems: "center",
               }}
             >
-              <RefreshCw size={20} strokeWidth={2.4} />
+              <Cloud size={20} strokeWidth={2.4} />
             </div>
             <div>
               <h2 style={{ margin: 0, fontSize: "17px", color: "#0f172a", fontWeight: 800 }}>
-                Haushalt & Cloud-Sync
+                Accounts & Cloud-Sync
               </h2>
               <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "2px" }}>
                 <span
@@ -106,13 +261,13 @@ export function HouseholdSyncModal({
                     width: "7px",
                     height: "7px",
                     borderRadius: "50%",
-                    background: "#10b981",
+                    background: currentUserEmail ? "#10b981" : "#94a3b8",
                     display: "inline-block",
-                    boxShadow: "0 0 6px #10b981",
+                    boxShadow: currentUserEmail ? "0 0 6px #10b981" : "none",
                   }}
                 />
-                <span style={{ fontSize: "11px", color: "#059669", fontWeight: 650 }}>
-                  Echtzeit-Synchronisation aktiv
+                <span style={{ fontSize: "11px", color: currentUserEmail ? "#059669" : "#64748b", fontWeight: 650 }}>
+                  {currentUserEmail ? `Verbunden: ${currentUserEmail}` : "Supabase PostgreSQL Sync"}
                 </span>
               </div>
             </div>
@@ -127,197 +282,444 @@ export function HouseholdSyncModal({
           </button>
         </div>
 
-        {/* Body */}
-        <div className="modal-body" style={{ padding: "18px 20px", display: "flex", flexDirection: "column", gap: "16px" }}>
-          {/* Household Name */}
-          <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "14px", border: "1px solid #e2e8f0" }}>
-            <label style={{ display: "block", fontSize: "10.5px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "4px" }}>
-              Name des Haushalts
-            </label>
-            <input
-              type="text"
-              value={householdName}
-              onChange={(e) => handleSaveName(e.target.value)}
+        {/* Tab Switcher */}
+        <div style={{ padding: "12px 20px 0" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", background: "#f1f5f9", padding: "4px", borderRadius: "12px" }}>
+            <button
+              type="button"
+              onClick={() => setActiveTab("cloud")}
               style={{
-                width: "100%",
-                background: "transparent",
+                padding: "8px",
+                borderRadius: "9px",
                 border: "none",
-                fontSize: "14px",
+                fontSize: "12px",
                 fontWeight: 750,
-                color: "#0f172a",
-                outline: "none",
+                cursor: "pointer",
+                background: activeTab === "cloud" ? "#ffffff" : "transparent",
+                color: activeTab === "cloud" ? "#0f172a" : "#64748b",
+                boxShadow: activeTab === "cloud" ? "0 1px 3px rgba(0,0,0,0.06)" : "none",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "6px",
               }}
-            />
+            >
+              <Database size={14} />
+              <span>Supabase Cloud</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("link")}
+              style={{
+                padding: "8px",
+                borderRadius: "9px",
+                border: "none",
+                fontSize: "12px",
+                fontWeight: 750,
+                cursor: "pointer",
+                background: activeTab === "link" ? "#ffffff" : "transparent",
+                color: activeTab === "link" ? "#0f172a" : "#64748b",
+                boxShadow: activeTab === "link" ? "0 1px 3px rgba(0,0,0,0.06)" : "none",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "6px",
+              }}
+            >
+              <Users size={14} />
+              <span>Haushalts-Link</span>
+            </button>
           </div>
+        </div>
 
-          {/* Share / Invite Link Box */}
-          <div
-            style={{
-              background: "linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%)",
-              border: "1.5px solid #a7f3d0",
-              borderRadius: "16px",
-              padding: "14px",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
-              <span style={{ fontSize: "12px", fontWeight: 750, color: "#065f46" }}>
-                Partner oder Mitbewohner einladen
-              </span>
-              <span
-                style={{
-                  fontSize: "10px",
-                  fontWeight: 800,
-                  background: "#10b981",
-                  color: "white",
-                  padding: "2px 7px",
-                  borderRadius: "6px",
-                  letterSpacing: "0.05em",
-                }}
-              >
-                CODE: {inviteCode}
-              </span>
-            </div>
-            <p style={{ margin: "0 0 10px", fontSize: "11.5px", color: "#047857", lineHeight: 1.4 }}>
-              Teile diesen Einladungs-Link. Sobald dein Partner oder Mitbewohner den Link öffnet, teilt ihr automatisch denselben Vorrat und dieselbe Einkaufsliste in Echtzeit.
-            </p>
-
-            <div style={{ display: "flex", gap: "8px" }}>
-              <input
-                type="text"
-                readOnly
-                value={inviteUrl}
-                style={{
-                  flex: 1,
-                  background: "white",
-                  border: "1px solid #a7f3d0",
-                  borderRadius: "10px",
-                  padding: "6px 10px",
-                  fontSize: "11px",
-                  color: "#334155",
-                  fontFamily: "monospace",
-                  outline: "none",
-                }}
-              />
-              <button
-                type="button"
-                onClick={handleCopyLink}
-                style={{
-                  padding: "6px 14px",
-                  background: copied ? "#047857" : "#059669",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "10px",
-                  fontSize: "11.5px",
-                  fontWeight: 750,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "5px",
-                  transition: "background 150ms ease",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {copied ? "✓ Kopiert!" : "Link kopieren"}
-              </button>
-            </div>
-          </div>
-
-          {/* Members in Household */}
-          <div>
-            <span style={{ fontSize: "11.5px", fontWeight: 750, color: "#475569", display: "block", marginBottom: "8px" }}>
-              Mitglieder im Haushalt (2)
-            </span>
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "9px 12px",
-                  background: "#ffffff",
-                  border: "1px solid #e2e8f0",
-                  borderRadius: "12px",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: "9px" }}>
-                  <div
-                    style={{
-                      width: "28px",
-                      height: "28px",
-                      borderRadius: "50%",
-                      background: "#059669",
-                      color: "white",
-                      display: "grid",
-                      placeItems: "center",
-                      fontSize: "11px",
-                      fontWeight: 750,
-                    }}
-                  >
-                    DU
+        {/* Modal Body */}
+        <div className="modal-body" style={{ padding: "16px 20px 20px", display: "flex", flexDirection: "column", gap: "16px" }}>
+          
+          {/* TAB 1: SUPABASE CLOUD & ACCOUNTS */}
+          {activeTab === "cloud" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+              {currentUserEmail ? (
+                /* Logged In State */
+                <div style={{ background: "#f8fafc", padding: "14px", borderRadius: "16px", border: "1px solid #e2e8f0" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
+                    <div>
+                      <span style={{ fontSize: "10.5px", color: "#64748b", textTransform: "uppercase", fontWeight: 700, letterSpacing: "0.05em" }}>
+                        Eingeloggter Account
+                      </span>
+                      <strong style={{ display: "block", fontSize: "14px", color: "#0f172a", marginTop: "2px" }}>
+                        {currentUserEmail}
+                      </strong>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleSignOut}
+                      style={{
+                        padding: "5px 10px",
+                        background: "#fee2e2",
+                        color: "#b91c1c",
+                        border: "1px solid #fecaca",
+                        borderRadius: "8px",
+                        fontSize: "11px",
+                        fontWeight: 750,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "4px",
+                      }}
+                    >
+                      <LogOut size={12} />
+                      Abmelden
+                    </button>
                   </div>
-                  <div>
-                    <strong style={{ fontSize: "12.5px", color: "#0f172a", display: "block" }}>
-                      Du (Dieses Gerät)
-                    </strong>
-                    <span style={{ fontSize: "10.5px", color: "#64748b" }}>Admin / Ersteller</span>
+
+                  {/* Backup & Restore Controls */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginTop: "12px" }}>
+                    <button
+                      type="button"
+                      disabled={isSyncing}
+                      onClick={handleCloudBackup}
+                      style={{
+                        padding: "9px 12px",
+                        background: "#059669",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "10px",
+                        fontSize: "12px",
+                        fontWeight: 750,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "6px",
+                        boxShadow: "0 2px 4px rgba(5,150,105,0.2)",
+                      }}
+                    >
+                      <CloudUpload size={14} />
+                      {isSyncing ? "Sichert..." : "In Cloud sichern"}
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={isSyncing}
+                      onClick={handleCloudRestore}
+                      style={{
+                        padding: "9px 12px",
+                        background: "#ffffff",
+                        color: "#1e293b",
+                        border: "1px solid #cbd5e1",
+                        borderRadius: "10px",
+                        fontSize: "12px",
+                        fontWeight: 750,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "6px",
+                      }}
+                    >
+                      <CloudDownload size={14} />
+                      Aus Cloud laden
+                    </button>
                   </div>
                 </div>
-                <span style={{ fontSize: "10.5px", fontWeight: 700, color: "#059669", background: "#ecfdf5", padding: "2px 8px", borderRadius: "99px" }}>
-                  Online
-                </span>
+              ) : (
+                /* Auth Form (Login / Register) */
+                <form onSubmit={handleAuthSubmit} style={{ background: "#f8fafc", padding: "16px", borderRadius: "16px", border: "1px solid #e2e8f0" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
+                    <div style={{ display: "flex", gap: "8px" }}>
+                      <button
+                        type="button"
+                        onClick={() => setAuthMode("login")}
+                        style={{
+                          background: "transparent",
+                          border: "none",
+                          fontSize: "13px",
+                          fontWeight: authMode === "login" ? 800 : 600,
+                          color: authMode === "login" ? "#059669" : "#64748b",
+                          cursor: "pointer",
+                          paddingBottom: "2px",
+                          borderBottom: authMode === "login" ? "2px solid #059669" : "none",
+                        }}
+                      >
+                        Anmelden
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAuthMode("signup")}
+                        style={{
+                          background: "transparent",
+                          border: "none",
+                          fontSize: "13px",
+                          fontWeight: authMode === "signup" ? 800 : 600,
+                          color: authMode === "signup" ? "#059669" : "#64748b",
+                          cursor: "pointer",
+                          paddingBottom: "2px",
+                          borderBottom: authMode === "signup" ? "2px solid #059669" : "none",
+                        }}
+                      >
+                        Konto erstellen
+                      </button>
+                    </div>
+                    <span style={{ fontSize: "10px", fontWeight: 700, color: "#64748b" }}>
+                      Kostenlos & Sicher
+                    </span>
+                  </div>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    <input
+                      type="email"
+                      value={authEmail}
+                      onChange={(e) => setAuthEmail(e.target.value)}
+                      placeholder="E-Mail-Adresse"
+                      required
+                      style={{
+                        padding: "9px 12px",
+                        borderRadius: "10px",
+                        border: "1px solid #cbd5e1",
+                        fontSize: "12.5px",
+                        outline: "none",
+                        background: "#ffffff",
+                      }}
+                    />
+                    <input
+                      type="password"
+                      value={authPassword}
+                      onChange={(e) => setAuthPassword(e.target.value)}
+                      placeholder="Passwort"
+                      required
+                      style={{
+                        padding: "9px 12px",
+                        borderRadius: "10px",
+                        border: "1px solid #cbd5e1",
+                        fontSize: "12.5px",
+                        outline: "none",
+                        background: "#ffffff",
+                      }}
+                    />
+
+                    {authError && (
+                      <div style={{ display: "flex", alignItems: "center", gap: "5px", color: "#dc2626", fontSize: "11px", marginTop: "2px" }}>
+                        <AlertCircle size={13} />
+                        <span>{authError}</span>
+                      </div>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={authLoading}
+                      style={{
+                        marginTop: "4px",
+                        padding: "10px 14px",
+                        background: "#059669",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "10px",
+                        fontSize: "12.5px",
+                        fontWeight: 750,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "6px",
+                      }}
+                    >
+                      {authMode === "login" ? <LogIn size={15} /> : <UserPlus size={15} />}
+                      {authLoading
+                        ? "Verbinde..."
+                        : authMode === "login"
+                        ? "Mit Supabase einloggen"
+                        : "Account jetzt registrieren"}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* Custom Supabase Config Drawer */}
+              <div style={{ background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: "14px", padding: "12px" }}>
+                <div
+                  onClick={() => setShowConfigDrawer((prev) => !prev)}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer" }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <Key size={15} className="text-slate-500" />
+                    <span style={{ fontSize: "12px", fontWeight: 700, color: "#334155" }}>
+                      Eigene Supabase-Verbindung (URL & Key)
+                    </span>
+                  </div>
+                  <span style={{ fontSize: "11px", color: "#059669", fontWeight: 700 }}>
+                    {showConfigDrawer ? "Schließen ▲" : "Konfigurieren ▼"}
+                  </span>
+                </div>
+
+                {showConfigDrawer && (
+                  <div style={{ marginTop: "12px", display: "flex", flexDirection: "column", gap: "8px", paddingTop: "10px", borderTop: "1px solid #f1f5f9" }}>
+                    <div>
+                      <label style={{ fontSize: "10.5px", fontWeight: 700, color: "#64748b", display: "block", marginBottom: "3px" }}>
+                        Supabase Project URL
+                      </label>
+                      <input
+                        type="url"
+                        value={configUrl}
+                        onChange={(e) => setConfigUrl(e.target.value)}
+                        placeholder="https://xyzcompany.supabase.co"
+                        style={{ width: "100%", padding: "7px 10px", border: "1px solid #cbd5e1", borderRadius: "8px", fontSize: "11.5px", outline: "none" }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: "10.5px", fontWeight: 700, color: "#64748b", display: "block", marginBottom: "3px" }}>
+                        Supabase Anon Key
+                      </label>
+                      <input
+                        type="password"
+                        value={configAnonKey}
+                        onChange={(e) => setConfigAnonKey(e.target.value)}
+                        placeholder="eyJhbGciOi..."
+                        style={{ width: "100%", padding: "7px 10px", border: "1px solid #cbd5e1", borderRadius: "8px", fontSize: "11.5px", outline: "none" }}
+                      />
+                    </div>
+
+                    <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
+                      <button
+                        type="button"
+                        onClick={handleSaveCustomConfig}
+                        style={{
+                          padding: "6px 12px",
+                          background: "#059669",
+                          color: "white",
+                          border: "none",
+                          borderRadius: "8px",
+                          fontSize: "11.5px",
+                          fontWeight: 700,
+                          cursor: "pointer",
+                        }}
+                      >
+                        Speichern
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(SUPABASE_SQL_SETUP);
+                          setSqlCopied(true);
+                          setTimeout(() => setSqlCopied(false), 2500);
+                        }}
+                        style={{
+                          padding: "6px 12px",
+                          background: "#f1f5f9",
+                          color: "#334155",
+                          border: "1px solid #cbd5e1",
+                          borderRadius: "8px",
+                          fontSize: "11.5px",
+                          fontWeight: 700,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {sqlCopied ? "✓ SQL kopiert!" : "SQL Table Schema kopieren"}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
+            </div>
+          )}
 
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "9px 12px",
-                  background: "#f8fafc",
-                  border: "1px dashed #cbd5e1",
-                  borderRadius: "12px",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: "9px" }}>
-                  <div
-                    style={{
-                      width: "28px",
-                      height: "28px",
-                      borderRadius: "50%",
-                      background: "#e2e8f0",
-                      color: "#64748b",
-                      display: "grid",
-                      placeItems: "center",
-                      fontSize: "11px",
-                      fontWeight: 700,
-                    }}
-                  >
-                    +
-                  </div>
-                  <div>
-                    <strong style={{ fontSize: "12.5px", color: "#475569", display: "block" }}>
-                      Partner / Mitbewohner
-                    </strong>
-                    <span style={{ fontSize: "10.5px", color: "#94a3b8" }}>Bereit zum Verbinden</span>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleCopyLink}
+          {/* TAB 2: HOUSEHOLD WG LINK */}
+          {activeTab === "link" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+              {/* Household Name */}
+              <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "14px", border: "1px solid #e2e8f0" }}>
+                <label style={{ display: "block", fontSize: "10.5px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "4px" }}>
+                  Name des Haushalts
+                </label>
+                <input
+                  type="text"
+                  value={householdName}
+                  onChange={(e) => handleSaveName(e.target.value)}
                   style={{
+                    width: "100%",
                     background: "transparent",
                     border: "none",
-                    color: "#059669",
-                    fontSize: "11px",
-                    fontWeight: 700,
-                    cursor: "pointer",
+                    fontSize: "14px",
+                    fontWeight: 750,
+                    color: "#0f172a",
+                    outline: "none",
                   }}
-                >
-                  Einladen →
-                </button>
+                />
+              </div>
+
+              {/* Share / Invite Link Box */}
+              <div
+                style={{
+                  background: "linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%)",
+                  border: "1.5px solid #a7f3d0",
+                  borderRadius: "16px",
+                  padding: "14px",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+                  <span style={{ fontSize: "12px", fontWeight: 750, color: "#065f46" }}>
+                    Partner oder Mitbewohner einladen
+                  </span>
+                  <span
+                    style={{
+                      fontSize: "10px",
+                      fontWeight: 800,
+                      background: "#10b981",
+                      color: "white",
+                      padding: "2px 7px",
+                      borderRadius: "6px",
+                      letterSpacing: "0.05em",
+                    }}
+                  >
+                    CODE: {inviteCode}
+                  </span>
+                </div>
+                <p style={{ margin: "0 0 10px", fontSize: "11.5px", color: "#047857", lineHeight: 1.4 }}>
+                  Teile diesen Einladungs-Link. Sobald dein Partner oder Mitbewohner den Link öffnet, teilt ihr automatisch denselben Vorrat und dieselbe Einkaufsliste in Echtzeit.
+                </p>
+
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <input
+                    type="text"
+                    readOnly
+                    value={inviteUrl}
+                    style={{
+                      flex: 1,
+                      background: "white",
+                      border: "1px solid #a7f3d0",
+                      borderRadius: "10px",
+                      padding: "6px 10px",
+                      fontSize: "11px",
+                      color: "#334155",
+                      fontFamily: "monospace",
+                      outline: "none",
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleCopyLink}
+                    style={{
+                      padding: "6px 14px",
+                      background: copied ? "#047857" : "#059669",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "10px",
+                      fontSize: "11.5px",
+                      fontWeight: 750,
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "5px",
+                      transition: "background 150ms ease",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {copied ? "✓ Kopiert!" : "Link kopieren"}
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Sync Stats & Manual Trigger */}
           <div
@@ -364,6 +766,7 @@ export function HouseholdSyncModal({
             </button>
           </div>
 
+          {/* Danger Zone: Link to Full Reset Modal */}
           {onOpenReset && (
             <div style={{ paddingTop: "4px", borderTop: "1px dashed #e2e8f0" }}>
               <button
@@ -389,7 +792,7 @@ export function HouseholdSyncModal({
                   transition: "background 150ms ease",
                 }}
               >
-                <span>⚙️ Vorrat verwalten / Duplikate fixen / Reset</span>
+                <span>⚙️ Account & Vorrat leeren / Duplikate fixen / Reset</span>
               </button>
             </div>
           )}
