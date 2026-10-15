@@ -148,6 +148,10 @@ export function HouseholdSyncModal({
       setAuthError("Bitte Benutzername und Passwort eingeben.");
       return;
     }
+    if (authPassword.length < 6) {
+      setAuthError("Das Passwort muss mindestens 6 Zeichen lang sein.");
+      return;
+    }
 
     // Auto-save key if entered in the modal
     if (!supabaseConfig.isConfigured) {

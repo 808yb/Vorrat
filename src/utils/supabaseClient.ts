@@ -88,13 +88,17 @@ export function normalizeUsernameToEmail(input: string): string {
   const trimmed = input.trim().toLowerCase();
   if (trimmed.includes("@")) return trimmed;
   const clean = trimmed.replace(/[^a-z0-9._-]/g, "");
-  return `${clean || "kueche"}@vorrat.internal`;
+  return `${clean || "kueche"}@vorrat-app.de`;
 }
 
 export function displayUsernameFromEmail(emailOrUser?: string | null): string {
   if (!emailOrUser) return "";
-  if (emailOrUser.endsWith("@vorrat.internal")) {
-    return emailOrUser.replace("@vorrat.internal", "");
+  if (
+    emailOrUser.endsWith("@vorrat-app.de") ||
+    emailOrUser.endsWith("@vorrat.internal") ||
+    emailOrUser.endsWith("@vorrat.de")
+  ) {
+    return emailOrUser.split("@")[0];
   }
   return emailOrUser;
 }
@@ -114,7 +118,12 @@ export async function signInWithEmail(usernameOrEmail: string, pass: string) {
     email,
     password: pass,
   });
-  if (error) throw error;
+  if (error) {
+    if (error.message.includes("Invalid login credentials")) {
+      throw new Error("Benutzername oder Passwort ist falsch.");
+    }
+    throw error;
+  }
   return data;
 }
 
@@ -126,7 +135,24 @@ export async function signUpWithEmail(usernameOrEmail: string, pass: string) {
     email,
     password: pass,
   });
-  if (error) throw error;
+  if (error) {
+    if (error.message.includes("User already registered")) {
+      throw new Error("Dieser Benutzername ist bereits vergeben. Bitte melde dich an oder wähle einen anderen.");
+    }
+    if (error.message.includes("Password should be at least 6 characters")) {
+      throw new Error("Das Passwort muss mindestens 6 Zeichen lang sein.");
+    }
+    throw error;
+  }
+
+  // If no session created automatically, attempt immediate sign-in
+  if (!data.session) {
+    try {
+      const loginRes = await supabase.auth.signInWithPassword({ email, password: pass });
+      if (loginRes.data.session) return loginRes.data;
+    } catch {}
+  }
+
   return data;
 }
 
