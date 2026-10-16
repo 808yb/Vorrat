@@ -59,6 +59,24 @@ export interface WeeklyMealPlannerScreenProps {
   onNotify?: (message: string) => void;
 }
 
+function DayMealThumb({ recipe }: { recipe: CatalogRecipe }) {
+  const [imgError, setImgError] = useState(false);
+
+  if (recipe.imageUrl && !imgError) {
+    return (
+      <img
+        src={recipe.imageUrl}
+        alt={recipe.title}
+        className="day-col-img"
+        loading="lazy"
+        onError={() => setImgError(true)}
+      />
+    );
+  }
+
+  return <ProductMark tone={getFoodTone(recipe.title)} name={recipe.title} compact />;
+}
+
 export function WeeklyMealPlannerScreen({
   pantry,
   favorites,
@@ -88,6 +106,33 @@ export function WeeklyMealPlannerScreen({
   const [ingredientFilter, setIngredientFilter] = useState<"all" | "missing" | "inStock">("all");
   const [syncedRecently, setSyncedRecently] = useState(false);
   const [isSavedRecipesDistributorOpen, setIsSavedRecipesDistributorOpen] = useState(false);
+
+  // Dynamic calendar dates for the current week (Monday - Sunday)
+  const weekDates = useMemo(() => {
+    const now = new Date();
+    const currentDay = now.getDay(); // 0 is Sunday, 1 is Monday...
+    const distToMonday = currentDay === 0 ? -6 : 1 - currentDay;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() + distToMonday);
+
+    const dates: Record<WeekdayId, number> = {
+      mo: 0,
+      di: 0,
+      mi: 0,
+      do: 0,
+      fr: 0,
+      sa: 0,
+      so: 0,
+    };
+
+    WEEKDAYS.forEach((w, idx) => {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + idx);
+      dates[w.id] = d.getDate();
+    });
+
+    return dates;
+  }, []);
 
   // Saved / Favorited recipes from catalog
   const savedRecipes = useMemo(
@@ -410,40 +455,110 @@ export function WeeklyMealPlannerScreen({
         </div>
       </section>
 
-      {/* Weekdays Filter Navigation (Horizontal Pills) */}
-      <section className="planner-week-nav-bar hide-scrollbar">
-        <button
-          type="button"
-          className={`week-nav-pill ${selectedDayFilter === "all" ? "active" : ""}`}
-          onClick={() => setSelectedDayFilter("all")}
-        >
-          <span>Alle Tage</span>
-          <b>{totalMealsCount}</b>
-        </button>
+      {/* Meal Plan Strip Card (Reference Layout with Photos & Names per Day) */}
+      <section className="meal-plan-card">
+        <div className="meal-plan-card-header">
+          <div className="meal-plan-header-left">
+            <div className="meal-plan-calendar-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
+            </div>
+            <div>
+              <div className="meal-plan-title-line">
+                <h3>Wochenplan</h3>
+                <span className="meal-plan-count-tag">{totalMealsCount} geplant</span>
+              </div>
+              <p>Geplante Mahlzeiten dieser Woche</p>
+            </div>
+          </div>
 
-        {WEEKDAYS.map((day) => {
-          const dayMeals = plannedMeals.filter((m) => m.dayId === day.id);
-          const hasMeals = dayMeals.length > 0;
-          const isSelected = selectedDayFilter === day.id;
+          <button
+            type="button"
+            className="meal-plan-view-toggle"
+            onClick={() => setSelectedDayFilter((prev) => (prev === "all" ? "mo" : "all"))}
+            title={selectedDayFilter === "all" ? "Tagesansicht fokussieren" : "Alle Tage anzeigen"}
+          >
+            <span>{selectedDayFilter === "all" ? "Alle 7 Tage" : "Alle Tage anzeigen →"}</span>
+          </button>
+        </div>
 
-          return (
-            <button
-              key={day.id}
-              type="button"
-              className={`week-nav-pill ${isSelected ? "active" : ""} ${hasMeals ? "has-meals" : ""}`}
-              onClick={() => setSelectedDayFilter(day.id)}
-            >
-              <span className="pill-day-short">{day.short}</span>
-              {hasMeals ? (
-                <span className="pill-meal-dot" title={`${dayMeals.length} Mahlzeit(en)`}>
-                  {dayMeals.length}
-                </span>
-              ) : (
-                <span className="pill-empty-dot" />
-              )}
-            </button>
-          );
-        })}
+        {/* 7 Days Row: Mon - Sun with Day, Date, Food Thumbnail & Meal Name */}
+        <div className="meal-plan-days-row hide-scrollbar">
+          {WEEKDAYS.map((day) => {
+            const dayMeals = plannedMeals.filter((m) => m.dayId === day.id);
+            const hasMeals = dayMeals.length > 0;
+            const primaryMeal = dayMeals[0];
+            const recipe = primaryMeal ? catalog.find((r) => r.id === primaryMeal.recipeId) : null;
+            const isSelected = selectedDayFilter === day.id;
+            const dateNum = weekDates[day.id];
+
+            return (
+              <button
+                key={day.id}
+                type="button"
+                className={`meal-plan-day-col ${isSelected ? "active" : ""} ${hasMeals ? "has-meal" : "empty"}`}
+                onClick={() => {
+                  if (isSelected) {
+                    setSelectedDayFilter("all");
+                  } else {
+                    setSelectedDayFilter(day.id);
+                  }
+                }}
+                title={
+                  hasMeals
+                    ? `${day.name}: ${dayMeals.map((m) => m.recipeTitle).join(", ")}`
+                    : `${day.name}: Noch kein Gericht geplant (+ Tippen zum Planen)`
+                }
+              >
+                <span className="day-col-short">{day.short}</span>
+                <span className="day-col-date">{dateNum}</span>
+
+                <div className="day-col-thumb-wrap">
+                  {recipe ? (
+                    <DayMealThumb recipe={recipe} />
+                  ) : (
+                    <div
+                      className="day-col-empty-thumb"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openAddModalForDay(day.id);
+                      }}
+                      title={`Gericht für ${day.name} hinzufügen`}
+                    >
+                      <span>+</span>
+                    </div>
+                  )}
+
+                  {dayMeals.length > 1 && (
+                    <span className="day-col-extra-badge">+{dayMeals.length - 1}</span>
+                  )}
+                </div>
+
+                <div className="day-col-name-wrap">
+                  {recipe ? (
+                    <span className="day-col-recipe-name" title={recipe.title}>
+                      {recipe.title.replace(/\s*Deluxe\b/gi, "").trim()}
+                    </span>
+                  ) : (
+                    <span
+                      className="day-col-empty-label"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openAddModalForDay(day.id);
+                      }}
+                    >
+                      + Planen
+                    </span>
+                  )}
+                </div>
+              </button>
+            );
+          })}
+        </div>
       </section>
 
       {/* Main Days Grid */}

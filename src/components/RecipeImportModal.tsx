@@ -174,18 +174,18 @@ export function RecipeImportModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="w-full sm:max-w-xl bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-3xl shadow-2xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-6 duration-300">
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <div className="w-full sm:max-w-xl bg-white border border-slate-200 rounded-t-3xl sm:rounded-3xl shadow-2xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-6 duration-300">
         
         {/* Header */}
-        <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between bg-slate-900/90 sticky top-0 z-10">
+        <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0 z-10">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-700 flex items-center justify-center text-white shadow-md shadow-emerald-500/20">
               <Sparkles size={18} />
             </div>
             <div>
-              <h3 className="font-bold text-base text-white">Rezept mit KI importieren</h3>
-              <p className="text-xs text-slate-400">Aus Videos, TikToks, Reels, URLs oder Text</p>
+              <h3 className="font-bold text-base text-slate-900">Rezept mit KI importieren</h3>
+              <p className="text-xs text-slate-500">Aus Videos, TikToks, Reels, URLs oder Text</p>
             </div>
           </div>
           <button
@@ -193,25 +193,25 @@ export function RecipeImportModal({
               handleReset();
               onClose();
             }}
-            className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
           >
             <X size={20} />
           </button>
         </div>
 
         {/* Content Body */}
-        <div className="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1">
+        <div className="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1 bg-white">
           {!importedData ? (
             <>
               {/* 3-Way Mode Switcher */}
-              <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-800/80 rounded-xl border border-slate-700/50">
+              <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200/80">
                 <button
                   type="button"
                   onClick={() => setActiveTab("video")}
                   className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                     activeTab === "video"
-                      ? "bg-emerald-500 text-slate-950 shadow-sm font-bold"
-                      : "text-slate-400 hover:text-slate-200"
+                      ? "bg-white text-emerald-700 shadow-sm font-bold border border-slate-200/60"
+                      : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
                   <Video size={14} />
@@ -222,8 +222,8 @@ export function RecipeImportModal({
                   onClick={() => setActiveTab("url")}
                   className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                     activeTab === "url"
-                      ? "bg-emerald-500 text-slate-950 shadow-sm font-bold"
-                      : "text-slate-400 hover:text-slate-200"
+                      ? "bg-white text-emerald-700 shadow-sm font-bold border border-slate-200/60"
+                      : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
                   <LinkIcon size={14} />
@@ -234,8 +234,8 @@ export function RecipeImportModal({
                   onClick={() => setActiveTab("text")}
                   className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                     activeTab === "text"
-                      ? "bg-emerald-500 text-slate-950 shadow-sm font-bold"
-                      : "text-slate-400 hover:text-slate-200"
+                      ? "bg-white text-emerald-700 shadow-sm font-bold border border-slate-200/60"
+                      : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
                   <FileText size={14} />
@@ -247,7 +247,7 @@ export function RecipeImportModal({
               {activeTab === "video" && (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-slate-300">
+                    <label className="text-xs font-semibold text-slate-700">
                       Kochvideo, TikTok oder Reel hochladen
                     </label>
                     <span className="text-[10px] text-slate-400">MP4, MOV, WebM (bis 25 MB)</span>
@@ -258,8 +258,8 @@ export function RecipeImportModal({
                     onClick={() => fileInputRef.current?.click()}
                     className={`border-2 border-dashed rounded-2xl p-5 text-center cursor-pointer transition-all ${
                       selectedVideoFile
-                        ? "border-emerald-500/80 bg-emerald-950/20"
-                        : "border-slate-700 hover:border-slate-600 bg-slate-950/50 hover:bg-slate-950/80"
+                        ? "border-emerald-500 bg-emerald-50/40"
+                        : "border-slate-300 hover:border-emerald-500 bg-slate-50 hover:bg-emerald-50/20"
                     }`}
                   >
                     <input
@@ -281,24 +281,24 @@ export function RecipeImportModal({
                             />
                           </div>
                         )}
-                        <div className="flex items-center justify-center gap-2 text-xs font-bold text-emerald-400">
+                        <div className="flex items-center justify-center gap-2 text-xs font-bold text-emerald-700">
                           <CheckCircle2 size={16} />
                           <span>{selectedVideoFile.name}</span>
-                          <span className="text-slate-400 font-normal">
+                          <span className="text-slate-500 font-normal">
                             ({(selectedVideoFile.size / (1024 * 1024)).toFixed(1)} MB)
                           </span>
                         </div>
-                        <span className="text-[11px] text-slate-400 block">Klicke, um ein anderes Video zu wählen</span>
+                        <span className="text-[11px] text-slate-500 block">Klicke, um ein anderes Video zu wählen</span>
                       </div>
                     ) : (
                       <div className="space-y-2">
-                        <div className="w-12 h-12 rounded-2xl bg-slate-800 text-emerald-400 flex items-center justify-center mx-auto shadow-md">
+                        <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto shadow-sm">
                           <UploadCloud size={24} />
                         </div>
-                        <strong className="text-xs text-slate-200 block">
+                        <strong className="text-xs text-slate-800 block">
                           Video hier ablegen oder Datei auswählen
                         </strong>
-                        <p className="text-[11px] text-slate-400 max-w-xs mx-auto">
+                        <p className="text-[11px] text-slate-500 max-w-xs mx-auto">
                           Gemini analysiert visuelle Zutaten, Text-Einblendungen & gesprochene Mengenangaben.
                         </p>
                       </div>
@@ -309,9 +309,9 @@ export function RecipeImportModal({
                   <button
                     type="button"
                     onClick={handleLoadDemoReel}
-                    className="w-full py-2.5 px-3 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-emerald-500/30 text-emerald-300 text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    className="w-full py-2.5 px-3 rounded-xl bg-emerald-50/80 hover:bg-emerald-100/80 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer"
                   >
-                    <Sparkles size={14} className="text-emerald-400" />
+                    <Sparkles size={14} className="text-emerald-600" />
                     <span>✨ Beispiel-Reel testen: Crispy Chicken Wraps (TikTok)</span>
                   </button>
                 </div>
@@ -320,15 +320,15 @@ export function RecipeImportModal({
               {/* URL TAB */}
               {activeTab === "url" && (
                 <div className="space-y-2">
-                  <label className="text-xs font-medium text-slate-300">Rezept-Link einfügen</label>
+                  <label className="text-xs font-semibold text-slate-700">Rezept-Link einfügen</label>
                   <input
                     type="url"
                     value={inputUrl}
                     onChange={(e) => setInputUrl(e.target.value)}
                     placeholder="https://chefkoch.de/... oder foodblog.com/..."
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-3 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-3 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
                   />
-                  <p className="text-[11px] text-slate-400">
+                  <p className="text-[11px] text-slate-500">
                     Unterstützt Koch-Websites, Foodblogs und Online-Rezepte.
                   </p>
                 </div>
@@ -337,23 +337,23 @@ export function RecipeImportModal({
               {/* TEXT TAB */}
               {activeTab === "text" && (
                 <div className="space-y-2">
-                  <label className="text-xs font-medium text-slate-300">Rezept-Text oder Social-Media Caption</label>
+                  <label className="text-xs font-semibold text-slate-700">Rezept-Text oder Social-Media Caption</label>
                   <textarea
                     rows={6}
                     value={inputText}
                     onChange={(e) => setInputText(e.target.value)}
                     placeholder="Kopiere hier Zutaten & Zubereitung aus Instagram, TikTok, WhatsApp oder Kochbuch..."
-                    className="w-full bg-slate-950 border border-slate-700 rounded-xl p-3.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all resize-none"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all resize-none"
                   />
-                  <p className="text-[11px] text-slate-400">
+                  <p className="text-[11px] text-slate-500">
                     Die KI erkennt Zutaten, Mengenangaben und Schritte automatisch.
                   </p>
                 </div>
               )}
 
               {error && (
-                <div className="flex items-start gap-2.5 p-3 rounded-xl bg-red-950/40 border border-red-800/60 text-red-300 text-xs">
-                  <AlertCircle size={16} className="shrink-0 mt-0.5 text-red-400" />
+                <div className="flex items-start gap-2.5 p-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs">
+                  <AlertCircle size={16} className="shrink-0 mt-0.5 text-red-500" />
                   <span>{error}</span>
                 </div>
               )}
@@ -362,11 +362,11 @@ export function RecipeImportModal({
                 type="button"
                 disabled={isLoading}
                 onClick={handleAnalyze}
-                className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-bold text-sm shadow-lg shadow-emerald-500/25 active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
+                className="w-full py-3.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-md shadow-emerald-600/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
               >
                 {isLoading ? (
                   <>
-                    <span className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
+                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                     <span>
                       {activeTab === "video"
                         ? "Gemini analysiert Video & Tonspur..."
@@ -388,51 +388,51 @@ export function RecipeImportModal({
           ) : (
             /* Analysis Result Preview */
             <div className="space-y-4 animate-in fade-in duration-300">
-              <div className="relative rounded-2xl overflow-hidden border border-slate-800 bg-slate-950">
+              <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-100">
                 <img
                   src={importedData.recipe.imageUrl}
                   alt={importedData.recipe.title}
                   className="w-full h-44 object-cover"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-950/30 to-transparent" />
                 
-                <div className="absolute top-3 right-3 bg-emerald-500/90 text-slate-950 font-bold text-xs px-2.5 py-1 rounded-full backdrop-blur-md">
+                <div className="absolute top-3 right-3 bg-emerald-500 text-slate-950 font-bold text-xs px-2.5 py-1 rounded-full backdrop-blur-md shadow-sm">
                   {importedData.recipe.matchScore}% im Vorrat
                 </div>
 
                 <div className="absolute bottom-3 left-3 right-3 text-white">
                   <h4 className="font-bold text-lg leading-tight">{importedData.recipe.title}</h4>
-                  <p className="text-xs text-slate-300 line-clamp-1 mt-0.5">{importedData.recipe.subtitle}</p>
+                  <p className="text-xs text-slate-200 line-clamp-1 mt-0.5">{importedData.recipe.subtitle}</p>
                 </div>
               </div>
 
               {/* Stats badges */}
               <div className="grid grid-cols-3 gap-2">
-                <div className="bg-slate-800/80 p-2 rounded-xl text-center border border-slate-700/50">
-                  <div className="flex items-center justify-center gap-1 text-slate-400 text-[10px]">
+                <div className="bg-slate-50 p-2 rounded-xl text-center border border-slate-200">
+                  <div className="flex items-center justify-center gap-1 text-slate-500 text-[10px]">
                     <Clock size={12} /> Zeit
                   </div>
-                  <span className="font-bold text-xs text-slate-100">{importedData.recipe.time}</span>
+                  <span className="font-bold text-xs text-slate-800">{importedData.recipe.time}</span>
                 </div>
-                <div className="bg-slate-800/80 p-2 rounded-xl text-center border border-slate-700/50">
-                  <div className="flex items-center justify-center gap-1 text-slate-400 text-[10px]">
+                <div className="bg-slate-50 p-2 rounded-xl text-center border border-slate-200">
+                  <div className="flex items-center justify-center gap-1 text-slate-500 text-[10px]">
                     <Flame size={12} /> Kalorien
                   </div>
-                  <span className="font-bold text-xs text-slate-100">{importedData.recipe.baseCal} kcal</span>
+                  <span className="font-bold text-xs text-slate-800">{importedData.recipe.baseCal} kcal</span>
                 </div>
-                <div className="bg-slate-800/80 p-2 rounded-xl text-center border border-slate-700/50">
-                  <div className="flex items-center justify-center gap-1 text-slate-400 text-[10px]">
+                <div className="bg-slate-50 p-2 rounded-xl text-center border border-slate-200">
+                  <div className="flex items-center justify-center gap-1 text-slate-500 text-[10px]">
                     <ChefHat size={12} /> Protein
                   </div>
-                  <span className="font-bold text-xs text-slate-100">{importedData.recipe.baseProt}g</span>
+                  <span className="font-bold text-xs text-slate-800">{importedData.recipe.baseProt}g</span>
                 </div>
               </div>
 
               {/* Ingredients Breakdown */}
-              <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-3.5 space-y-2">
-                <h5 className="font-semibold text-xs text-slate-200 flex items-center justify-between">
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 space-y-2">
+                <h5 className="font-semibold text-xs text-slate-800 flex items-center justify-between">
                   <span>Zutaten-Abgleich mit Vorrat</span>
-                  <span className="text-[11px] text-emerald-400">
+                  <span className="text-[11px] text-emerald-700 font-bold">
                     {importedData.recipe.ingredientsList(1).length - importedData.missingIngredients.length} / {importedData.recipe.ingredientsList(1).length} vorhanden
                   </span>
                 </h5>
@@ -447,19 +447,19 @@ export function RecipeImportModal({
                         key={idx}
                         className={`flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs ${
                           isMissing
-                            ? "bg-amber-950/30 border border-amber-800/40 text-amber-200"
-                            : "bg-emerald-950/30 border border-emerald-800/40 text-emerald-200"
+                            ? "bg-amber-50 border border-amber-200 text-amber-900"
+                            : "bg-emerald-50 border border-emerald-200 text-emerald-900"
                         }`}
                       >
                         <div className="flex items-center gap-2">
                           {isMissing ? (
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                           ) : (
-                            <CheckCircle2 size={13} className="text-emerald-400" />
+                            <CheckCircle2 size={13} className="text-emerald-600" />
                           )}
                           <span>{ing.name}</span>
                         </div>
-                        <span className="text-slate-400 font-medium">{ing.amount}</span>
+                        <span className="text-slate-500 font-medium">{ing.amount}</span>
                       </div>
                     );
                   })}
@@ -468,18 +468,18 @@ export function RecipeImportModal({
 
               {/* Add to Groceries Option */}
               {importedData.missingIngredients.length > 0 && (
-                <label className="flex items-center gap-3 p-3 bg-slate-800/60 border border-slate-700/60 rounded-xl cursor-pointer hover:bg-slate-800 transition-colors">
+                <label className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-100 transition-colors">
                   <input
                     type="checkbox"
                     checked={addToGroceries}
                     onChange={(e) => setAddToGroceries(e.target.checked)}
-                    className="w-4 h-4 rounded text-emerald-500 focus:ring-emerald-400 border-slate-600 bg-slate-900"
+                    className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300 bg-white"
                   />
                   <div className="flex-1 text-xs">
-                    <span className="font-semibold text-slate-200 block">
+                    <span className="font-semibold text-slate-800 block">
                       {importedData.missingIngredients.length} fehlende Zutaten auf Einkaufsliste setzen
                     </span>
-                    <span className="text-slate-400 text-[11px]">
+                    <span className="text-slate-500 text-[11px]">
                       Werden direkt für den nächsten Einkauf vorbereitet
                     </span>
                   </div>
@@ -492,14 +492,14 @@ export function RecipeImportModal({
                 <button
                   type="button"
                   onClick={handleReset}
-                  className="py-3 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition-colors cursor-pointer"
+                  className="py-3 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 text-slate-700 font-semibold text-xs transition-colors cursor-pointer"
                 >
                   Anderes Rezept
                 </button>
                 <button
                   type="button"
                   onClick={handleConfirmSave}
-                  className="py-3 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/25 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                  className="py-3 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-md shadow-emerald-600/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <CheckCircle2 size={15} />
                   Rezept merken

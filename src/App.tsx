@@ -645,9 +645,29 @@ function AppHeader({
   );
 }
 
+const PANTRY_CATEGORY_GROUPS = [
+  { id: "Kühl", name: "Kühlschrank", icon: "🧊", chip: "Kühlschrank" },
+  { id: "Tiefkühl", name: "Tiefkühl (TK)", icon: "❄️", chip: "Tiefkühl" },
+  { id: "Trocken", name: "Trockenvorrat", icon: "🥫", chip: "Trockenvorrat" },
+  { id: "Saucen", name: "Gewürze & Saucen", icon: "🧂", chip: "Gewürze & Saucen" },
+  { id: "Getränke", name: "Getränke", icon: "🥤", chip: "Getränke" },
+  { id: "Sonstiges", name: "Sonstiges", icon: "📦", chip: "" },
+];
+
+function getCategoryGroupKey(cat: string): string {
+  const c = (cat || "").toLowerCase();
+  if (c.includes("tief") || c.includes("tk") || c.includes("gefrier")) return "Tiefkühl";
+  if (c.includes("kühl")) return "Kühl";
+  if (c.includes("trocken") || c.includes("reis") || c.includes("nudel") || c.includes("mehl") || c.includes("hafer") || c.includes("grund")) return "Trocken";
+  if (c.includes("sauc") || c.includes("gewürz") || c.includes("öl") || c.includes("essig") || c.includes("dressing")) return "Saucen";
+  if (c.includes("getränk") || c.includes("saft") || c.includes("wasser") || c.includes("tee") || c.includes("kaffee")) return "Getränke";
+  return "Sonstiges";
+}
+
 function PantryScreen({
   pantry,
   updateAmount,
+  onUpdateCategory,
   onOpenAddModal,
   onEditItem,
   onDeleteItem,
@@ -657,6 +677,7 @@ function PantryScreen({
 }: {
   pantry: PantryItem[];
   updateAmount: (id: number | string, delta: number) => void;
+  onUpdateCategory?: (id: number | string, newCategory: string) => void;
   onOpenAddModal: () => void;
   onEditItem: (item: PantryItem) => void;
   onDeleteItem: (id: number | string) => void;
@@ -666,6 +687,14 @@ function PantryScreen({
 }) {
   const [filter, setFilter] = useState("Alle");
   const [search, setSearch] = useState("");
+  const [collapsedCats, setCollapsedCats] = useState<Record<string, boolean>>({});
+
+  const toggleCat = (catId: string) => {
+    setCollapsedCats((prev) => ({
+      ...prev,
+      [catId]: !prev[catId],
+    }));
+  };
 
   const urgentItems = useMemo(() => {
     return pantry.filter(
@@ -688,6 +717,7 @@ function PantryScreen({
     "Alle",
     ...(urgentItems.length > 0 ? [`🚨 Dringend (${urgentItems.length})`] : ["🚨 Dringend"]),
     "Kühlschrank",
+    "Tiefkühl",
     "Trockenvorrat",
     "Gewürze & Saucen",
     "Getränke",
@@ -699,15 +729,136 @@ function PantryScreen({
       item.amount > 0 &&
       (getMhdStatus(item.mhd) === "soon" || getMhdStatus(item.mhd) === "expired");
 
+    const catKey = getCategoryGroupKey(item.category);
+
     const categoryMatch =
       filter === "Alle" ||
       (filter.startsWith("🚨") && isUrgent) ||
-      (filter === "Kühlschrank" && item.category === "Kühl") ||
-      (filter === "Trockenvorrat" && item.category === "Trocken") ||
-      (filter === "Gewürze & Saucen" && item.category === "Saucen") ||
-      (filter === "Getränke" && item.category === "Getränke");
+      (filter === "Kühlschrank" && catKey === "Kühl") ||
+      (filter === "Tiefkühl" && catKey === "Tiefkühl") ||
+      (filter === "Trockenvorrat" && catKey === "Trocken") ||
+      (filter === "Gewürze & Saucen" && catKey === "Saucen") ||
+      (filter === "Getränke" && catKey === "Getränke");
     return categoryMatch && item.name.toLowerCase().includes(search.toLowerCase());
   });
+
+  const renderProductCard = (item: PantryItem) => {
+    const isUnlimited = Boolean(item.isUnlimited || item.name.toLowerCase().includes("wasser") || item.amount >= 99999);
+    const percent = isUnlimited ? 100 : Math.min(100, Math.round((item.amount / item.total) * 100));
+    const status = isUnlimited ? "Vorhanden" : percent === 0 ? "Leer" : percent <= 25 ? "Niedrig" : "Vorhanden";
+    const step = item.unit === "g" ? 50 : item.unit === "ml" ? 25 : 1;
+    const catGroup = getCategoryGroupKey(item.category);
+
+    return (
+      <article
+        className="product-card clickable"
+        key={item.id}
+        onClick={() => onEditItem(item)}
+      >
+        <ProductMark tone={item.tone} name={item.name} category={item.category} />
+        <div className="product-content">
+          <div className="product-heading">
+            <div>
+              <div className="product-title-row">
+                <h3>{item.name}</h3>
+                <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
+                  <button
+                    type="button"
+                    className="product-edit-icon-btn"
+                    title="Vorrat bearbeiten"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEditItem(item);
+                    }}
+                  >
+                    <Icon name="pencil" size={12} />
+                  </button>
+                  <button
+                    type="button"
+                    className="product-delete-icon-btn"
+                    title="Aus Vorrat löschen"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDeleteItem(item.id);
+                    }}
+                  >
+                    <Icon name="trash" size={12} />
+                  </button>
+                </div>
+              </div>
+              <div className="product-sub-row">
+                <select
+                  className="product-cat-select"
+                  value={catGroup}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => {
+                    e.stopPropagation();
+                    if (onUpdateCategory) {
+                      onUpdateCategory(item.id, e.target.value);
+                    }
+                  }}
+                  title="Lagerort / Kategorie direkt ändern"
+                >
+                  <option value="Kühl">🧊 Kühlschrank</option>
+                  <option value="Tiefkühl">❄️ Tiefkühl</option>
+                  <option value="Trocken">🥫 Trocken</option>
+                  <option value="Saucen">🧂 Gewürze/Saucen</option>
+                  <option value="Getränke">🥤 Getränke</option>
+                  <option value="Sonstiges">📦 Sonstiges</option>
+                </select>
+                <span className={`mhd-badge ${getMhdStatus(item.mhd)}`}>
+                  {formatMhdDisplay(item.mhd)}
+                </span>
+              </div>
+            </div>
+            <span className={`status ${status.toLowerCase()}`}>
+              {isUnlimited ? "Unbegrenzt" : status}
+            </span>
+          </div>
+          <div className="stock-row">
+            {isUnlimited ? (
+              <span className="unlimited-stock-badge" style={{ color: "#059669", fontWeight: 700, fontSize: "12px" }}>
+                ∞ Immer vorrätig
+              </span>
+            ) : (
+              <span>
+                {item.amount}{item.unit} <small>/ {item.total}{item.unit}</small>
+              </span>
+            )}
+            {!isUnlimited && (
+              <div className="stepper" onClick={(e) => e.stopPropagation()}>
+                <Button
+                  className="stepper-button"
+                  onClick={() => updateAmount(item.id, -step)}
+                >
+                  <Icon name="minus" size={14} />
+                </Button>
+                <Button
+                  className="stepper-button plus"
+                  onClick={() => updateAmount(item.id, step)}
+                >
+                  <Icon name="plus" size={14} />
+                </Button>
+              </div>
+            )}
+          </div>
+          <div className="progress-track">
+            <motion.div
+              className={`progress-bar-fill ${isUnlimited ? "vorhanden" : status.toLowerCase()}`}
+              initial={false}
+              animate={{ width: `${percent}%` }}
+              transition={{
+                type: "spring",
+                stiffness: 280,
+                damping: 24,
+                mass: 0.6,
+              }}
+            />
+          </div>
+        </div>
+      </article>
+    );
+  };
 
   return (
     <main className="screen pantry-screen">
@@ -775,109 +926,51 @@ function PantryScreen({
       </div>
 
       <div className="section-heading">
-        <div><h2>Lebensmittel</h2><p>Nach Füllstand sortiert</p></div>
-        <Button className="text-button">Sortieren <Icon name="chevron" size={14} /></Button>
+        <div><h2>Lebensmittel</h2><p>In Kategorien geordnet · Nach Füllstand sortiert</p></div>
       </div>
 
-      <div className="inventory-list">
-        {visible.map((item) => {
-          const isUnlimited = Boolean(item.isUnlimited || item.name.toLowerCase().includes("wasser") || item.amount >= 99999);
-          const percent = isUnlimited ? 100 : Math.min(100, Math.round((item.amount / item.total) * 100));
-          const status = isUnlimited ? "Vorhanden" : percent === 0 ? "Leer" : percent <= 25 ? "Niedrig" : "Vorhanden";
-          const step = item.unit === "g" ? 50 : item.unit === "ml" ? 25 : 1;
+      {/* Product List Grouped into Dropdown Accordions */}
+      {filter === "Alle" ? (
+        <div className="pantry-category-sections">
+          {PANTRY_CATEGORY_GROUPS.map((group) => {
+            const itemsInGroup = visible.filter(
+              (item) => getCategoryGroupKey(item.category) === group.id
+            );
+            if (itemsInGroup.length === 0) return null;
+            const isCollapsed = Boolean(collapsedCats[group.id]);
 
-          return (
-            <article
-              className="product-card clickable"
-              key={item.id}
-              onClick={() => onEditItem(item)}
-            >
-              <ProductMark tone={item.tone} name={item.name} category={item.category} />
-              <div className="product-content">
-                <div className="product-heading">
-                  <div>
-                    <div className="product-title-row">
-                      <h3>{item.name}</h3>
-                      <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
-                        <button
-                          type="button"
-                          className="product-edit-icon-btn"
-                          title="Vorrat bearbeiten"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onEditItem(item);
-                          }}
-                        >
-                          <Icon name="pencil" size={12} />
-                        </button>
-                        <button
-                          type="button"
-                          className="product-delete-icon-btn"
-                          title="Aus Vorrat löschen"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onDeleteItem(item.id);
-                          }}
-                        >
-                          <Icon name="trash" size={12} />
-                        </button>
-                      </div>
-                    </div>
-                    <div className="product-sub-row">
-                      <span className="product-cat-pill">{item.category}</span>
-                      <span className={`mhd-badge ${getMhdStatus(item.mhd)}`}>
-                        {formatMhdDisplay(item.mhd)}
-                      </span>
-                    </div>
+            return (
+              <div key={group.id} className="pantry-category-group">
+                <button
+                  type="button"
+                  className="pantry-category-header"
+                  onClick={() => toggleCat(group.id)}
+                  aria-expanded={!isCollapsed}
+                >
+                  <div className="pantry-cat-title">
+                    <span className="pantry-cat-icon">{group.icon}</span>
+                    <h3>{group.name}</h3>
+                    <span className="pantry-cat-count">{itemsInGroup.length}</span>
                   </div>
-                  <span className={`status ${status.toLowerCase()}`}>
-                    {isUnlimited ? "Unbegrenzt" : status}
+                  <span className={`pantry-cat-chevron ${isCollapsed ? "collapsed" : ""}`}>
+                    <Icon name="chevron" size={14} />
                   </span>
-                </div>
-                <div className="stock-row">
-                  {isUnlimited ? (
-                    <span className="unlimited-stock-badge" style={{ color: "#059669", fontWeight: 700, fontSize: "12px" }}>
-                      ∞ Immer vorrätig
-                    </span>
-                  ) : (
-                    <span>
-                      {item.amount}{item.unit} <small>/ {item.total}{item.unit}</small>
-                    </span>
-                  )}
-                  {!isUnlimited && (
-                    <div className="stepper" onClick={(e) => e.stopPropagation()}>
-                      <Button
-                        className="stepper-button"
-                        onClick={() => updateAmount(item.id, -step)}
-                      >
-                        <Icon name="minus" size={14} />
-                      </Button>
-                      <Button
-                        className="stepper-button plus"
-                        onClick={() => updateAmount(item.id, step)}
-                      >
-                        <Icon name="plus" size={14} />
-                      </Button>
-                    </div>
-                  )}
-                </div>
-                <div className="progress-track">
-                  <motion.div
-                    className={`progress-bar-fill ${isUnlimited ? "vorhanden" : status.toLowerCase()}`}
-                    initial={false}
-                    animate={{ width: `${percent}%` }}
-                    transition={{
-                      type: "spring",
-                      stiffness: 280,
-                      damping: 24,
-                      mass: 0.6,
-                    }}
-                  />
-                </div>
+                </button>
+
+                {!isCollapsed && (
+                  <div className="inventory-list">
+                    {itemsInGroup.map(renderProductCard)}
+                  </div>
+                )}
               </div>
-            </article>
-          );
-        })}
+            );
+          })}
+        </div>
+      ) : (
+        <div className="inventory-list">
+          {visible.map(renderProductCard)}
+        </div>
+      )}
 
         {visible.length === 0 && (
           <div
@@ -923,7 +1016,6 @@ function PantryScreen({
             )}
           </div>
         )}
-      </div>
 
       {/* Bottom Management & Reset Action */}
       {pantry.length > 0 && onOpenReset && (
@@ -1102,23 +1194,40 @@ function CookScreen({
     return list;
   }, [activeSearchedRecipe, shuffleIndex, servings]);
 
-  // Shuffle Handler: Strictly rotates through catalog proposals, clears searched recipe from shuffle
-  const handleShuffle = () => {
+  // Überrasch mich Handler: Pick a random recipe with high pantry match
+  const handleSurpriseMe = () => {
     setIsRotating(true);
-    setActiveSearchedRecipe(null);
-    setShuffleIndex((prev) => (prev + 1) % 3);
-    setDeckKey((k) => k + 1);
-    setMatchScore(Math.floor(Math.random() * 5) + 95); // 95% - 99%
-    setGenerated(true);
+    // Score all catalog recipes by pantry coverage
+    const scored = FULL_RECIPE_CATALOG.map((rec) => {
+      const breakdown = getRecipePantryBreakdown(rec, pantry, servings);
+      const inStockCount = breakdown.inStock.length;
+      const totalCount = breakdown.inStock.length + breakdown.missing.length;
+      const pct = totalCount > 0 ? inStockCount / totalCount : 0;
+      return { recipe: rec, pct, inStockCount };
+    });
 
-    if (onNotify) {
-      onNotify("3 neue Rezeptvorschläge gemischt");
+    // Prefer recipes with >= 30% match
+    const goodMatches = scored.filter((s) => s.pct >= 0.3);
+    const pool = goodMatches.length > 0 ? goodMatches : scored;
+    const randomPick = pool[Math.floor(Math.random() * pool.length)];
+
+    if (randomPick) {
+      setActiveSearchedRecipe(randomPick.recipe);
+      setDeckKey((k) => k + 1);
+      setViewMode("swipe");
+      setGenerated(true);
+      if (onNotify) {
+        const percentDisplay = Math.round(randomPick.pct * 100);
+        onNotify(`🎲 Überraschung: «${randomPick.recipe.title}» (${percentDisplay}% vorrätig)!`);
+      }
     }
 
     setTimeout(() => {
       setIsRotating(false);
     }, 400);
   };
+
+  const handleShuffle = handleSurpriseMe;
 
   const handleGenerate = async () => {
     const query = intent.trim();
@@ -1166,8 +1275,7 @@ function CookScreen({
         setIsAiGenerating(false);
       }
     } else {
-      handleShuffle();
-      if (onNotify) onNotify("Rezeptvorschläge für deinen Vorrat aktualisiert");
+      handleSurpriseMe();
     }
   };
 
@@ -1175,7 +1283,6 @@ function CookScreen({
     <main className="screen cook-screen">
       <section className="title-row cook-title">
         <div><p className="eyebrow">Smart & restefreundlich</p><h1>Was kochen wir?</h1></div>
-        <div className="ai-orb"><Icon name="sparkles" size={19} /></div>
       </section>
 
       <section className="generator-card">
@@ -1221,11 +1328,11 @@ function CookScreen({
           </Button>
         </label>
 
-        {/* Dual button bar: Generate + Shuffle */}
+        {/* Dual button bar: Generate + Überrasch mich */}
         <div style={{ display: "flex", gap: "8px" }}>
           <Button
             className={`primary-button generate-button ${isAiGenerating ? "loading" : ""}`}
-            style={{ flex: 2 }}
+            style={{ flex: 1.6 }}
             icon={isAiGenerating ? "sync" : "wand"}
             disabled={isAiGenerating}
             onClick={handleGenerate}
@@ -1236,22 +1343,23 @@ function CookScreen({
           <Button
             className="secondary-button"
             style={{
-              flex: 1,
+              flex: 1.4,
               height: "44px",
               background: "#ecfdf5",
               borderColor: "#a7f3d0",
               color: "#047857",
               fontWeight: 750,
               gap: "5px",
+              whiteSpace: "nowrap",
             }}
-            title="Alternative Rezeptvorschläge anzeigen"
+            title="Zufälliges Rezept mit Zutaten aus deinem Vorrat vorschlagen"
             disabled={isAiGenerating}
-            onClick={handleShuffle}
+            onClick={handleSurpriseMe}
           >
             <span style={{ display: "inline-block", transform: isRotating ? "rotate(180deg)" : "none", transition: "transform 350ms ease" }}>
-              <Icon name="shuffle" size={16} />
+              🎲
             </span>
-            Shuffle
+            Überrasch mich
           </Button>
         </div>
 
@@ -1405,7 +1513,7 @@ function CookScreen({
           onOpenDetails={(rec) => setActiveModalRecipe(rec)}
           onAddMissingToGroceries={onAddMissingToGroceries}
           onNotify={onNotify}
-          onShuffle={handleShuffle}
+          onShuffle={handleSurpriseMe}
           onNavigateToSaved={onNavigateToCook}
         />
       ) : (
@@ -1428,11 +1536,11 @@ function CookScreen({
                   borderColor: "#cbd5e1",
                   color: "#334155",
                 }}
-                onClick={handleShuffle}
-                title="Andere 3 Rezepte anzeigen"
+                onClick={handleSurpriseMe}
+                title="Zufälliges Rezept aus Vorrat vorschlagen"
               >
-                <Icon name="shuffle" size={12} />
-                Shuffle
+                <span>🎲</span>
+                Überrasch mich
               </Button>
             </div>
           </div>
@@ -1667,10 +1775,10 @@ function CookScreen({
                   fontSize: "11px",
                   fontWeight: 750,
                 }}
-                onClick={handleShuffle}
+                onClick={handleSurpriseMe}
               >
-                <Icon name="shuffle" size={15} />
-                Andere Rezepte anzeigen (Shuffle)
+                <span>🎲</span>
+                Zufälliges Rezept vorschlagen (Überrasch mich)
               </Button>
             </div>
           </div>
@@ -1819,6 +1927,7 @@ function ShoppingScreen({
   onComplete,
   onToggleItem,
   onDeleteGrocery,
+  onClearGroceries,
   onNavigateToPlanner,
   onNotify,
 }: {
@@ -1826,6 +1935,7 @@ function ShoppingScreen({
   onComplete: (checkedIds: number[]) => void;
   onToggleItem: (id: number) => void;
   onDeleteGrocery: (id: number) => void;
+  onClearGroceries?: () => void;
   onNavigateToPlanner?: () => void;
   onNotify?: (message: string) => void;
 }) {
@@ -1952,7 +2062,33 @@ function ShoppingScreen({
             <span>
               <strong>{groceries.length}</strong> Artikel in {groups.length} Kategorien
             </span>
-            <span>{activeChecked.length} erledigt</span>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <span>{activeChecked.length} erledigt</span>
+              {onClearGroceries && (
+                <button
+                  type="button"
+                  onClick={onClearGroceries}
+                  style={{
+                    background: "#fff1f2",
+                    border: "1px solid #fecdd3",
+                    color: "#e11d48",
+                    fontSize: "11px",
+                    fontWeight: 650,
+                    padding: "3px 8px",
+                    borderRadius: "8px",
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "4px",
+                    transition: "all 140ms ease",
+                  }}
+                  title="Alle Artikel aus der Einkaufsliste löschen"
+                >
+                  <Icon name="trash" size={12} />
+                  <span>Einkauf leeren</span>
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="grocery-groups">
@@ -2005,7 +2141,7 @@ function ShoppingScreen({
             })}
           </div>
 
-          <div className="shopping-footer">
+          <div className="shopping-footer" style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
             <Button
               className="primary-button checkout-button"
               onClick={() => {
@@ -2028,6 +2164,30 @@ function ShoppingScreen({
                 <Icon name="chevron" size={16} />
               </span>
             </Button>
+            {onClearGroceries && (
+              <button
+                type="button"
+                onClick={onClearGroceries}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "#94a3b8",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  padding: "4px 8px",
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "5px",
+                }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = "#e11d48")}
+                onMouseLeave={(e) => (e.currentTarget.style.color = "#94a3b8")}
+              >
+                <Icon name="trash" size={13} />
+                <span>Einkaufsliste leeren</span>
+              </button>
+            )}
           </div>
         </>
       )}
@@ -2384,6 +2544,26 @@ export default function App() {
         return item;
       })
     );
+  };
+
+  const updateCategory = (id: number | string, newCategory: string) => {
+    setPantry((items) =>
+      items.map((item) => {
+        if (String(item.id) === String(id)) {
+          return { ...item, category: newCategory };
+        }
+        return item;
+      })
+    );
+    notify("Lagerort aktualisiert");
+  };
+
+  const handleClearGroceries = () => {
+    setGroceries([]);
+    try {
+      localStorage.setItem("forret_design_groceries", JSON.stringify([]));
+    } catch {}
+    notify("Einkaufsliste geleert");
   };
 
   const lowStockCount = useMemo(
@@ -2771,6 +2951,7 @@ export default function App() {
         <PantryScreen
           pantry={pantry}
           updateAmount={updateAmount}
+          onUpdateCategory={updateCategory}
           onOpenAddModal={() => setIsAddModalOpen(true)}
           onEditItem={(item) => setEditingPantryItem(item)}
           onDeleteItem={handleDeletePantryItem}
@@ -2845,6 +3026,7 @@ export default function App() {
           onComplete={completeShopping}
           onToggleItem={() => {}}
           onDeleteGrocery={(id) => setGroceries((prev) => prev.filter((g) => g.id !== id))}
+          onClearGroceries={handleClearGroceries}
           onNavigateToPlanner={() => setActiveTab("planner")}
           onNotify={notify}
         />
