@@ -1,3 +1,4 @@
+import { Receipt, Sparkles } from "lucide-react";
 import React, { useState, useRef, useEffect } from "react";
 import { BrowserMultiFormatReader } from "@zxing/library";
 import { ProductMark, getFoodTone } from "./FoodIcons";

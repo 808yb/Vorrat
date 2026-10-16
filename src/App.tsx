@@ -73,10 +73,12 @@ function Icon({
   name,
   size = 20,
   strokeWidth = 1.8,
+  className = "",
 }: {
   name: IconName;
   size?: number;
   strokeWidth?: number;
+  className?: string;
 }) {
   const paths: Record<IconName, ReactNode> = {
     archive: (
@@ -287,6 +289,7 @@ function Icon({
   return (
     <svg
       aria-hidden="true"
+      className={className}
       fill="none"
       height={size}
       viewBox="0 0 24 24"
