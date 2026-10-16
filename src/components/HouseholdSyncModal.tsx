@@ -143,7 +143,7 @@ export function HouseholdSyncModal({
     setSupabaseConfig(updated);
     setAnonKeyInput(updated.anonKey);
     setAuthError(null);
-    if (onNotify) onNotify("✓ Supabase Anon Key gespeichert & aktiviert!");
+    if (onNotify) onNotify("Supabase Anon Key gespeichert & aktiviert!");
   };
 
   // Supabase Auth Handlers
@@ -194,7 +194,7 @@ export function HouseholdSyncModal({
           console.warn("Auto-restore after login:", fetchErr);
         }
         onAuthChange?.(true);
-        if (onNotify) onNotify(`✓ Eingeloggt als ${displayUsernameFromEmail(email)} – Vorrat synchronisiert!`);
+        if (onNotify) onNotify(`Eingeloggt als ${displayUsernameFromEmail(email)} – Vorrat synchronisiert!`);
       } else {
         const { user } = await signUpWithEmail(authEmail, authPassword);
         const email = user?.email || authEmail;
@@ -211,7 +211,7 @@ export function HouseholdSyncModal({
           console.warn("Auto-save on signup:", saveErr);
         }
         onAuthChange?.(true);
-        if (onNotify) onNotify(`✓ Account «${displayUsernameFromEmail(email)}» erstellt & synchronisiert!`);
+        if (onNotify) onNotify(`Account «${displayUsernameFromEmail(email)}» erstellt & synchronisiert!`);
       }
       setAuthEmail("");
       setAuthPassword("");
@@ -242,7 +242,7 @@ export function HouseholdSyncModal({
         mealPlan: mealPlanData,
       });
       setLastSyncTime("Gerade eben");
-      if (onNotify) onNotify("✓ Gesamter Vorrat erfolgreich in Supabase gesichert!");
+      if (onNotify) onNotify("Gesamter Vorrat erfolgreich in Supabase gesichert!");
     } catch (err: unknown) {
       console.error(err);
       const msg = err instanceof Error ? err.message : "Fehler beim Cloud-Backup.";
@@ -266,7 +266,7 @@ export function HouseholdSyncModal({
       if (data.householdName) {
         handleSaveName(data.householdName);
       }
-      if (onNotify) onNotify("✓ Vorrat & Rezepte aus Supabase Cloud wiederhergestellt!");
+      if (onNotify) onNotify("Vorrat & Rezepte aus Supabase Cloud wiederhergestellt!");
     } catch (err: unknown) {
       console.error(err);
       const msg = err instanceof Error ? err.message : "Fehler beim Laden aus der Cloud.";
@@ -758,7 +758,7 @@ export function HouseholdSyncModal({
                         gap: "6px",
                       }}
                     >
-                      {sqlCopied ? "✓ SQL Table Schema kopiert!" : "SQL Table Schema kopieren"}
+                      {sqlCopied ? "SQL Table Schema kopiert!" : "SQL Table Schema kopieren"}
                     </button>
                   </div>
                 )}
@@ -857,7 +857,7 @@ export function HouseholdSyncModal({
                       whiteSpace: "nowrap",
                     }}
                   >
-                    {copied ? "✓ Kopiert!" : "Link kopieren"}
+                    {copied ? "Kopiert!" : "Link kopieren"}
                   </button>
                 </div>
               </div>
@@ -935,7 +935,7 @@ export function HouseholdSyncModal({
                   transition: "background 150ms ease",
                 }}
               >
-                <span>⚙️ Account & Vorrat leeren / Duplikate fixen / Reset</span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><Settings className="w-3.5 h-3.5" /> Account & Vorrat leeren / Duplikate fixen / Reset</span>
               </button>
             </div>
           )}

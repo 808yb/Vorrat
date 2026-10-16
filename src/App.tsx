@@ -59,7 +59,15 @@ type IconName =
   | "timer"
   | "user"
   | "wand"
-  | "trash";
+  | "trash"
+  | "alert"
+  | "dice"
+  | "moon"
+  | "fridge"
+  | "snowflake"
+  | "can"
+  | "bottle"
+  | "package";
 
 function Icon({
   name,
@@ -223,9 +231,55 @@ function Icon({
         <path d="m18 3 .7 2.3L21 6l-2.3.7L18 9l-.7-2.3L15 6l2.3-.7L18 3Z" />
       </>
     ),
-    trash: (
+        trash: (
       <>
         <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      </>
+    ),
+    alert: (
+      <>
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 8v4M12 16h.01" />
+      </>
+    ),
+    dice: (
+      <>
+        <rect x="3" y="3" width="18" height="18" rx="3" />
+        <circle cx="8" cy="8" r="1.2" fill="currentColor" />
+        <circle cx="16" cy="16" r="1.2" fill="currentColor" />
+        <circle cx="12" cy="12" r="1.2" fill="currentColor" />
+        <circle cx="16" cy="8" r="1.2" fill="currentColor" />
+        <circle cx="8" cy="16" r="1.2" fill="currentColor" />
+      </>
+    ),
+    moon: (
+      <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+    ),
+    fridge: (
+      <>
+        <rect x="5" y="2" width="14" height="20" rx="2" />
+        <path d="M5 10h14M9 5v2M9 14v3" />
+      </>
+    ),
+    snowflake: (
+      <>
+        <path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14" />
+      </>
+    ),
+    can: (
+      <>
+        <ellipse cx="12" cy="5" rx="8" ry="3" />
+        <path d="M4 5v14c0 1.66 3.58 3 8 3s8-1.34 8-3V5" />
+        <path d="M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3" />
+      </>
+    ),
+    bottle: (
+      <path d="M10 2h4v4l2 3v12a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V9l2-3V2Z" />
+    ),
+    package: (
+      <>
+        <path d="m16.5 9.4-9-5.19M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+        <path d="M3.27 6.96 12 12.01l8.73-5.05M12 22.08V12" />
       </>
     ),
   };
@@ -609,8 +663,8 @@ function AppHeader({
   return (
     <header className="app-header">
       <div className="brand">
-        <div className="brand-mark"><Icon name="leaf" size={18} /></div>
-        <span>Forret</span>
+        <div className="brand-mark"><Icon name="leaf" size={17} /></div>
+        <span>Vorrat</span>
       </div>
       <div className="header-actions">
         {onOpenCoach && (
@@ -645,13 +699,13 @@ function AppHeader({
   );
 }
 
-const PANTRY_CATEGORY_GROUPS = [
-  { id: "Kühl", name: "Kühlschrank", icon: "🧊", chip: "Kühlschrank" },
-  { id: "Tiefkühl", name: "Tiefkühl (TK)", icon: "❄️", chip: "Tiefkühl" },
-  { id: "Trocken", name: "Trockenvorrat", icon: "🥫", chip: "Trockenvorrat" },
-  { id: "Saucen", name: "Gewürze & Saucen", icon: "🧂", chip: "Gewürze & Saucen" },
-  { id: "Getränke", name: "Getränke", icon: "🥤", chip: "Getränke" },
-  { id: "Sonstiges", name: "Sonstiges", icon: "📦", chip: "" },
+const PANTRY_CATEGORY_GROUPS: Array<{ id: string; name: string; iconName: IconName; chip: string }> = [
+  { id: "Kühl", name: "Kühlschrank", iconName: "fridge", chip: "Kühlschrank" },
+  { id: "Tiefkühl", name: "Tiefkühl (TK)", iconName: "snowflake", chip: "Tiefkühl" },
+  { id: "Trocken", name: "Trockenvorrat", iconName: "can", chip: "Trockenvorrat" },
+  { id: "Saucen", name: "Gewürze & Saucen", iconName: "sparkles", chip: "Gewürze & Saucen" },
+  { id: "Getränke", name: "Getränke", iconName: "bottle", chip: "Getränke" },
+  { id: "Sonstiges", name: "Sonstiges", iconName: "package", chip: "" },
 ];
 
 function getCategoryGroupKey(cat: string): string {
@@ -715,7 +769,7 @@ function PantryScreen({
 
   const chips = [
     "Alle",
-    ...(urgentItems.length > 0 ? [`🚨 Dringend (${urgentItems.length})`] : ["🚨 Dringend"]),
+    ...(urgentItems.length > 0 ? [`Dringend (${urgentItems.length})`] : ["Dringend"]),
     "Kühlschrank",
     "Tiefkühl",
     "Trockenvorrat",
@@ -733,7 +787,7 @@ function PantryScreen({
 
     const categoryMatch =
       filter === "Alle" ||
-      (filter.startsWith("🚨") && isUrgent) ||
+      (filter.startsWith("Dringend") && isUrgent) ||
       (filter === "Kühlschrank" && catKey === "Kühl") ||
       (filter === "Tiefkühl" && catKey === "Tiefkühl") ||
       (filter === "Trockenvorrat" && catKey === "Trocken") ||
@@ -799,12 +853,12 @@ function PantryScreen({
                   }}
                   title="Lagerort / Kategorie direkt ändern"
                 >
-                  <option value="Kühl">🧊 Kühlschrank</option>
-                  <option value="Tiefkühl">❄️ Tiefkühl</option>
-                  <option value="Trocken">🥫 Trocken</option>
-                  <option value="Saucen">🧂 Gewürze/Saucen</option>
-                  <option value="Getränke">🥤 Getränke</option>
-                  <option value="Sonstiges">📦 Sonstiges</option>
+                  <option value="Kühl">Kühlschrank</option>
+                  <option value="Tiefkühl">Tiefkühl</option>
+                  <option value="Trocken">Trocken</option>
+                  <option value="Saucen">Gewürze/Saucen</option>
+                  <option value="Getränke">Getränke</option>
+                  <option value="Sonstiges">Sonstiges</option>
                 </select>
                 <span className={`mhd-badge ${getMhdStatus(item.mhd)}`}>
                   {formatMhdDisplay(item.mhd)}
@@ -817,7 +871,7 @@ function PantryScreen({
           </div>
           <div className="stock-row">
             {isUnlimited ? (
-              <span className="unlimited-stock-badge" style={{ color: "#059669", fontWeight: 700, fontSize: "12px" }}>
+              <span className="unlimited-stock-badge" style={{ color: "#2d5a3e", fontWeight: 700, fontSize: "12px" }}>
                 ∞ Immer vorrätig
               </span>
             ) : (
@@ -871,7 +925,7 @@ function PantryScreen({
       {urgentItems.length > 0 && (
         <div className="food-waste-alert-banner">
           <div className="food-waste-header">
-            <span className="waste-badge">🚨 Food-Waste Alarm</span>
+            <span className="waste-badge" style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}><Icon name="alert" size={13} /> Food-Waste Alarm</span>
             <span className="waste-count">
               {urgentItems.length} {urgentItems.length === 1 ? "Zutat läuft bald ab" : "Zutaten laufen bald ab"}
             </span>
@@ -893,7 +947,7 @@ function PantryScreen({
               <Icon name="chevron" size={14} />
             </button>
             <div className="waste-saved-pill" title="Bereits gerettete Lebensmittel">
-              🌱 Bisher gerettet: {savedWasteStats.count} Zutaten (~{savedWasteStats.money.toFixed(0)} €)
+              <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}><Icon name="leaf" size={12} /> Bisher gerettet: {savedWasteStats.count} Zutaten (~{savedWasteStats.money.toFixed(0)} €)</span>
             </div>
           </div>
         </div>
@@ -948,7 +1002,7 @@ function PantryScreen({
                   aria-expanded={!isCollapsed}
                 >
                   <div className="pantry-cat-title">
-                    <span className="pantry-cat-icon">{group.icon}</span>
+                    <span className="pantry-cat-icon" style={{ display: "inline-flex", alignItems: "center" }}><Icon name={group.iconName} size={15} /></span>
                     <h3>{group.name}</h3>
                     <span className="pantry-cat-count">{itemsInGroup.length}</span>
                   </div>
@@ -1218,7 +1272,7 @@ function CookScreen({
       setGenerated(true);
       if (onNotify) {
         const percentDisplay = Math.round(randomPick.pct * 100);
-        onNotify(`🎲 Überraschung: «${randomPick.recipe.title}» (${percentDisplay}% vorrätig)!`);
+        onNotify(`Überraschung: «${randomPick.recipe.title}» (${percentDisplay}% vorrätig)!`);
       }
     }
 
@@ -1345,9 +1399,9 @@ function CookScreen({
             style={{
               flex: 1.4,
               height: "44px",
-              background: "#ecfdf5",
-              borderColor: "#a7f3d0",
-              color: "#047857",
+              background: "#ebf3ee",
+              borderColor: "#c6dcce",
+              color: "#2d5a3e",
               fontWeight: 750,
               gap: "5px",
               whiteSpace: "nowrap",
@@ -1356,9 +1410,7 @@ function CookScreen({
             disabled={isAiGenerating}
             onClick={handleSurpriseMe}
           >
-            <span style={{ display: "inline-block", transform: isRotating ? "rotate(180deg)" : "none", transition: "transform 350ms ease" }}>
-              🎲
-            </span>
+            <span style={{ display: "inline-flex", alignItems: "center", transform: isRotating ? "rotate(180deg)" : "none", transition: "transform 350ms ease" }}><Icon name="dice" size={16} /></span>
             Überrasch mich
           </Button>
         </div>
@@ -1374,7 +1426,7 @@ function CookScreen({
             onClick={onOpenImportRecipe}
           >
             <Icon name="sparkles" size={15} />
-            <span>Rezept importieren (Link / Instagram / TikTok / Text)</span>
+            <span>Rezept importieren</span>
           </button>
         )}
       </section>
@@ -1394,24 +1446,6 @@ function CookScreen({
           </button>
         </div>
       )}
-
-      {/* View Mode Toggle: Tinder-Swipe Deck vs. List View */}
-      <div className="recipe-view-mode-toggle">
-        <button
-          type="button"
-          className={viewMode === "swipe" ? "active" : ""}
-          onClick={() => setViewMode("swipe")}
-        >
-          <span>Tinder-Swipe Deck</span>
-        </button>
-        <button
-          type="button"
-          className={viewMode === "list" ? "active" : ""}
-          onClick={() => setViewMode("list")}
-        >
-          <span>Listenansicht</span>
-        </button>
-      </div>
 
       {/* Resteverwertungs-Filter: Alle vs 100% Vorrat vs Max 1-2 Zutaten nachkaufen */}
       <div className="stock-filter-toolbar" style={{ margin: "10px 0 14px" }}>
@@ -1450,7 +1484,7 @@ function CookScreen({
             }}
             title="Kein Zukauf nötig · Perfekt wenn Läden abends schon zu haben"
           >
-            <span>🌙</span> 100% Vorrat ({perfectStockCount})
+            <Icon name="moon" size={13} /> 100% Vorrat ({perfectStockCount})
           </button>
           <button
             type="button"
@@ -1470,7 +1504,7 @@ function CookScreen({
             }}
             title="Maximal 1 bis 2 Zutaten nachkaufen"
           >
-            <span>🛒</span> Max. 1–2 Zukauf ({max2StockCount})
+            <Icon name="cart" size={13} /> Max. 1–2 Zukauf ({max2StockCount})
           </button>
         </div>
 
@@ -1489,7 +1523,7 @@ function CookScreen({
               color: "#065f46",
             }}
           >
-            <span style={{ fontSize: "16px" }}>🌙</span>
+            <Icon name="moon" size={15} />
             <div>
               <strong>Abend-Filter aktiv: Läden schon zu?</strong>
               <div style={{ color: "#047857", fontSize: "10.5px" }}>
@@ -1539,7 +1573,7 @@ function CookScreen({
                 onClick={handleSurpriseMe}
                 title="Zufälliges Rezept aus Vorrat vorschlagen"
               >
-                <span>🎲</span>
+                <Icon name="dice" size={15} />
                 Überrasch mich
               </Button>
             </div>
@@ -1777,7 +1811,7 @@ function CookScreen({
                 }}
                 onClick={handleSurpriseMe}
               >
-                <span>🎲</span>
+                <Icon name="dice" size={14} />
                 Zufälliges Rezept vorschlagen (Überrasch mich)
               </Button>
             </div>
@@ -2869,7 +2903,7 @@ export default function App() {
       localStorage.removeItem("vorrat_coach_chat_history");
       localStorage.removeItem("forret_household_code");
     } catch {}
-    notify("✓ Account komplett geleert: Vorrat, Rezepte, Einkauf & Wochenplan auf 0!");
+    notify("Account komplett geleert: Vorrat, Rezepte, Einkauf & Wochenplan auf 0!");
   };
 
   const handleFullReset = () => {

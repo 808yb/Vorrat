@@ -18,7 +18,7 @@ export function calculateEstimatedMhd(name: string, category: string, baseDate: 
   let hint = "Kühlregal (~2 Wochen)";
   let isUrgent = false;
 
-  // 1. Fresh meat, poultry, fish, minced meat (🚨 Akut)
+  // 1. Fresh meat, poultry, fish, minced meat (Akut)
   if (
     lower.includes("hähn") ||
     lower.includes("minuten") ||
@@ -36,10 +36,10 @@ export function calculateEstimatedMhd(name: string, category: string, baseDate: 
     lower.includes("mett")
   ) {
     days = 3;
-    hint = "🚨 Akut verzehren (Frischfleisch/Geflügel)";
+    hint = "Akut verzehren (Frischfleisch/Geflügel)";
     isUrgent = true;
   }
-  // 2. Leafy greens, salads, berries, fresh herbs (🚨 Dringend)
+  // 2. Leafy greens, salads, berries, fresh herbs (Dringend)
   else if (
     lower.includes("salat") ||
     lower.includes("pflück") ||
@@ -54,7 +54,7 @@ export function calculateEstimatedMhd(name: string, category: string, baseDate: 
     lower.includes("basilikum")
   ) {
     days = 4;
-    hint = "🚨 Schnell verbrauchen (Salat/Beeren)";
+    hint = "Schnell verbrauchen (Salat/Beeren)";
     isUrgent = true;
   }
   // 3. Fresh vegetables & fruits (Frischgemüse & Obst)

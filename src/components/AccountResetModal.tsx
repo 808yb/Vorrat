@@ -199,7 +199,7 @@ export function AccountResetModal({
                 >
                   <Trash2 size={14} />
                   {confirmWipeAll
-                    ? "⚠️ Wirklich bestätigen: ALLES AUF 0 LEEREN"
+                    ? "Wirklich bestätigen: ALLES AUF 0 LEEREN"
                     : "Account & Alle Daten jetzt leeren"}
                 </button>
               </div>

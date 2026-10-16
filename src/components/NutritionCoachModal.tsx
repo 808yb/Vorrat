@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
-import { X, Sparkles, Dumbbell, Flame, Wallet, Zap, Apple, Send, Bot, Trash2, User, ArrowRight } from "lucide-react";
+import { X, Sparkles, ShoppingCart, Dumbbell, Flame, Wallet, Zap, Apple, Send, Bot, Trash2, User, ArrowRight } from "lucide-react";
 import { GoogleGenAI } from "@google/genai";
 import { getGeminiApiKey } from "../utils/geminiRecipes";
 import { type PantryItem } from "../App";
@@ -318,7 +318,7 @@ ANWEISUNG:
                       : "bg-white border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50"
                   }`}
                 >
-                  <span className="font-bold block text-slate-900">💪 High Protein</span>
+                  <span className="font-bold flex items-center gap-1.5 text-slate-900"><Dumbbell className="w-3.5 h-3.5 text-emerald-600" /> High Protein</span>
                   <span className="text-[10px] text-slate-500">Muskelaufbau & Sättigung</span>
                 </button>
                 <button
@@ -330,7 +330,7 @@ ANWEISUNG:
                       : "bg-white border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50"
                   }`}
                 >
-                  <span className="font-bold block text-slate-900">🔥 Kaloriendefizit</span>
+                  <span className="font-bold flex items-center gap-1.5 text-slate-900"><Flame className="w-3.5 h-3.5 text-amber-500" /> Kaloriendefizit</span>
                   <span className="text-[10px] text-slate-500">Viel Volumen, wenig Kcal</span>
                 </button>
                 <button
@@ -342,7 +342,7 @@ ANWEISUNG:
                       : "bg-white border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50"
                   }`}
                 >
-                  <span className="font-bold block text-slate-900">💰 Sparfuchs</span>
+                  <span className="font-bold flex items-center gap-1.5 text-slate-900"><Wallet className="w-3.5 h-3.5 text-emerald-600" /> Sparfuchs</span>
                   <span className="text-[10px] text-slate-500">Kein Zukauf nötig</span>
                 </button>
                 <button
@@ -354,7 +354,7 @@ ANWEISUNG:
                       : "bg-white border-slate-200 text-slate-700 hover:border-slate-300 hover:bg-slate-50"
                   }`}
                 >
-                  <span className="font-bold block text-slate-900">⚡ Express (&lt; 15m)</span>
+                  <span className="font-bold flex items-center gap-1.5 text-slate-900"><Zap className="w-3.5 h-3.5 text-amber-500" /> Express (&lt; 15m)</span>
                   <span className="text-[10px] text-slate-500">Minimaler Aufwand</span>
                 </button>
               </div>
@@ -369,7 +369,7 @@ ANWEISUNG:
               onClick={() => handleAskCoach("Was ist die proteinreichste Mahlzeit, die ich aus meinem Vorrat machen kann?")}
               className="text-[11px] whitespace-nowrap bg-slate-100 hover:bg-slate-200 border border-slate-200/80 rounded-full px-3 py-1.5 text-slate-700 font-medium transition-all cursor-pointer shrink-0"
             >
-              💪 Protein-Boost
+              <span className="inline-flex items-center gap-1"><Dumbbell className="w-3 h-3 text-emerald-600" /> Protein-Boost</span>
             </button>
             <button
               type="button"
@@ -377,7 +377,7 @@ ANWEISUNG:
               onClick={() => handleAskCoach("Schlage einen gesunden Snack aus meinem Vorrat gegen Heißhunger vor.")}
               className="text-[11px] whitespace-nowrap bg-slate-100 hover:bg-slate-200 border border-slate-200/80 rounded-full px-3 py-1.5 text-slate-700 font-medium transition-all cursor-pointer shrink-0"
             >
-              🥗 Snack gegen Heißhunger
+              <span className="inline-flex items-center gap-1"><Apple className="w-3 h-3 text-emerald-600" /> Snack gegen Heißhunger</span>
             </button>
             <button
               type="button"
@@ -385,7 +385,7 @@ ANWEISUNG:
               onClick={() => handleAskCoach("Was fehlt in meinem Vorrat, um mein Ernährungsziel optimal zu unterstützen?")}
               className="text-[11px] whitespace-nowrap bg-slate-100 hover:bg-slate-200 border border-slate-200/80 rounded-full px-3 py-1.5 text-slate-700 font-medium transition-all cursor-pointer shrink-0"
             >
-              🛒 Was nachkaufen?
+              <span className="inline-flex items-center gap-1"><ShoppingCart className="w-3 h-3 text-emerald-600" /> Was nachkaufen?</span>
             </button>
           </div>
 

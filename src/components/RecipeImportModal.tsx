@@ -312,7 +312,7 @@ export function RecipeImportModal({
                     className="w-full py-2.5 px-3 rounded-xl bg-emerald-50/80 hover:bg-emerald-100/80 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer"
                   >
                     <Sparkles size={14} className="text-emerald-600" />
-                    <span>✨ Beispiel-Reel testen: Crispy Chicken Wraps (TikTok)</span>
+                    <span>Beispiel-Reel testen: Crispy Chicken Wraps (TikTok)</span>
                   </button>
                 </div>
               )}

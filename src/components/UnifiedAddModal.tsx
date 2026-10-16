@@ -907,7 +907,7 @@ export function UnifiedAddModal({
                           if (items.length > 0) {
                             setReceiptItems(items);
                             setReceiptUploadSuccess(true);
-                            if (onNotify) onNotify(`✓ ${items.length} Lebensmittel auf dem Bon erkannt!`);
+                            if (onNotify) onNotify(`${items.length} Lebensmittel auf dem Bon erkannt!`);
                           } else {
                             setReceiptUploadSuccess(false);
                             setReceiptError("Keine Lebensmittel auf dem Bild erkannt. Bitte stelle sicher, dass der Kassenbon gut beleuchtet und scharf ist.");
@@ -1024,7 +1024,7 @@ export function UnifiedAddModal({
               {/* Error Message */}
               {receiptError && !isAnalyzingReceipt && (
                 <div style={{ fontSize: "11.5px", color: "#b91c1c", background: "#fef2f2", border: "1px solid #fecaca", padding: "10px 14px", borderRadius: "12px", display: "flex", alignItems: "flex-start", gap: "8px" }}>
-                  <span style={{ fontSize: "14px", marginTop: "-1px" }}>⚠️</span>
+                  
                   <div style={{ flex: 1 }}>
                     <strong style={{ display: "block", marginBottom: "2px" }}>Erkennung fehlgeschlagen</strong>
                     <span>{receiptError}</span>
@@ -1055,7 +1055,7 @@ export function UnifiedAddModal({
                       Kassenbon erfasst
                     </span>
                     <span style={{ fontSize: "10.5px", color: "#047857" }}>
-                      ✓ {receiptItems.length} Positionen erfolgreich erkannt
+                      {receiptItems.length} Positionen erfolgreich erkannt
                     </span>
                   </div>
                   <button
@@ -1076,7 +1076,7 @@ export function UnifiedAddModal({
               {/* Empty state when no receipt scanned yet */}
               {receiptItems.length === 0 && !isAnalyzingReceipt && (
                 <div style={{ textAlign: "center", padding: "24px 16px", background: "#f8fafc", borderRadius: "16px", border: "1px dashed #cbd5e1" }}>
-                  <div style={{ fontSize: "30px", marginBottom: "6px" }}>🧾</div>
+                  <div style={{ width: "52px", height: "52px", borderRadius: "50%", background: "#f4f7f5", border: "1px solid #eaece9", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 8px", color: "#12151a" }}><Receipt className="w-6 h-6 text-slate-700" /></div>
                   <h4 style={{ margin: "0 0 4px", fontSize: "13.5px", fontWeight: 750, color: "#0f172a" }}>
                     Kassenbon automatisch scannen & analysieren
                   </h4>
@@ -1103,7 +1103,7 @@ export function UnifiedAddModal({
                         gap: "6px",
                       }}
                     >
-                      <span>✨ Echten Lidl-Bon testen (11 Artikel mit Auto-MHD)</span>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><Sparkles className="w-3.5 h-3.5" /> Echten Lidl-Bon testen (11 Artikel mit Auto-MHD)</span>
                     </button>
                     <button
                       type="button"
@@ -1119,7 +1119,7 @@ export function UnifiedAddModal({
                         cursor: "pointer",
                       }}
                     >
-                      💡 Standard-Bon testen (4 Artikel)
+                      Standard-Bon testen (4 Artikel)
                     </button>
                   </div>
                 </div>
@@ -1144,7 +1144,7 @@ export function UnifiedAddModal({
                         Erkannte Positionen ({receiptItems.filter((i) => i.selected).length}/{receiptItems.length})
                       </span>
                       <span style={{ fontSize: "10px", color: "#059669", display: "block", marginTop: "1px" }}>
-                        ✨ MHDs automatisch nach Frische-Klasse geschätzt
+                        MHDs automatisch nach Frische-Klasse geschätzt
                       </span>
                     </div>
                     <button
@@ -1207,7 +1207,7 @@ export function UnifiedAddModal({
                                 </strong>
                                 {isAkut && (
                                   <span style={{ fontSize: "9px", fontWeight: 800, background: "#fee2e2", color: "#dc2626", padding: "1px 6px", borderRadius: "4px" }}>
-                                    🚨 Akut
+                                    Akut
                                   </span>
                                 )}
                               </div>
@@ -1230,7 +1230,7 @@ export function UnifiedAddModal({
                                       gap: "3px",
                                     }}
                                   >
-                                    📅 MHD: {item.mhd.split("-").reverse().join(".")}
+                                    MHD: {item.mhd.split("-").reverse().join(".")}
                                     {item.shelfLifeDays !== undefined ? ` (~${item.shelfLifeDays} T.)` : ""}
                                   </span>
                                 )}
@@ -1298,7 +1298,7 @@ export function UnifiedAddModal({
                           });
                         });
                         if (onNotify) {
-                          onNotify(`✓ ${selected.length} Lebensmittel vom Kassenbon mit Auto-MHD hinzugefügt!`);
+                          onNotify(`${selected.length} Lebensmittel vom Kassenbon mit Auto-MHD hinzugefügt!`);
                         }
                         handleClose();
                       }}
