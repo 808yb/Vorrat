@@ -52,7 +52,10 @@ export function UnifiedAddModal({
   const [isScanningLoading, setIsScanningLoading] = useState(false);
   const [scanStatusMessage, setScanStatusMessage] = useState("");
   const [scannedProduct, setScannedProduct] = useState<OFFProduct | null>(null);
-  const [customScanAmount, setCustomScanAmount] = useState(500);
+  const [scanAmountStr, setScanAmountStr] = useState("500");
+  const [scanUnit, setScanUnit] = useState("g");
+  const [scanCategory, setScanCategory] = useState("Kühl");
+  const [scanMhd, setScanMhd] = useState("");
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const codeReaderRef = useRef<BrowserMultiFormatReader | null>(null);
@@ -61,8 +64,11 @@ export function UnifiedAddModal({
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<OFFProduct[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [selectedSearchResult, setSelectedSearchResult] = useState<OFFProduct | null>(null);
-  const [searchResultAmount, setSearchResultAmount] = useState(500);
+  const [selectedSearchCode, setSelectedSearchCode] = useState<string | null>(null);
+  const [searchAmountStr, setSearchAmountStr] = useState("500");
+  const [searchUnit, setSearchUnit] = useState("g");
+  const [searchCategory, setSearchCategory] = useState("Kühl");
+  const [searchMhd, setSearchMhd] = useState("");
 
   // Receipt OCR State
   const [receiptImage, setReceiptImage] = useState<string | null>(null);
@@ -144,9 +150,10 @@ export function UnifiedAddModal({
   const [manualName, setManualName] = useState("");
   const [manualCategory, setManualCategory] = useState("Kühl");
   const [manualIsUnlimited, setManualIsUnlimited] = useState(false);
-  const [manualAmount, setManualAmount] = useState(500);
-  const [manualTotal, setManualTotal] = useState(500);
+  const [manualAmountStr, setManualAmountStr] = useState("500");
+  const [manualTotalStr, setManualTotalStr] = useState("500");
   const [manualUnit, setManualUnit] = useState("g");
+  const [manualMhd, setManualMhd] = useState("");
   const [manualCalories, setManualCalories] = useState<number | "">("");
   const [manualProtein, setManualProtein] = useState<number | "">("");
   const [manualCarbs, setManualCarbs] = useState<number | "">("");
@@ -173,7 +180,7 @@ export function UnifiedAddModal({
     stopLiveCamera();
     setActiveMode("menu");
     setScannedProduct(null);
-    setSelectedSearchResult(null);
+    setSelectedSearchCode(null);
     setSearchQuery("");
     setSearchResults([]);
     setBarcodeInput("");
@@ -185,7 +192,7 @@ export function UnifiedAddModal({
     stopLiveCamera();
     setActiveMode("menu");
     setScannedProduct(null);
-    setSelectedSearchResult(null);
+    setSelectedSearchCode(null);
     setScanStatusMessage("");
   };
 
@@ -218,7 +225,10 @@ export function UnifiedAddModal({
       const res = await lookupBarcodeFromOFF(clean);
       if (res.success && res.product) {
         setScannedProduct(res.product);
-        setCustomScanAmount(res.product.amount);
+        setScanAmountStr(String(res.product.amount || 500));
+        setScanUnit(res.product.unit || "g");
+        setScanCategory(res.product.category || "Kühl");
+        setScanMhd("");
         if (res.source === "generated") {
           setScanStatusMessage("Neuer Barcode erkannt · Vorlage für schnelles Hinzufügen bereit.");
         } else {
@@ -346,6 +356,7 @@ export function UnifiedAddModal({
     setSearchQuery(q);
     if (!q.trim()) {
       setSearchResults([]);
+      setSelectedSearchCode(null);
       return;
     }
 
@@ -353,25 +364,51 @@ export function UnifiedAddModal({
     try {
       const results = await searchProductsInOFF(q);
       setSearchResults(results);
+      if (results.length > 0) {
+        setSelectedSearchCode(results[0].code);
+        setSearchAmountStr(String(results[0].amount || 500));
+        setSearchUnit(results[0].unit || "g");
+        setSearchCategory(results[0].category || "Kühl");
+        setSearchMhd("");
+      } else {
+        setSelectedSearchCode(null);
+      }
     } finally {
       setIsSearching(false);
     }
   };
 
-  // Add scanned / searched product to pantry
-  const handleApplyOFFProduct = (prod: OFFProduct, amountToApply: number) => {
+  const handleSelectSearchResult = (prod: OFFProduct) => {
+    setSelectedSearchCode(prod.code);
+    setSearchAmountStr(String(prod.amount || 500));
+    setSearchUnit(prod.unit || "g");
+    setSearchCategory(prod.category || "Kühl");
+    setSearchMhd("");
+  };
+
+  // Add scanned / searched product to pantry with customizable unit, category and MHD
+  const handleApplyOFFProduct = (
+    prod: OFFProduct,
+    amountToApply: number,
+    customUnit?: string,
+    customCategory?: string,
+    customMhd?: string
+  ) => {
+    const finalUnit = customUnit || prod.unit || "g";
+    const finalCategory = customCategory || prod.category || "Kühl";
     onAddProduct({
       name: prod.name,
-      category: prod.category,
+      category: finalCategory,
       amount: amountToApply,
-      total: prod.total > amountToApply ? prod.total : amountToApply,
-      unit: prod.unit,
+      total: (customUnit && customUnit !== prod.unit) ? amountToApply : (prod.total > amountToApply ? prod.total : amountToApply),
+      unit: finalUnit,
       tone: prod.tone,
       minAmount: Math.round(amountToApply * 0.3),
       caloriesPer100g: prod.calories,
       proteinPer100g: prod.protein,
       carbsPer100g: prod.carbs,
       fatPer100g: prod.fat,
+      mhd: customMhd ? (customMhd.trim() || undefined) : undefined,
     });
     if (onNotify) {
       onNotify(`+${prod.name} zum Vorrat hinzugefügt`);
@@ -384,22 +421,30 @@ export function UnifiedAddModal({
     e.preventDefault();
     if (!manualName.trim()) return;
 
+    const numAmount = Number(manualAmountStr);
+    if (!manualIsUnlimited && (!manualAmountStr.trim() || isNaN(numAmount) || numAmount <= 0)) {
+      return;
+    }
+
     const isUnlimited = manualIsUnlimited || manualName.toLowerCase().includes("wasser");
     const detectedTone = getFoodTone(manualName, manualCategory);
+    const parsedAmount = isUnlimited ? 999999 : numAmount;
+    const parsedTotal = isUnlimited ? 999999 : Math.max(parsedAmount, Number(manualTotalStr) || parsedAmount);
+
     onAddProduct({
       name: manualName.trim(),
       category: manualCategory,
-      amount: isUnlimited ? 999999 : Number(manualAmount),
-      total: isUnlimited ? 999999 : Number(manualTotal),
+      amount: parsedAmount,
+      total: parsedTotal,
       unit: manualUnit,
       tone: detectedTone,
-      minAmount: isUnlimited ? 0 : Math.round(Number(manualTotal) * 0.3),
+      minAmount: isUnlimited ? 0 : Math.round(parsedTotal * 0.3),
       caloriesPer100g: manualCalories !== "" ? Number(manualCalories) : 180,
       proteinPer100g: manualProtein !== "" ? Number(manualProtein) : 6.0,
       carbsPer100g: manualCarbs !== "" ? Number(manualCarbs) : 25.0,
       fatPer100g: manualFat !== "" ? Number(manualFat) : 3.0,
       isUnlimited,
-      mhd: isUnlimited ? "Unbegrenzt" : undefined,
+      mhd: isUnlimited ? "Unbegrenzt" : (manualMhd.trim() || undefined),
     });
 
     if (onNotify) {
@@ -408,6 +453,9 @@ export function UnifiedAddModal({
 
     setManualName("");
     setManualIsUnlimited(false);
+    setManualAmountStr("500");
+    setManualTotalStr("500");
+    setManualMhd("");
     setManualCalories("");
     setManualProtein("");
     setManualCarbs("");
@@ -808,25 +856,179 @@ export function UnifiedAddModal({
                     </div>
                   </div>
 
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "10px" }}>
-                    <label style={{ fontSize: "11px", fontWeight: 700, color: "#334155" }}>
-                      Menge ({scannedProduct.unit}):
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={customScanAmount}
-                      onChange={(e) => setCustomScanAmount(Number(e.target.value) || 1)}
-                      className="search-field"
-                      style={{ width: "90px", height: "34px", textAlign: "center" }}
-                    />
+                  {/* Upgraded Quantity, Unit, Category & MHD Configurator */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "12px", background: "#f8fafc", padding: "12px", borderRadius: "14px", border: "1px solid #e2e8f0" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr", gap: "8px", alignItems: "center" }}>
+                      <div>
+                        <label style={{ fontSize: "10px", fontWeight: 750, color: "#475569", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>
+                          Menge
+                        </label>
+                        <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const cur = Number(scanAmountStr) || 0;
+                              const step = ["Stk.", "Bund", "Packung", "Dose", "Flasche"].includes(scanUnit) ? 1 : 50;
+                              setScanAmountStr(String(Math.max(0, cur - step)));
+                            }}
+                            style={{ width: "30px", height: "34px", borderRadius: "8px", border: "1px solid #cbd5e1", background: "#ffffff", fontWeight: 700, cursor: "pointer", color: "#334155" }}
+                          >
+                            −
+                          </button>
+                          <input
+                            type="number"
+                            min="0"
+                            value={scanAmountStr}
+                            onChange={(e) => setScanAmountStr(e.target.value)}
+                            placeholder="Menge"
+                            className="search-field"
+                            style={{ width: "100%", height: "34px", textAlign: "center", fontWeight: 700, fontSize: "13px" }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const cur = Number(scanAmountStr) || 0;
+                              const step = ["Stk.", "Bund", "Packung", "Dose", "Flasche"].includes(scanUnit) ? 1 : 50;
+                              setScanAmountStr(String(cur + step));
+                            }}
+                            style={{ width: "30px", height: "34px", borderRadius: "8px", border: "1px solid #cbd5e1", background: "#ffffff", fontWeight: 700, cursor: "pointer", color: "#334155" }}
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: "10px", fontWeight: 750, color: "#475569", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>
+                          Einheit
+                        </label>
+                        <select
+                          value={scanUnit}
+                          onChange={(e) => setScanUnit(e.target.value)}
+                          className="search-field"
+                          style={{ width: "100%", height: "34px", fontSize: "11.5px", padding: "0 6px", background: "#ffffff" }}
+                        >
+                          <option value="g">Gramm (g)</option>
+                          <option value="ml">Milliliter (ml)</option>
+                          <option value="Stk.">Stück (Stk.)</option>
+                          <option value="Bund">Bund</option>
+                          <option value="Packung">Packung (Pkg.)</option>
+                          <option value="Dose">Dose</option>
+                          <option value="Flasche">Flasche</option>
+                          <option value="kg">Kilogramm (kg)</option>
+                          <option value="l">Liter (l)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label style={{ fontSize: "10px", fontWeight: 750, color: "#475569", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>
+                          Lagerort
+                        </label>
+                        <select
+                          value={scanCategory}
+                          onChange={(e) => setScanCategory(e.target.value)}
+                          className="search-field"
+                          style={{ width: "100%", height: "34px", fontSize: "11.5px", padding: "0 6px", background: "#ffffff" }}
+                        >
+                          <option value="Kühl">Kühlschrank</option>
+                          <option value="Tiefkühl">Tiefkühl</option>
+                          <option value="Trocken">Trockenvorrat</option>
+                          <option value="Saucen">Saucen/Gewürze</option>
+                          <option value="Getränke">Getränke</option>
+                          <option value="Sonstiges">Sonstiges</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Quick amount chips */}
+                    <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
+                      <span style={{ fontSize: "10.5px", color: "#64748b", fontWeight: 600 }}>Schnellwahl:</span>
+                      {(["Stk.", "Bund", "Packung", "Dose", "Flasche"].includes(scanUnit)
+                        ? [1, 2, 3, 5, 10]
+                        : ["kg", "l"].includes(scanUnit)
+                        ? [1, 2, 5]
+                        : [100, 250, 500, 1000]
+                      ).map((chipVal) => (
+                        <button
+                          key={chipVal}
+                          type="button"
+                          onClick={() => setScanAmountStr(String(chipVal))}
+                          style={{
+                            padding: "3px 8px",
+                            borderRadius: "6px",
+                            border: scanAmountStr === String(chipVal) ? "1.5px solid #059669" : "1px solid #cbd5e1",
+                            background: scanAmountStr === String(chipVal) ? "#ecfdf5" : "#ffffff",
+                            color: scanAmountStr === String(chipVal) ? "#047857" : "#334155",
+                            fontSize: "11px",
+                            fontWeight: 700,
+                            cursor: "pointer",
+                          }}
+                        >
+                          {chipVal}{scanUnit}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Optional MHD */}
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" }}>
+                        <label style={{ fontSize: "10px", fontWeight: 750, color: "#475569", textTransform: "uppercase" }}>
+                          Mindesthaltbarkeitsdatum (MHD)
+                        </label>
+                        {scanMhd && (
+                          <button
+                            type="button"
+                            onClick={() => setScanMhd("")}
+                            style={{ border: "none", background: "none", color: "#dc2626", fontSize: "10px", cursor: "pointer", fontWeight: 700 }}
+                          >
+                            Entfernen
+                          </button>
+                        )}
+                      </div>
+                      <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
+                        <input
+                          type="date"
+                          value={scanMhd}
+                          onChange={(e) => setScanMhd(e.target.value)}
+                          className="search-field"
+                          style={{ height: "32px", fontSize: "11px", padding: "0 8px", background: "#ffffff" }}
+                        />
+                        {[
+                          { label: "+3 T.", days: 3 },
+                          { label: "+7 T.", days: 7 },
+                          { label: "+14 T.", days: 14 },
+                          { label: "+6 M.", days: 180 },
+                        ].map((btn) => (
+                          <button
+                            key={btn.label}
+                            type="button"
+                            onClick={() => {
+                              const d = new Date();
+                              d.setDate(d.getDate() + btn.days);
+                              setScanMhd(d.toISOString().split("T")[0]);
+                            }}
+                            style={{ padding: "3px 7px", fontSize: "10.5px", fontWeight: 600, borderRadius: "6px", border: "1px solid #cbd5e1", background: "#ffffff", cursor: "pointer", color: "#475569" }}
+                          >
+                            {btn.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
                     <button
                       type="button"
                       className="primary-button"
-                      style={{ flex: 1, height: "34px", fontSize: "11.5px", borderRadius: "10px" }}
-                      onClick={() => handleApplyOFFProduct(scannedProduct, customScanAmount)}
+                      disabled={!scanAmountStr.trim() || Number(scanAmountStr) <= 0}
+                      style={{
+                        height: "40px",
+                        fontSize: "12.5px",
+                        borderRadius: "10px",
+                        opacity: (!scanAmountStr.trim() || Number(scanAmountStr) <= 0) ? 0.5 : 1,
+                        cursor: (!scanAmountStr.trim() || Number(scanAmountStr) <= 0) ? "not-allowed" : "pointer",
+                      }}
+                      onClick={() => handleApplyOFFProduct(scannedProduct, Number(scanAmountStr), scanUnit, scanCategory, scanMhd)}
                     >
-                      In Vorrat übernehmen
+                      {Number(scanAmountStr) > 0 ? "In Vorrat übernehmen" : "Menge eingeben"}
                     </button>
                   </div>
                 </div>
@@ -1213,9 +1415,82 @@ export function UnifiedAddModal({
                                 )}
                               </div>
                               <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "3px", flexWrap: "wrap" }}>
-                                <span style={{ fontSize: "10.5px", color: "#64748b" }}>
-                                  {item.category} · {item.quantity}
-                                </span>
+                                <div style={{ display: "inline-flex", alignItems: "center", gap: "4px" }} onClick={(e) => e.stopPropagation()}>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    value={item.amount === 0 ? "" : item.amount}
+                                    onChange={(e) => {
+                                      const val = e.target.value === "" ? 0 : Number(e.target.value);
+                                      setReceiptItems((prev) =>
+                                        prev.map((i) => (i.id === item.id ? { ...i, amount: val, total: Math.max(val, i.total) } : i))
+                                      );
+                                    }}
+                                    placeholder="0"
+                                    style={{
+                                      width: "55px",
+                                      height: "26px",
+                                      fontSize: "11px",
+                                      fontWeight: 700,
+                                      textAlign: "center",
+                                      borderRadius: "6px",
+                                      border: "1px solid #cbd5e1",
+                                      background: "#ffffff",
+                                    }}
+                                  />
+                                  <select
+                                    value={item.unit}
+                                    onChange={(e) => {
+                                      const newUnit = e.target.value;
+                                      setReceiptItems((prev) =>
+                                        prev.map((i) => (i.id === item.id ? { ...i, unit: newUnit } : i))
+                                      );
+                                    }}
+                                    style={{
+                                      height: "26px",
+                                      fontSize: "11px",
+                                      borderRadius: "6px",
+                                      border: "1px solid #cbd5e1",
+                                      background: "#ffffff",
+                                      padding: "0 4px",
+                                      fontWeight: 600,
+                                    }}
+                                  >
+                                    <option value="g">g</option>
+                                    <option value="ml">ml</option>
+                                    <option value="Stk.">Stk.</option>
+                                    <option value="Bund">Bund</option>
+                                    <option value="Packung">Pkg.</option>
+                                    <option value="Dose">Dose</option>
+                                    <option value="Flasche">Fl.</option>
+                                    <option value="kg">kg</option>
+                                    <option value="l">l</option>
+                                  </select>
+                                  <select
+                                    value={item.category}
+                                    onChange={(e) => {
+                                      const newCat = e.target.value;
+                                      setReceiptItems((prev) =>
+                                        prev.map((i) => (i.id === item.id ? { ...i, category: newCat as any } : i))
+                                      );
+                                    }}
+                                    style={{
+                                      height: "26px",
+                                      fontSize: "10px",
+                                      borderRadius: "6px",
+                                      border: "1px solid #cbd5e1",
+                                      background: "#ffffff",
+                                      padding: "0 4px",
+                                    }}
+                                  >
+                                    <option value="Kühl">Kühl</option>
+                                    <option value="Tiefkühl">Tiefkühl</option>
+                                    <option value="Trocken">Trocken</option>
+                                    <option value="Saucen">Saucen</option>
+                                    <option value="Getränke">Getränke</option>
+                                    <option value="Sonstiges">Sonstiges</option>
+                                  </select>
+                                </div>
                                 {item.mhd && (
                                   <span
                                     style={{
@@ -1281,7 +1556,7 @@ export function UnifiedAddModal({
                       className="primary-button generate-button"
                       style={{ height: "46px", borderRadius: "12px", fontSize: "13px", marginTop: "4px" }}
                       onClick={() => {
-                        const selected = receiptItems.filter((i) => i.selected);
+                        const selected = receiptItems.filter((i) => i.selected && i.amount > 0);
                         selected.forEach((item) => {
                           onAddProduct({
                             name: item.name,
@@ -1304,7 +1579,7 @@ export function UnifiedAddModal({
                         handleClose();
                       }}
                     >
-                      {receiptItems.filter((i) => i.selected).length} Positionen mit MHD in Vorrat übernehmen
+                      {receiptItems.filter((i) => i.selected && i.amount > 0).length} Positionen mit MHD in Vorrat übernehmen
                     </button>
                   )}
                 </>
@@ -1349,37 +1624,260 @@ export function UnifiedAddModal({
                 </div>
               )}
 
-              {/* Search Results List */}
-              <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "4px" }}>
-                {searchResults.map((item) => (
-                  <div
-                    key={item.code}
-                    className="db-search-item-card"
-                    onClick={() => setSelectedSearchResult(item)}
-                  >
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                        <strong style={{ fontSize: "12.5px", color: "#0f172a" }}>{item.name}</strong>
-                        <span className="nutri-pill mini">Nutri {item.nutriScore}</span>
+              {/* Search Results List with Active Configurator */}
+              {(() => {
+                const activeItem = searchResults.find((r) => r.code === selectedSearchCode) || (searchResults.length > 0 ? searchResults[0] : null);
+
+                return (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "4px" }}>
+                    {/* Active Selected Item Configuration Card */}
+                    {activeItem && (
+                      <div
+                        style={{
+                          background: "#ffffff",
+                          border: "2px solid #10b981",
+                          borderRadius: "16px",
+                          padding: "14px",
+                          boxShadow: "0 4px 12px rgba(16, 185, 129, 0.08)",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "10px",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "8px" }}>
+                          <div>
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                              <strong style={{ fontSize: "13.5px", color: "#0f172a" }}>{activeItem.name}</strong>
+                              <span className="nutri-pill mini">Nutri {activeItem.nutriScore}</span>
+                            </div>
+                            <p style={{ margin: "2px 0 0", fontSize: "11px", color: "#64748b" }}>
+                              {activeItem.brand} · {activeItem.calories} kcal / 100g
+                            </p>
+                          </div>
+                          <span style={{ fontSize: "10px", fontWeight: 800, background: "#ecfdf5", color: "#047857", padding: "2px 8px", borderRadius: "6px" }}>
+                            Ausgewählt
+                          </span>
+                        </div>
+
+                        {/* Amount, Unit & Category Controls */}
+                        <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr", gap: "8px", alignItems: "center" }}>
+                          <div>
+                            <label style={{ fontSize: "10px", fontWeight: 750, color: "#475569", textTransform: "uppercase", display: "block", marginBottom: "3px" }}>
+                              Menge
+                            </label>
+                            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const cur = Number(searchAmountStr) || 0;
+                                  const step = ["Stk.", "Bund", "Packung", "Dose", "Flasche"].includes(searchUnit) ? 1 : 50;
+                                  setSearchAmountStr(String(Math.max(0, cur - step)));
+                                }}
+                                style={{ width: "28px", height: "34px", borderRadius: "8px", border: "1px solid #cbd5e1", background: "#f8fafc", fontWeight: 700, cursor: "pointer", color: "#334155" }}
+                              >
+                                −
+                              </button>
+                              <input
+                                type="number"
+                                min="0"
+                                value={searchAmountStr}
+                                onChange={(e) => setSearchAmountStr(e.target.value)}
+                                placeholder="Menge"
+                                className="search-field"
+                                style={{ width: "100%", height: "34px", textAlign: "center", fontWeight: 700, fontSize: "13px" }}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const cur = Number(searchAmountStr) || 0;
+                                  const step = ["Stk.", "Bund", "Packung", "Dose", "Flasche"].includes(searchUnit) ? 1 : 50;
+                                  setSearchAmountStr(String(cur + step));
+                                }}
+                                style={{ width: "28px", height: "34px", borderRadius: "8px", border: "1px solid #cbd5e1", background: "#f8fafc", fontWeight: 700, cursor: "pointer", color: "#334155" }}
+                              >
+                                +
+                              </button>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label style={{ fontSize: "10px", fontWeight: 750, color: "#475569", textTransform: "uppercase", display: "block", marginBottom: "3px" }}>
+                              Einheit
+                            </label>
+                            <select
+                              value={searchUnit}
+                              onChange={(e) => setSearchUnit(e.target.value)}
+                              className="search-field"
+                              style={{ width: "100%", height: "34px", fontSize: "11.5px", padding: "0 6px", background: "#ffffff" }}
+                            >
+                              <option value="g">Gramm (g)</option>
+                              <option value="ml">Milliliter (ml)</option>
+                              <option value="Stk.">Stück (Stk.)</option>
+                              <option value="Bund">Bund</option>
+                              <option value="Packung">Packung (Pkg.)</option>
+                              <option value="Dose">Dose</option>
+                              <option value="Flasche">Flasche</option>
+                              <option value="kg">Kilogramm (kg)</option>
+                              <option value="l">Liter (l)</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label style={{ fontSize: "10px", fontWeight: 750, color: "#475569", textTransform: "uppercase", display: "block", marginBottom: "3px" }}>
+                              Lagerort
+                            </label>
+                            <select
+                              value={searchCategory}
+                              onChange={(e) => setSearchCategory(e.target.value)}
+                              className="search-field"
+                              style={{ width: "100%", height: "34px", fontSize: "11.5px", padding: "0 6px", background: "#ffffff" }}
+                            >
+                              <option value="Kühl">Kühlschrank</option>
+                              <option value="Tiefkühl">Tiefkühl</option>
+                              <option value="Trocken">Trockenvorrat</option>
+                              <option value="Saucen">Saucen/Gewürze</option>
+                              <option value="Getränke">Getränke</option>
+                              <option value="Sonstiges">Sonstiges</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Quick amount chips */}
+                        <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
+                          <span style={{ fontSize: "10.5px", color: "#64748b", fontWeight: 600 }}>Schnellwahl:</span>
+                          {(["Stk.", "Bund", "Packung", "Dose", "Flasche"].includes(searchUnit)
+                            ? [1, 2, 3, 5, 10]
+                            : ["kg", "l"].includes(searchUnit)
+                            ? [1, 2, 5]
+                            : [100, 250, 500, 1000]
+                          ).map((chipVal) => (
+                            <button
+                              key={chipVal}
+                              type="button"
+                              onClick={() => setSearchAmountStr(String(chipVal))}
+                              style={{
+                                padding: "3px 8px",
+                                borderRadius: "6px",
+                                border: searchAmountStr === String(chipVal) ? "1.5px solid #059669" : "1px solid #cbd5e1",
+                                background: searchAmountStr === String(chipVal) ? "#ecfdf5" : "#f8fafc",
+                                color: searchAmountStr === String(chipVal) ? "#047857" : "#334155",
+                                fontSize: "11px",
+                                fontWeight: 700,
+                                cursor: "pointer",
+                              }}
+                            >
+                              {chipVal}{searchUnit}
+                            </button>
+                          ))}
+                        </div>
+
+                        {/* Optional MHD */}
+                        <div>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "3px" }}>
+                            <label style={{ fontSize: "10px", fontWeight: 750, color: "#475569", textTransform: "uppercase" }}>
+                              Mindesthaltbarkeitsdatum (MHD)
+                            </label>
+                            {searchMhd && (
+                              <button
+                                type="button"
+                                onClick={() => setSearchMhd("")}
+                                style={{ border: "none", background: "none", color: "#dc2626", fontSize: "10px", cursor: "pointer", fontWeight: 700 }}
+                              >
+                                Entfernen
+                              </button>
+                            )}
+                          </div>
+                          <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
+                            <input
+                              type="date"
+                              value={searchMhd}
+                              onChange={(e) => setSearchMhd(e.target.value)}
+                              className="search-field"
+                              style={{ height: "30px", fontSize: "11px", padding: "0 6px", background: "#ffffff" }}
+                            />
+                            {[
+                              { label: "+3 T.", days: 3 },
+                              { label: "+7 T.", days: 7 },
+                              { label: "+14 T.", days: 14 },
+                              { label: "+6 M.", days: 180 },
+                            ].map((btn) => (
+                              <button
+                                key={btn.label}
+                                type="button"
+                                onClick={() => {
+                                  const d = new Date();
+                                  d.setDate(d.getDate() + btn.days);
+                                  setSearchMhd(d.toISOString().split("T")[0]);
+                                }}
+                                style={{ padding: "3px 7px", fontSize: "10.5px", fontWeight: 600, borderRadius: "6px", border: "1px solid #cbd5e1", background: "#f8fafc", cursor: "pointer", color: "#475569" }}
+                              >
+                                {btn.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          className="primary-button"
+                          disabled={!searchAmountStr.trim() || Number(searchAmountStr) <= 0}
+                          style={{
+                            height: "40px",
+                            fontSize: "12.5px",
+                            borderRadius: "10px",
+                            marginTop: "2px",
+                            opacity: (!searchAmountStr.trim() || Number(searchAmountStr) <= 0) ? 0.5 : 1,
+                            cursor: (!searchAmountStr.trim() || Number(searchAmountStr) <= 0) ? "not-allowed" : "pointer",
+                          }}
+                          onClick={() => handleApplyOFFProduct(activeItem, Number(searchAmountStr), searchUnit, searchCategory, searchMhd)}
+                        >
+                          {Number(searchAmountStr) > 0 ? `+ ${activeItem.name} (${searchAmountStr}${searchUnit}) in Vorrat` : "Bitte Menge angeben"}
+                        </button>
                       </div>
-                      <p style={{ margin: "2px 0 0", fontSize: "10.5px", color: "#64748b" }}>
-                        {item.brand} · {item.amount}{item.unit} · {item.calories} kcal
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      className="primary-button"
-                      style={{ height: "30px", padding: "0 10px", fontSize: "10.5px", borderRadius: "8px" }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleApplyOFFProduct(item, item.amount);
-                      }}
-                    >
-                      + Übernehmen
-                    </button>
+                    )}
+
+                    {/* Other search results in case multiple items matched */}
+                    {searchResults.length > 1 && (
+                      <div style={{ marginTop: "6px", display: "flex", flexDirection: "column", gap: "6px" }}>
+                        <span style={{ fontSize: "11px", fontWeight: 700, color: "#475569" }}>
+                          Weitere Treffer ({searchResults.length - 1}):
+                        </span>
+                        {searchResults
+                          .filter((it) => it.code !== (activeItem ? activeItem.code : ""))
+                          .map((item) => (
+                            <div
+                              key={item.code}
+                              className="db-search-item-card"
+                              style={{ cursor: "pointer" }}
+                              onClick={() => handleSelectSearchResult(item)}
+                            >
+                              <div style={{ flex: 1 }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                  <strong style={{ fontSize: "12px", color: "#0f172a" }}>{item.name}</strong>
+                                  <span className="nutri-pill mini">Nutri {item.nutriScore}</span>
+                                </div>
+                                <p style={{ margin: "2px 0 0", fontSize: "10.5px", color: "#64748b" }}>
+                                  {item.brand} · Standard: {item.amount}{item.unit}
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                className="chip"
+                                style={{ height: "28px", padding: "0 10px", fontSize: "10.5px", borderRadius: "8px", border: "1px solid #10b981", color: "#047857", background: "#ecfdf5", fontWeight: 700 }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSelectSearchResult(item);
+                                }}
+                              >
+                                Anpassen & Übernehmen
+                              </button>
+                            </div>
+                          ))}
+                      </div>
+                    )}
                   </div>
-                ))}
-              </div>
+                );
+              })()}
 
               {searchQuery && !isSearching && searchResults.length === 0 && (
                 <div style={{ textAlign: "center", padding: "20px", color: "#64748b", fontSize: "12px" }}>
@@ -1438,10 +1936,12 @@ export function UnifiedAddModal({
                     className="search-field"
                     style={{ width: "100%", marginTop: "4px" }}
                   >
-                    <option value="Kühl">Kühl</option>
-                    <option value="Trocken">Trocken</option>
-                    <option value="Saucen">Saucen</option>
+                    <option value="Kühl">Kühlschrank</option>
                     <option value="Tiefkühl">Tiefkühl</option>
+                    <option value="Trocken">Trockenvorrat</option>
+                    <option value="Saucen">Gewürze & Saucen</option>
+                    <option value="Getränke">Getränke</option>
+                    <option value="Sonstiges">Sonstiges</option>
                   </select>
                 </label>
 
@@ -1456,6 +1956,12 @@ export function UnifiedAddModal({
                     <option value="g">Gramm (g)</option>
                     <option value="ml">Milliliter (ml)</option>
                     <option value="Stk.">Stück (Stk.)</option>
+                    <option value="Bund">Bund</option>
+                    <option value="Packung">Packung (Pkg.)</option>
+                    <option value="Dose">Dose</option>
+                    <option value="Flasche">Flasche</option>
+                    <option value="kg">Kilogramm (kg)</option>
+                    <option value="l">Liter (l)</option>
                   </select>
                 </label>
               </div>
@@ -1504,29 +2010,133 @@ export function UnifiedAddModal({
                   </p>
                 </div>
               ) : (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-                  <label style={{ fontSize: "11px", fontWeight: 700, color: "#475569" }}>
-                    Aktueller Vorrat
-                    <input
-                      type="number"
-                      min="1"
-                      value={manualAmount}
-                      onChange={(e) => setManualAmount(Number(e.target.value) || 0)}
-                      className="search-field"
-                      style={{ width: "100%", marginTop: "4px" }}
-                    />
-                  </label>
-                  <label style={{ fontSize: "11px", fontWeight: 700, color: "#475569" }}>
-                    Gesamtmenge (Packung)
-                    <input
-                      type="number"
-                      min="1"
-                      value={manualTotal}
-                      onChange={(e) => setManualTotal(Number(e.target.value) || 0)}
-                      className="search-field"
-                      style={{ width: "100%", marginTop: "4px" }}
-                    />
-                  </label>
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                    <label style={{ fontSize: "11px", fontWeight: 700, color: "#475569" }}>
+                      Aktueller Vorrat
+                      <div style={{ display: "flex", alignItems: "center", gap: "4px", marginTop: "4px" }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const cur = Number(manualAmountStr) || 0;
+                            const step = ["Stk.", "Bund", "Packung", "Dose", "Flasche"].includes(manualUnit) ? 1 : 50;
+                            setManualAmountStr(String(Math.max(0, cur - step)));
+                          }}
+                          style={{ width: "28px", height: "36px", borderRadius: "8px", border: "1px solid #cbd5e1", background: "#f8fafc", fontWeight: 700, cursor: "pointer", color: "#334155" }}
+                        >
+                          −
+                        </button>
+                        <input
+                          type="number"
+                          min="0"
+                          value={manualAmountStr}
+                          onChange={(e) => setManualAmountStr(e.target.value)}
+                          placeholder="z. B. 250"
+                          className="search-field"
+                          style={{ width: "100%", height: "36px", textAlign: "center", fontWeight: 700 }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const cur = Number(manualAmountStr) || 0;
+                            const step = ["Stk.", "Bund", "Packung", "Dose", "Flasche"].includes(manualUnit) ? 1 : 50;
+                            setManualAmountStr(String(cur + step));
+                          }}
+                          style={{ width: "28px", height: "36px", borderRadius: "8px", border: "1px solid #cbd5e1", background: "#f8fafc", fontWeight: 700, cursor: "pointer", color: "#334155" }}
+                        >
+                          +
+                        </button>
+                      </div>
+                    </label>
+
+                    <label style={{ fontSize: "11px", fontWeight: 700, color: "#475569" }}>
+                      Gesamtpackung
+                      <input
+                        type="number"
+                        min="0"
+                        value={manualTotalStr}
+                        onChange={(e) => setManualTotalStr(e.target.value)}
+                        placeholder="z. B. 500"
+                        className="search-field"
+                        style={{ width: "100%", height: "36px", marginTop: "4px" }}
+                      />
+                    </label>
+                  </div>
+
+                  {/* Quick amount chips */}
+                  <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
+                    <span style={{ fontSize: "10.5px", color: "#64748b", fontWeight: 600 }}>Schnellwahl:</span>
+                    {(["Stk.", "Bund", "Packung", "Dose", "Flasche"].includes(manualUnit)
+                      ? [1, 2, 3, 5, 10]
+                      : ["kg", "l"].includes(manualUnit)
+                      ? [1, 2, 5]
+                      : [100, 250, 500, 1000]
+                    ).map((chipVal) => (
+                      <button
+                        key={chipVal}
+                        type="button"
+                        onClick={() => setManualAmountStr(String(chipVal))}
+                        style={{
+                          padding: "3px 8px",
+                          borderRadius: "6px",
+                          border: manualAmountStr === String(chipVal) ? "1.5px solid #059669" : "1px solid #cbd5e1",
+                          background: manualAmountStr === String(chipVal) ? "#ecfdf5" : "#f8fafc",
+                          color: manualAmountStr === String(chipVal) ? "#047857" : "#334155",
+                          fontSize: "11px",
+                          fontWeight: 700,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {chipVal}{manualUnit}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Optional MHD in Manual Mode */}
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" }}>
+                      <label style={{ fontSize: "10px", fontWeight: 750, color: "#475569", textTransform: "uppercase" }}>
+                        Mindesthaltbarkeitsdatum (MHD)
+                      </label>
+                      {manualMhd && (
+                        <button
+                          type="button"
+                          onClick={() => setManualMhd("")}
+                          style={{ border: "none", background: "none", color: "#dc2626", fontSize: "10px", cursor: "pointer", fontWeight: 700 }}
+                        >
+                          Entfernen
+                        </button>
+                      )}
+                    </div>
+                    <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
+                      <input
+                        type="date"
+                        value={manualMhd}
+                        onChange={(e) => setManualMhd(e.target.value)}
+                        className="search-field"
+                        style={{ height: "32px", fontSize: "11px", padding: "0 8px", background: "#ffffff" }}
+                      />
+                      {[
+                        { label: "+3 T.", days: 3 },
+                        { label: "+7 T.", days: 7 },
+                        { label: "+14 T.", days: 14 },
+                        { label: "+6 M.", days: 180 },
+                      ].map((btn) => (
+                        <button
+                          key={btn.label}
+                          type="button"
+                          onClick={() => {
+                            const d = new Date();
+                            d.setDate(d.getDate() + btn.days);
+                            setManualMhd(d.toISOString().split("T")[0]);
+                          }}
+                          style={{ padding: "3px 7px", fontSize: "10.5px", fontWeight: 600, borderRadius: "6px", border: "1px solid #cbd5e1", background: "#ffffff", cursor: "pointer", color: "#475569" }}
+                        >
+                          {btn.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -1571,13 +2181,32 @@ export function UnifiedAddModal({
                 </div>
               </div>
 
-              <button
-                type="submit"
-                className="primary-button generate-button"
-                style={{ height: "46px", borderRadius: "12px", fontSize: "13px", marginTop: "4px" }}
-              >
-                In Vorrat speichern
-              </button>
+              {(() => {
+                const numAmount = Number(manualAmountStr);
+                const isAmountValid = manualIsUnlimited || (manualAmountStr.trim() !== "" && !isNaN(numAmount) && numAmount > 0);
+                const canSubmit = Boolean(manualName.trim() && isAmountValid);
+                return (
+                  <button
+                    type="submit"
+                    className="primary-button generate-button"
+                    disabled={!canSubmit}
+                    style={{
+                      height: "46px",
+                      borderRadius: "12px",
+                      fontSize: "13px",
+                      marginTop: "4px",
+                      opacity: canSubmit ? 1 : 0.5,
+                      cursor: canSubmit ? "pointer" : "not-allowed",
+                    }}
+                  >
+                    {!manualName.trim()
+                      ? "Name des Lebensmittels eingeben"
+                      : !isAmountValid
+                      ? "Bitte Menge angeben"
+                      : "In Vorrat speichern"}
+                  </button>
+                );
+              })()}
             </form>
           )}
         </div>

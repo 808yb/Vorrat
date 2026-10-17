@@ -19,8 +19,8 @@ export function EditPantryItemModal({
 }: EditPantryItemModalProps) {
   const [name, setName] = useState("");
   const [category, setCategory] = useState("Kühl");
-  const [amount, setAmount] = useState<number>(100);
-  const [total, setTotal] = useState<number>(500);
+  const [amountStr, setAmountStr] = useState("100");
+  const [totalStr, setTotalStr] = useState("500");
   const [unit, setUnit] = useState("g");
   const [mhd, setMhd] = useState("");
   const [isUnlimited, setIsUnlimited] = useState(false);
@@ -36,8 +36,8 @@ export function EditPantryItemModal({
       setName(item.name || "");
       setCategory(item.category || "Kühl");
       setIsUnlimited(unlimited);
-      setAmount(unlimited ? 1000 : (item.amount ?? 0));
-      setTotal(unlimited ? 1000 : (item.total || 500));
+      setAmountStr(unlimited ? "1000" : (item.amount !== undefined && item.amount !== null ? String(item.amount) : ""));
+      setTotalStr(unlimited ? "1000" : (item.total ? String(item.total) : (item.amount ? String(item.amount) : "500")));
       setUnit(item.unit || "g");
       setMhd(item.mhd || "");
       setConfirmDelete(false);
@@ -59,17 +59,31 @@ export function EditPantryItemModal({
     setMhd("");
   };
 
+  const stepAmount = (delta: number) => {
+    const cur = Number(amountStr) || 0;
+    const isSingleUnit = ["Stk.", "Bund", "Packung", "Dose", "Flasche"].includes(unit);
+    const step = isSingleUnit ? 1 : 50;
+    const next = Math.max(0, cur + delta * step);
+    setAmountStr(String(next));
+  };
+
+  const numAmount = Number(amountStr);
+  const isAmountValid = isUnlimited || (amountStr.trim() !== "" && !isNaN(numAmount) && numAmount > 0);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!name.trim() || !isAmountValid) return;
+
+    const parsedAmount = isUnlimited ? 999999 : numAmount;
+    const parsedTotal = isUnlimited ? 999999 : Math.max(parsedAmount, Number(totalStr) || parsedAmount);
 
     const updated: PantryItem = {
       ...item,
       name: name.trim(),
       category,
       isUnlimited,
-      amount: isUnlimited ? 999999 : Math.max(0, Number(amount) || 0),
-      total: isUnlimited ? 999999 : Math.max(1, Number(total) || 1),
+      amount: parsedAmount,
+      total: parsedTotal,
       unit: isUnlimited ? (unit || "ml") : unit,
       mhd: isUnlimited ? (mhd.trim() || "Unbegrenzt") : (mhd.trim() || undefined),
       tone: getFoodTone(name.trim(), category),
@@ -97,7 +111,7 @@ export function EditPantryItemModal({
             <ProductMark tone={getFoodTone(name || item.name, category)} name={name || item.name} compact />
             <div>
               <h3>Vorrat bearbeiten</h3>
-              <p>Details und Mindesthaltbarkeit anpassen</p>
+              <p>Details, Menge und Mindesthaltbarkeit anpassen</p>
             </div>
           </div>
           <button type="button" className="modal-close-btn" onClick={onClose}>
@@ -123,17 +137,22 @@ export function EditPantryItemModal({
           {/* Category Chips */}
           <div className="edit-field-group">
             <label className="edit-field-label">Kategorie</label>
-            <div className="edit-category-pills">
-              {["Kühl", "Trocken", "Saucen"].map((cat) => (
+            <div className="edit-category-pills" style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+              {[
+                { id: "Kühl", label: "Kühlschrank" },
+                { id: "Tiefkühl", label: "Tiefkühl" },
+                { id: "Trocken", label: "Trockenvorrat" },
+                { id: "Saucen", label: "Gewürze & Saucen" },
+                { id: "Getränke", label: "Getränke" },
+                { id: "Sonstiges", label: "Sonstiges" },
+              ].map((cat) => (
                 <button
-                  key={cat}
+                  key={cat.id}
                   type="button"
-                  className={`cat-pill-btn ${category === cat ? "active" : ""}`}
-                  onClick={() => setCategory(cat)}
+                  className={`cat-pill-btn ${category === cat.id ? "active" : ""}`}
+                  onClick={() => setCategory(cat.id)}
                 >
-                  {cat === "Kühl" && "Kühlschrank"}
-                  {cat === "Trocken" && "Trockenvorrat"}
-                  {cat === "Saucen" && "Saucen & Gewürze"}
+                  {cat.label}
                 </button>
               ))}
             </div>
@@ -171,23 +190,68 @@ export function EditPantryItemModal({
             <div className="edit-amounts-grid">
               <div className="edit-field-group">
                 <label className="edit-field-label">Aktueller Vorrat</label>
-                <input
-                  type="number"
-                  min="0"
-                  className="edit-input"
-                  value={amount}
-                  onChange={(e) => setAmount(Number(e.target.value))}
-                  required={!isUnlimited}
-                />
+                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                  <button
+                    type="button"
+                    onClick={() => stepAmount(-1)}
+                    style={{
+                      width: "36px",
+                      height: "38px",
+                      borderRadius: "8px",
+                      border: "1px solid #cbd5e1",
+                      background: "#f8fafc",
+                      fontSize: "16px",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "#334155"
+                    }}
+                  >
+                    −
+                  </button>
+                  <input
+                    type="number"
+                    min="0"
+                    className="edit-input"
+                    value={amountStr}
+                    onChange={(e) => setAmountStr(e.target.value)}
+                    placeholder="z. B. 250"
+                    style={{ textAlign: "center" }}
+                    required={!isUnlimited}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => stepAmount(1)}
+                    style={{
+                      width: "36px",
+                      height: "38px",
+                      borderRadius: "8px",
+                      border: "1px solid #cbd5e1",
+                      background: "#f8fafc",
+                      fontSize: "16px",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      color: "#334155"
+                    }}
+                  >
+                    +
+                  </button>
+                </div>
               </div>
               <div className="edit-field-group">
                 <label className="edit-field-label">Gesamtpackung</label>
                 <input
                   type="number"
-                  min="1"
+                  min="0"
                   className="edit-input"
-                  value={total}
-                  onChange={(e) => setTotal(Number(e.target.value))}
+                  value={totalStr}
+                  onChange={(e) => setTotalStr(e.target.value)}
+                  placeholder="z. B. 500"
                   required={!isUnlimited}
                 />
               </div>
@@ -201,6 +265,10 @@ export function EditPantryItemModal({
                   <option value="g">Gramm (g)</option>
                   <option value="ml">Milliliter (ml)</option>
                   <option value="Stk.">Stück (Stk.)</option>
+                  <option value="Bund">Bund</option>
+                  <option value="Packung">Packung (Pkg.)</option>
+                  <option value="Dose">Dose</option>
+                  <option value="Flasche">Flasche</option>
                   <option value="kg">Kilogramm (kg)</option>
                   <option value="l">Liter (l)</option>
                 </select>
@@ -272,8 +340,16 @@ export function EditPantryItemModal({
               <button type="button" className="cancel-edit-btn" onClick={onClose}>
                 Abbrechen
               </button>
-              <button type="submit" className="save-edit-btn">
-                Speichern
+              <button
+                type="submit"
+                className="save-edit-btn"
+                disabled={!name.trim() || !isAmountValid}
+                style={{
+                  opacity: (!name.trim() || !isAmountValid) ? 0.5 : 1,
+                  cursor: (!name.trim() || !isAmountValid) ? "not-allowed" : "pointer"
+                }}
+              >
+                {!isAmountValid ? "Menge eingeben" : "Speichern"}
               </button>
             </div>
           </div>
