@@ -21,6 +21,7 @@ import { PwaInstallBanner } from "./components/PwaInstallBanner";
 import { RecipeImportModal } from "./components/RecipeImportModal";
 import { NutritionCoachModal } from "./components/NutritionCoachModal";
 import { AccountResetModal } from "./components/AccountResetModal";
+import { SurpriseMeModal } from "./components/SurpriseMeModal";
 import {
   WeeklyMealPlannerScreen,
   type PlannedMeal,
@@ -1134,6 +1135,7 @@ function CookScreen({
 
   const [expandedRecipeId, setExpandedRecipeId] = useState<string | null>(null);
   const [activeModalRecipe, setActiveModalRecipe] = useState<CatalogRecipe | null>(null);
+  const [isSurpriseModalOpen, setIsSurpriseModalOpen] = useState(false);
 
   // Pure curated catalog recipes for the shuffle deck (always the 9 standard catalog proposals)
   const catalogShuffleList = useMemo(() => {
@@ -1250,37 +1252,13 @@ function CookScreen({
     return list;
   }, [activeSearchedRecipe, shuffleIndex, servings]);
 
-  // Überrasch mich Handler: Pick a random recipe with high pantry match
+  // Überrasch mich Handler: Open interactive preference dialog
   const handleSurpriseMe = () => {
     setIsRotating(true);
-    // Score all catalog recipes by pantry coverage
-    const scored = FULL_RECIPE_CATALOG.map((rec) => {
-      const breakdown = getRecipePantryBreakdown(rec, pantry, servings);
-      const inStockCount = breakdown.inStock.length;
-      const totalCount = breakdown.inStock.length + breakdown.missing.length;
-      const pct = totalCount > 0 ? inStockCount / totalCount : 0;
-      return { recipe: rec, pct, inStockCount };
-    });
-
-    // Prefer recipes with >= 30% match
-    const goodMatches = scored.filter((s) => s.pct >= 0.3);
-    const pool = goodMatches.length > 0 ? goodMatches : scored;
-    const randomPick = pool[Math.floor(Math.random() * pool.length)];
-
-    if (randomPick) {
-      setActiveSearchedRecipe(randomPick.recipe);
-      setDeckKey((k) => k + 1);
-      setViewMode("swipe");
-      setGenerated(true);
-      if (onNotify) {
-        const percentDisplay = Math.round(randomPick.pct * 100);
-        onNotify(`Überraschung: «${randomPick.recipe.title}» (${percentDisplay}% vorrätig)!`);
-      }
-    }
-
+    setIsSurpriseModalOpen(true);
     setTimeout(() => {
       setIsRotating(false);
-    }, 400);
+    }, 350);
   };
 
   const handleShuffle = handleSurpriseMe;
@@ -1449,9 +1427,19 @@ function CookScreen({
         </div>
       )}
 
-      {/* Resteverwertungs-Filter: Alle vs 100% Vorrat vs Max 1-2 Zutaten nachkaufen */}
-      <div className="stock-filter-toolbar" style={{ margin: "10px 0 14px" }}>
-        <div style={{ display: "flex", gap: "6px", overflowX: "auto", paddingBottom: "4px" }}>
+      {/* Resteverwertungs-Filter & View Mode Toolbar */}
+      <div
+        className="stock-filter-toolbar"
+        style={{
+          margin: "10px 0 14px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "8px",
+          flexWrap: "wrap",
+        }}
+      >
+        <div style={{ display: "flex", gap: "6px", overflowX: "auto", paddingBottom: "4px", flex: 1, minWidth: "220px" }}>
           <button
             type="button"
             className={`chip ${stockFilter === "all" ? "active" : ""}`}
@@ -1508,6 +1496,45 @@ function CookScreen({
           >
             <Icon name="cart" size={13} /> Max. 1–2 Zukauf ({max2StockCount})
           </button>
+        </div>
+
+        {/* View Mode Dropdown (TinderSwipe vs Liste) */}
+        <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
+          <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+            <select
+              aria-label="Rezept-Ansicht wählen"
+              value={viewMode}
+              onChange={(e) => setViewMode(e.target.value as "swipe" | "list")}
+              style={{
+                height: "32px",
+                padding: "0 28px 0 10px",
+                background: "#ffffff",
+                border: "1.5px solid #cbd5e1",
+                borderRadius: "10px",
+                fontSize: "11.5px",
+                fontWeight: 750,
+                color: "#1e293b",
+                cursor: "pointer",
+                appearance: "none",
+                WebkitAppearance: "none",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+              }}
+            >
+              <option value="swipe">🃏 TinderSwipe (Karten)</option>
+              <option value="list">📋 Listenansicht (Alle)</option>
+            </select>
+            <span
+              style={{
+                position: "absolute",
+                right: "9px",
+                pointerEvents: "none",
+                fontSize: "9px",
+                color: "#64748b",
+              }}
+            >
+              ▼
+            </span>
+          </div>
         </div>
 
         {stockFilter === "perfect" && (
@@ -1831,6 +1858,25 @@ function CookScreen({
         isFavorite={activeModalRecipe ? favorites.includes(activeModalRecipe.id) : false}
         onToggleFavorite={onToggleFavorite}
         onAddMissingToGroceries={onAddMissingToGroceries}
+      />
+
+      {/* Surprise Me Preferences Dialog Modal */}
+      <SurpriseMeModal
+        isOpen={isSurpriseModalOpen}
+        onClose={() => setIsSurpriseModalOpen(false)}
+        recipes={FULL_RECIPE_CATALOG}
+        pantry={pantry}
+        servings={servings}
+        onSelectRecipe={(rec) => {
+          setActiveSearchedRecipe(rec);
+          setDeckKey((k) => k + 1);
+          setViewMode("swipe");
+          setGenerated(true);
+        }}
+        onCookRecipe={(rec) => {
+          setActiveModalRecipe(rec);
+        }}
+        onNotify={onNotify}
       />
     </main>
   );
