@@ -11,7 +11,7 @@ import {
 } from "../utils/receiptOcr";
 import { findFoodNutrition, type FoodNutritionInfo } from "../data/foodNutritionDatabase";
 
-export type AddMode = "menu" | "camera" | "receipt" | "database" | "manual";
+export type AddMode = "menu" | "camera" | "receipt" | "manual";
 
 interface UnifiedAddModalProps {
   isOpen: boolean;
@@ -61,15 +61,10 @@ export function UnifiedAddModal({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const codeReaderRef = useRef<BrowserMultiFormatReader | null>(null);
 
-  // Database Search State
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<OFFProduct[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [selectedSearchCode, setSelectedSearchCode] = useState<string | null>(null);
-  const [searchAmountStr, setSearchAmountStr] = useState("500");
-  const [searchUnit, setSearchUnit] = useState("g");
-  const [searchCategory, setSearchCategory] = useState("Kühl");
-  const [searchMhd, setSearchMhd] = useState("");
+  // Live Database Search suggestions within Unified mode
+  const [offSearchResults, setOffSearchResults] = useState<OFFProduct[]>([]);
+  const [isOffSearching, setIsOffSearching] = useState(false);
+  const [selectedMatchedProduct, setSelectedMatchedProduct] = useState<OFFProduct | null>(null);
 
   // Receipt OCR State
   const [receiptImage, setReceiptImage] = useState<string | null>(null);
@@ -195,6 +190,34 @@ export function UnifiedAddModal({
     }
   }, [manualName]);
 
+  // Live search in Open Food Facts when typing in Unified mode
+  useEffect(() => {
+    const q = manualName.trim();
+    if (!q || q.length < 2) {
+      setOffSearchResults([]);
+      setIsOffSearching(false);
+      return;
+    }
+
+    if (selectedMatchedProduct && selectedMatchedProduct.name.trim().toLowerCase() === q.toLowerCase()) {
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsOffSearching(true);
+      try {
+        const results = await searchProductsInOFF(q);
+        setOffSearchResults(results);
+      } catch (err) {
+        console.error("OFF search error:", err);
+      } finally {
+        setIsOffSearching(false);
+      }
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [manualName, selectedMatchedProduct]);
+
   // Stop camera helper
   const stopLiveCamera = () => {
     if (codeReaderRef.current) {
@@ -216,9 +239,9 @@ export function UnifiedAddModal({
     stopLiveCamera();
     setActiveMode("menu");
     setScannedProduct(null);
-    setSelectedSearchCode(null);
-    setSearchQuery("");
-    setSearchResults([]);
+    setSelectedMatchedProduct(null);
+    setOffSearchResults([]);
+    setIsOffSearching(false);
     setBarcodeInput("");
     setScanStatusMessage("");
     onClose();
@@ -228,7 +251,9 @@ export function UnifiedAddModal({
     stopLiveCamera();
     setActiveMode("menu");
     setScannedProduct(null);
-    setSelectedSearchCode(null);
+    setSelectedMatchedProduct(null);
+    setOffSearchResults([]);
+    setIsOffSearching(false);
     setScanStatusMessage("");
   };
 
@@ -387,39 +412,22 @@ export function UnifiedAddModal({
     }
   };
 
-  // Search DB handler
-  const handleSearchDatabase = async (q: string) => {
-    setSearchQuery(q);
-    if (!q.trim()) {
-      setSearchResults([]);
-      setSelectedSearchCode(null);
-      return;
+  const handleApplySearchResultToForm = (prod: OFFProduct) => {
+    setManualName(prod.name);
+    setManualCategory(prod.category || "Kühl");
+    setManualUnit(prod.unit || "g");
+    setManualAmountStr(String(prod.amount || 500));
+    setManualTotalStr(String(prod.total || prod.amount || 500));
+    setManualCalories(prod.calories);
+    setManualProtein(prod.protein);
+    setManualCarbs(prod.carbs);
+    setManualFat(prod.fat);
+    setSelectedMatchedProduct(prod);
+    setOffSearchResults([]);
+    setIsMacroAutoFilled(true);
+    if (onNotify) {
+      onNotify(`Produkt «${prod.name}» übernommen (${prod.calories} kcal/100g)`);
     }
-
-    setIsSearching(true);
-    try {
-      const results = await searchProductsInOFF(q);
-      setSearchResults(results);
-      if (results.length > 0) {
-        setSelectedSearchCode(results[0].code);
-        setSearchAmountStr(String(results[0].amount || 500));
-        setSearchUnit(results[0].unit || "g");
-        setSearchCategory(results[0].category || "Kühl");
-        setSearchMhd("");
-      } else {
-        setSelectedSearchCode(null);
-      }
-    } finally {
-      setIsSearching(false);
-    }
-  };
-
-  const handleSelectSearchResult = (prod: OFFProduct) => {
-    setSelectedSearchCode(prod.code);
-    setSearchAmountStr(String(prod.amount || 500));
-    setSearchUnit(prod.unit || "g");
-    setSearchCategory(prod.category || "Kühl");
-    setSearchMhd("");
   };
 
   // Add scanned / searched product to pantry with customizable unit, category and MHD
@@ -537,15 +545,13 @@ export function UnifiedAddModal({
                 {activeMode === "menu" && "Lebensmittel hinzufügen"}
                 {activeMode === "camera" && "Barcode / Kamera Scan"}
                 {activeMode === "receipt" && "Kassenbon importieren"}
-                {activeMode === "database" && "Datenbank-Suche"}
-                {activeMode === "manual" && "Manuell eingeben"}
+                {activeMode === "manual" && "Lebensmittel suchen & erfassen"}
               </h2>
               <p style={{ margin: "2px 0 0", fontSize: "10.5px", color: "#64748b" }}>
                 {activeMode === "menu" && "Wähle deine bevorzugte Eingabemethode"}
                 {activeMode === "camera" && "EAN per Kamera, Foto oder Code scannen"}
                 {activeMode === "receipt" && (receiptItems.length > 0 ? `Kassenzettel mit ${receiptItems.length} Positionen einbuchen` : "Kassenbon per Foto scannen")}
-                {activeMode === "database" && "Open Food Facts Datenbank durchsuchen"}
-                {activeMode === "manual" && "Name, Menge und Nährwerte selbst erfassen"}
+                {activeMode === "manual" && "Live-Produktsuche, Nährwert-Erkennung & Mengenanpassung"}
               </p>
             </div>
           </div>
@@ -562,7 +568,7 @@ export function UnifiedAddModal({
         {/* Modal Body */}
         <div className="modal-body" style={{ maxHeight: "80vh", overflowY: "auto", padding: "16px 20px" }}>
           {/* ========================================================
-              VIEW 1: MENU (Chooser: Kamera, Bon, DB, Manuell)
+              VIEW 1: MENU (Chooser: Kamera, Bon, Suchen & Erfassen)
               ======================================================== */}
           {activeMode === "menu" && (
             <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
@@ -595,7 +601,7 @@ export function UnifiedAddModal({
               >
                 <div className="add-method-icon receipt">
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z" />
+                    <path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z" />
                     <path d="M14 8H8M16 12H8M12 16H8" />
                   </svg>
                 </div>
@@ -609,11 +615,11 @@ export function UnifiedAddModal({
                 <span className="add-method-arrow">→</span>
               </button>
 
-              {/* Option 3: Datenbank-Suche */}
+              {/* Option 3: Lebensmittel suchen & erfassen (Unified Database & Manual) */}
               <button
                 type="button"
                 className="add-method-card"
-                onClick={() => setActiveMode("database")}
+                onClick={() => setActiveMode("manual")}
               >
                 <div className="add-method-icon database">
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -623,32 +629,10 @@ export function UnifiedAddModal({
                 </div>
                 <div className="add-method-info">
                   <div className="add-method-top">
-                    <h4>Datenbank-Suche (Open Food Facts)</h4>
-                    <span className="add-badge purple">Produktsuche</span>
+                    <h4>Lebensmittel suchen & erfassen</h4>
+                    <span className="add-badge green">Smart-Suche & Manuell</span>
                   </div>
-                  <p>Nach Lebensmittelname suchen – greift auf tausende verifizierte Markenartikel zu.</p>
-                </div>
-                <span className="add-method-arrow">→</span>
-              </button>
-
-              {/* Option 4: Manuelle Eingabe */}
-              <button
-                type="button"
-                className="add-method-card"
-                onClick={() => setActiveMode("manual")}
-              >
-                <div className="add-method-icon manual">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                  </svg>
-                </div>
-                <div className="add-method-info">
-                  <div className="add-method-top">
-                    <h4>Manuell eingeben</h4>
-                    <span className="add-badge amber">Freie Eingabe</span>
-                  </div>
-                  <p>Name, Menge, Einheit und Nährwerte selbst erfassen ohne Barcode.</p>
+                  <p>Name eingeben – durchsucht Open Food Facts & Nährwert-DB oder eigene Angaben erfassen.</p>
                 </div>
                 <span className="add-method-arrow">→</span>
               </button>
@@ -656,7 +640,7 @@ export function UnifiedAddModal({
           )}
 
           {/* ========================================================
-              VIEW 2: CAMERA / BARCODE SCAN
+              VIEW 2: CAMERA / BARCODE SCAN (Scandinavian Modern Deli Style)
               ======================================================== */}
           {activeMode === "camera" && (
             <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
@@ -664,16 +648,17 @@ export function UnifiedAddModal({
               <div
                 style={{
                   position: "relative",
-                  height: "175px",
-                  background: "#0f172a",
-                  borderRadius: "16px",
+                  minHeight: "185px",
+                  background: isLiveCameraActive ? "#000000" : "#f4f7f5",
+                  border: isLiveCameraActive ? "none" : "2px dashed #cbd5e1",
+                  borderRadius: "18px",
                   display: "flex",
                   flexDirection: "column",
                   alignItems: "center",
                   justifyContent: "center",
-                  color: "white",
+                  color: isLiveCameraActive ? "white" : "#0f172a",
                   overflow: "hidden",
-                  boxShadow: "inset 0 0 20px rgba(0,0,0,0.6)",
+                  transition: "all 0.2s ease",
                 }}
               >
                 <video
@@ -696,11 +681,11 @@ export function UnifiedAddModal({
                     <div
                       style={{
                         position: "absolute",
-                        left: "20px",
-                        right: "20px",
+                        left: "15%",
+                        right: "15%",
                         height: "2px",
-                        background: "#ef4444",
-                        boxShadow: "0 0 10px #ef4444",
+                        background: "#10b981",
+                        boxShadow: "0 0 12px #10b981, 0 0 4px #34d399",
                         animation: "pulse 1.4s infinite",
                         zIndex: 2,
                       }}
@@ -709,17 +694,27 @@ export function UnifiedAddModal({
                       style={{
                         position: "relative",
                         zIndex: 3,
-                        width: "180px",
-                        height: "90px",
-                        border: "2px solid rgba(52, 211, 153, 0.8)",
-                        borderRadius: "12px",
+                        width: "190px",
+                        height: "95px",
+                        border: "2px solid #34d399",
+                        borderRadius: "14px",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
-                        boxShadow: "0 0 0 9999px rgba(15, 23, 42, 0.45)",
+                        boxShadow: "0 0 0 9999px rgba(15, 23, 42, 0.4)",
                       }}
                     >
-                      <span style={{ fontSize: "10px", color: "#a7f3d0", fontWeight: 700 }}>
+                      <span
+                        style={{
+                          fontSize: "10.5px",
+                          background: "rgba(255, 255, 255, 0.92)",
+                          color: "#2d5a3e",
+                          fontWeight: 750,
+                          padding: "3px 8px",
+                          borderRadius: "6px",
+                          boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
+                        }}
+                      >
                         Barcode zentrieren
                       </span>
                     </div>
@@ -738,13 +733,15 @@ export function UnifiedAddModal({
                           type="button"
                           onClick={toggleTorch}
                           style={{
-                            padding: "6px 12px",
+                            padding: "7px 13px",
                             borderRadius: "10px",
-                            background: isTorchOn ? "#059669" : "rgba(15, 23, 42, 0.8)",
-                            color: "white",
-                            border: "1px solid rgba(255,255,255,0.3)",
+                            background: isTorchOn ? "#2d5a3e" : "rgba(255, 255, 255, 0.9)",
+                            color: isTorchOn ? "#ffffff" : "#1e293b",
+                            border: "1px solid rgba(0,0,0,0.1)",
                             fontSize: "11px",
+                            fontWeight: 700,
                             cursor: "pointer",
+                            backdropFilter: "blur(8px)",
                           }}
                         >
                           {isTorchOn ? "Blitz Aus" : "Blitz An"}
@@ -754,13 +751,15 @@ export function UnifiedAddModal({
                         type="button"
                         onClick={stopLiveCamera}
                         style={{
-                          padding: "6px 12px",
+                          padding: "7px 13px",
                           borderRadius: "10px",
-                          background: "#dc2626",
-                          color: "white",
-                          border: "none",
+                          background: "rgba(255, 255, 255, 0.95)",
+                          color: "#dc2626",
+                          border: "1.5px solid #fecaca",
                           fontSize: "11px",
+                          fontWeight: 750,
                           cursor: "pointer",
+                          backdropFilter: "blur(8px)",
                         }}
                       >
                         Kamera stoppen
@@ -768,46 +767,77 @@ export function UnifiedAddModal({
                     </div>
                   </>
                 ) : (
-                  <div style={{ textAlign: "center", padding: "16px" }}>
-                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2" style={{ margin: "0 auto 6px" }}>
-                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-                      <circle cx="12" cy="13" r="4" />
-                    </svg>
-                    <strong style={{ fontSize: "13px", display: "block" }}>
+                  <div style={{ textAlign: "center", padding: "20px 16px" }}>
+                    <div
+                      style={{
+                        width: "48px",
+                        height: "48px",
+                        borderRadius: "14px",
+                        background: "#ebf3ee",
+                        color: "#2d5a3e",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        margin: "0 auto 8px",
+                      }}
+                    >
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                        <circle cx="12" cy="13" r="4" />
+                      </svg>
+                    </div>
+                    <strong style={{ fontSize: "14px", color: "#0f172a", fontWeight: 750, display: "block" }}>
                       Kamera-Scanner bereit
                     </strong>
-                    <p style={{ margin: "4px 0 12px", fontSize: "11px", color: "#94a3b8" }}>
-                      Live-Scan per Kamera oder Foto aus der Mediathek
+                    <p style={{ margin: "4px 0 14px", fontSize: "11.5px", color: "#64748b" }}>
+                      Live-Scan per Kamera oder Foto aus deiner Mediathek
                     </p>
                     <div style={{ display: "flex", gap: "8px", justifyContent: "center" }}>
                       <button
                         type="button"
                         onClick={startLiveCamera}
                         style={{
-                          padding: "8px 14px",
-                          background: "#059669",
-                          color: "white",
-                          borderRadius: "10px",
+                          padding: "9px 16px",
+                          background: "#2d5a3e",
+                          color: "#ffffff",
+                          borderRadius: "11px",
                           border: "none",
                           fontSize: "12px",
-                          fontWeight: 700,
+                          fontWeight: 750,
                           cursor: "pointer",
+                          boxShadow: "0 2px 6px rgba(45, 90, 62, 0.2)",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
                         }}
                       >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <circle cx="12" cy="12" r="10" />
+                          <polygon points="10 8 16 12 10 16 10 8" fill="currentColor" />
+                        </svg>
                         Live-Kamera starten
                       </button>
                       <label
                         style={{
-                          padding: "8px 14px",
-                          background: "rgba(255,255,255,0.15)",
-                          color: "white",
-                          borderRadius: "10px",
+                          padding: "9px 16px",
+                          background: "#ffffff",
+                          color: "#334155",
+                          borderRadius: "11px",
+                          border: "1.5px solid #cbd5e1",
                           fontSize: "12px",
-                          fontWeight: 700,
+                          fontWeight: 750,
                           cursor: "pointer",
-                          display: "inline-block",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
                         }}
                       >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                          <circle cx="8.5" cy="8.5" r="1.5" />
+                          <polyline points="21 15 16 10 5 21" />
+                        </svg>
                         Foto wählen
                         <input
                           type="file"
@@ -1628,321 +1658,163 @@ export function UnifiedAddModal({
           )}
 
           {/* ========================================================
-              VIEW 4: DATABASE SEARCH
+              VIEW 3: UNIFIED FOOD SEARCH & MANUAL ENTRY
               ======================================================== */}
-          {activeMode === "database" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-              <div style={{ display: "flex", gap: "8px" }}>
-                <input
-                  type="text"
-                  placeholder="Lebensmittel suchen (z. B. Haferflocken, Reis, Milch)..."
-                  value={searchQuery}
-                  onChange={(e) => handleSearchDatabase(e.target.value)}
-                  className="search-field"
-                  style={{ flex: 1 }}
-                />
-              </div>
+          {activeMode === "manual" && (
+            <form onSubmit={handleManualSubmit} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <label style={{ fontSize: "11px", fontWeight: 700, color: "#475569" }}>
+                Name des Lebensmittels oder Suchbegriff *
+                <div style={{ position: "relative", marginTop: "4px" }}>
+                  <input
+                    required
+                    value={manualName}
+                    onChange={(e) => {
+                      setManualName(e.target.value);
+                      if (selectedMatchedProduct && e.target.value !== selectedMatchedProduct.name) {
+                        setSelectedMatchedProduct(null);
+                      }
+                    }}
+                    placeholder="z. B. Hafermilch, Bio Eier, Apfel, Barilla Penne..."
+                    className="search-field"
+                    style={{ width: "100%", paddingRight: isOffSearching ? "36px" : "12px" }}
+                  />
+                  {isOffSearching && (
+                    <div style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", fontSize: "11px", color: "#64748b" }}>
+                      Suche...
+                    </div>
+                  )}
+                </div>
+              </label>
 
               {/* Quick suggestion chips */}
-              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                {["Basmati Reis", "Bio Eier", "Sojasauce", "Haferflocken", "Penne", "Milch", "Butter"].map((chip) => (
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
+                <span style={{ fontSize: "10px", fontWeight: 700, color: "#94a3b8", textTransform: "uppercase" }}>Schnellwahl:</span>
+                {["Bio Eier", "Basmati Reis", "Haferflocken", "Sojasauce", "Penne", "Milch", "Butter", "Tofu"].map((chip) => (
                   <button
                     key={chip}
                     type="button"
                     className="chip"
-                    style={{ fontSize: "10.5px", padding: "4px 9px", height: "26px" }}
-                    onClick={() => handleSearchDatabase(chip)}
+                    style={{ fontSize: "10.5px", padding: "3px 8px", height: "24px" }}
+                    onClick={() => {
+                      setManualName(chip);
+                      setSelectedMatchedProduct(null);
+                    }}
                   >
                     {chip}
                   </button>
                 ))}
               </div>
 
-              {isSearching && (
-                <div style={{ textAlign: "center", padding: "16px", fontSize: "11px", color: "#64748b" }}>
-                  Suche in Open Food Facts...
+              {/* If an Open Food Facts product was selected */}
+              {selectedMatchedProduct && (
+                <div
+                  style={{
+                    padding: "8px 12px",
+                    background: "#ecfdf5",
+                    border: "1.5px solid #a7f3d0",
+                    borderRadius: "12px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "8px",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0 }}>
+                    <span style={{ fontSize: "9.5px", fontWeight: 800, background: "#059669", color: "white", padding: "2px 6px", borderRadius: "5px", flexShrink: 0 }}>
+                      OPEN FOOD FACTS
+                    </span>
+                    <span style={{ fontSize: "12px", color: "#065f46", fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {selectedMatchedProduct.brand ? `${selectedMatchedProduct.brand} · ` : ""}{selectedMatchedProduct.name}
+                    </span>
+                    <span className="nutri-pill mini" style={{ flexShrink: 0 }}>Nutri {selectedMatchedProduct.nutriScore}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedMatchedProduct(null)}
+                    style={{ border: "none", background: "none", color: "#047857", cursor: "pointer", fontSize: "11px", fontWeight: 700, flexShrink: 0 }}
+                  >
+                    ✕
+                  </button>
                 </div>
               )}
 
-              {/* Search Results List with Active Configurator */}
-              {(() => {
-                const activeItem = searchResults.find((r) => r.code === selectedSearchCode) || (searchResults.length > 0 ? searchResults[0] : null);
-
-                return (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "4px" }}>
-                    {/* Active Selected Item Configuration Card */}
-                    {activeItem && (
+              {/* Live Search Results Shelf from Open Food Facts */}
+              {offSearchResults.length > 0 && !selectedMatchedProduct && (
+                <div
+                  style={{
+                    background: "#ffffff",
+                    border: "1.5px solid #cbd5e1",
+                    borderRadius: "14px",
+                    padding: "10px 12px",
+                    boxShadow: "0 4px 12px rgba(15, 23, 42, 0.08)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "6px",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span style={{ fontSize: "11px", fontWeight: 750, color: "#1e293b" }}>
+                      Treffer in Open Food Facts ({offSearchResults.length}):
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setOffSearchResults([])}
+                      style={{ border: "none", background: "none", color: "#64748b", fontSize: "11px", cursor: "pointer" }}
+                    >
+                      Schließen ✕
+                    </button>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxHeight: "170px", overflowY: "auto" }}>
+                    {offSearchResults.slice(0, 4).map((item) => (
                       <div
+                        key={item.code}
+                        onClick={() => handleApplySearchResultToForm(item)}
                         style={{
-                          background: "#ffffff",
-                          border: "2px solid #10b981",
-                          borderRadius: "16px",
-                          padding: "14px",
-                          boxShadow: "0 4px 12px rgba(16, 185, 129, 0.08)",
                           display: "flex",
-                          flexDirection: "column",
-                          gap: "10px",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          padding: "6px 10px",
+                          borderRadius: "10px",
+                          background: "#f8fafc",
+                          border: "1px solid #e2e8f0",
+                          cursor: "pointer",
+                          transition: "background 0.15s ease",
                         }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "#f1f5f9")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = "#f8fafc")}
                       >
-                        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "8px" }}>
-                          <div>
-                            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                              <strong style={{ fontSize: "13.5px", color: "#0f172a" }}>{activeItem.name}</strong>
-                              <span className="nutri-pill mini">Nutri {activeItem.nutriScore}</span>
-                            </div>
-                            <p style={{ margin: "2px 0 0", fontSize: "11px", color: "#64748b" }}>
-                              {activeItem.brand} · {activeItem.calories} kcal / 100g
-                            </p>
+                        <div style={{ flex: 1, minWidth: 0, paddingRight: "8px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <strong style={{ fontSize: "12px", color: "#0f172a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                              {item.name}
+                            </strong>
+                            <span className="nutri-pill mini">Nutri {item.nutriScore}</span>
                           </div>
-                          <span style={{ fontSize: "10px", fontWeight: 800, background: "#ecfdf5", color: "#047857", padding: "2px 8px", borderRadius: "6px" }}>
-                            Ausgewählt
+                          <span style={{ fontSize: "10.5px", color: "#64748b" }}>
+                            {item.brand ? `${item.brand} · ` : ""}{item.calories} kcal/100g · Standard: {item.amount}{item.unit}
                           </span>
                         </div>
-
-                        {/* Amount, Unit & Category Controls */}
-                        <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr", gap: "8px", alignItems: "center" }}>
-                          <div>
-                            <label style={{ fontSize: "10px", fontWeight: 750, color: "#475569", textTransform: "uppercase", display: "block", marginBottom: "3px" }}>
-                              Menge
-                            </label>
-                            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const cur = Number(searchAmountStr) || 0;
-                                  const step = ["Stk.", "Bund", "Packung", "Dose", "Flasche"].includes(searchUnit) ? 1 : 50;
-                                  setSearchAmountStr(String(Math.max(0, cur - step)));
-                                }}
-                                style={{ width: "28px", height: "34px", borderRadius: "8px", border: "1px solid #cbd5e1", background: "#f8fafc", fontWeight: 700, cursor: "pointer", color: "#334155" }}
-                              >
-                                −
-                              </button>
-                              <input
-                                type="number"
-                                min="0"
-                                value={searchAmountStr}
-                                onChange={(e) => setSearchAmountStr(e.target.value)}
-                                placeholder="Menge"
-                                className="search-field"
-                                style={{ width: "100%", height: "34px", textAlign: "center", fontWeight: 700, fontSize: "13px" }}
-                              />
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const cur = Number(searchAmountStr) || 0;
-                                  const step = ["Stk.", "Bund", "Packung", "Dose", "Flasche"].includes(searchUnit) ? 1 : 50;
-                                  setSearchAmountStr(String(cur + step));
-                                }}
-                                style={{ width: "28px", height: "34px", borderRadius: "8px", border: "1px solid #cbd5e1", background: "#f8fafc", fontWeight: 700, cursor: "pointer", color: "#334155" }}
-                              >
-                                +
-                              </button>
-                            </div>
-                          </div>
-
-                          <div>
-                            <label style={{ fontSize: "10px", fontWeight: 750, color: "#475569", textTransform: "uppercase", display: "block", marginBottom: "3px" }}>
-                              Einheit
-                            </label>
-                            <select
-                              value={searchUnit}
-                              onChange={(e) => setSearchUnit(e.target.value)}
-                              className="search-field"
-                              style={{ width: "100%", height: "34px", fontSize: "11.5px", padding: "0 6px", background: "#ffffff" }}
-                            >
-                              <option value="g">Gramm (g)</option>
-                              <option value="ml">Milliliter (ml)</option>
-                              <option value="Stk.">Stück (Stk.)</option>
-                              <option value="Bund">Bund</option>
-                              <option value="Packung">Packung (Pkg.)</option>
-                              <option value="Dose">Dose</option>
-                              <option value="Flasche">Flasche</option>
-                              <option value="kg">Kilogramm (kg)</option>
-                              <option value="l">Liter (l)</option>
-                            </select>
-                          </div>
-
-                          <div>
-                            <label style={{ fontSize: "10px", fontWeight: 750, color: "#475569", textTransform: "uppercase", display: "block", marginBottom: "3px" }}>
-                              Lagerort
-                            </label>
-                            <select
-                              value={searchCategory}
-                              onChange={(e) => setSearchCategory(e.target.value)}
-                              className="search-field"
-                              style={{ width: "100%", height: "34px", fontSize: "11.5px", padding: "0 6px", background: "#ffffff" }}
-                            >
-                              <option value="Kühl">Kühlschrank</option>
-                              <option value="Tiefkühl">Tiefkühl</option>
-                              <option value="Trocken">Trockenvorrat</option>
-                              <option value="Saucen">Saucen/Gewürze</option>
-                              <option value="Getränke">Getränke</option>
-                              <option value="Sonstiges">Sonstiges</option>
-                            </select>
-                          </div>
-                        </div>
-
-                        {/* Quick amount chips */}
-                        <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
-                          <span style={{ fontSize: "10.5px", color: "#64748b", fontWeight: 600 }}>Schnellwahl:</span>
-                          {(["Stk.", "Bund", "Packung", "Dose", "Flasche"].includes(searchUnit)
-                            ? [1, 2, 3, 5, 10]
-                            : ["kg", "l"].includes(searchUnit)
-                            ? [1, 2, 5]
-                            : [100, 250, 500, 1000]
-                          ).map((chipVal) => (
-                            <button
-                              key={chipVal}
-                              type="button"
-                              onClick={() => setSearchAmountStr(String(chipVal))}
-                              style={{
-                                padding: "3px 8px",
-                                borderRadius: "6px",
-                                border: searchAmountStr === String(chipVal) ? "1.5px solid #059669" : "1px solid #cbd5e1",
-                                background: searchAmountStr === String(chipVal) ? "#ecfdf5" : "#f8fafc",
-                                color: searchAmountStr === String(chipVal) ? "#047857" : "#334155",
-                                fontSize: "11px",
-                                fontWeight: 700,
-                                cursor: "pointer",
-                              }}
-                            >
-                              {chipVal}{searchUnit}
-                            </button>
-                          ))}
-                        </div>
-
-                        {/* Optional MHD */}
-                        <div>
-                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "3px" }}>
-                            <label style={{ fontSize: "10px", fontWeight: 750, color: "#475569", textTransform: "uppercase" }}>
-                              Mindesthaltbarkeitsdatum (MHD)
-                            </label>
-                            {searchMhd && (
-                              <button
-                                type="button"
-                                onClick={() => setSearchMhd("")}
-                                style={{ border: "none", background: "none", color: "#dc2626", fontSize: "10px", cursor: "pointer", fontWeight: 700 }}
-                              >
-                                Entfernen
-                              </button>
-                            )}
-                          </div>
-                          <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
-                            <input
-                              type="date"
-                              value={searchMhd}
-                              onChange={(e) => setSearchMhd(e.target.value)}
-                              className="search-field"
-                              style={{ height: "30px", fontSize: "11px", padding: "0 6px", background: "#ffffff" }}
-                            />
-                            {[
-                              { label: "+3 T.", days: 3 },
-                              { label: "+7 T.", days: 7 },
-                              { label: "+14 T.", days: 14 },
-                              { label: "+6 M.", days: 180 },
-                            ].map((btn) => (
-                              <button
-                                key={btn.label}
-                                type="button"
-                                onClick={() => {
-                                  const d = new Date();
-                                  d.setDate(d.getDate() + btn.days);
-                                  setSearchMhd(d.toISOString().split("T")[0]);
-                                }}
-                                style={{ padding: "3px 7px", fontSize: "10.5px", fontWeight: 600, borderRadius: "6px", border: "1px solid #cbd5e1", background: "#f8fafc", cursor: "pointer", color: "#475569" }}
-                              >
-                                {btn.label}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
                         <button
                           type="button"
-                          className="primary-button"
-                          disabled={!searchAmountStr.trim() || Number(searchAmountStr) <= 0}
                           style={{
-                            height: "40px",
-                            fontSize: "12.5px",
-                            borderRadius: "10px",
-                            marginTop: "2px",
-                            opacity: (!searchAmountStr.trim() || Number(searchAmountStr) <= 0) ? 0.5 : 1,
-                            cursor: (!searchAmountStr.trim() || Number(searchAmountStr) <= 0) ? "not-allowed" : "pointer",
+                            padding: "4px 8px",
+                            borderRadius: "7px",
+                            background: "#2d5a3e",
+                            color: "white",
+                            border: "none",
+                            fontSize: "10.5px",
+                            fontWeight: 700,
+                            cursor: "pointer",
+                            flexShrink: 0,
                           }}
-                          onClick={() => handleApplyOFFProduct(activeItem, Number(searchAmountStr), searchUnit, searchCategory, searchMhd)}
                         >
-                          {Number(searchAmountStr) > 0 ? `+ ${activeItem.name} (${searchAmountStr}${searchUnit}) in Vorrat` : "Bitte Menge angeben"}
+                          + Übernehmen
                         </button>
                       </div>
-                    )}
-
-                    {/* Other search results in case multiple items matched */}
-                    {searchResults.length > 1 && (
-                      <div style={{ marginTop: "6px", display: "flex", flexDirection: "column", gap: "6px" }}>
-                        <span style={{ fontSize: "11px", fontWeight: 700, color: "#475569" }}>
-                          Weitere Treffer ({searchResults.length - 1}):
-                        </span>
-                        {searchResults
-                          .filter((it) => it.code !== (activeItem ? activeItem.code : ""))
-                          .map((item) => (
-                            <div
-                              key={item.code}
-                              className="db-search-item-card"
-                              style={{ cursor: "pointer" }}
-                              onClick={() => handleSelectSearchResult(item)}
-                            >
-                              <div style={{ flex: 1 }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                                  <strong style={{ fontSize: "12px", color: "#0f172a" }}>{item.name}</strong>
-                                  <span className="nutri-pill mini">Nutri {item.nutriScore}</span>
-                                </div>
-                                <p style={{ margin: "2px 0 0", fontSize: "10.5px", color: "#64748b" }}>
-                                  {item.brand} · Standard: {item.amount}{item.unit}
-                                </p>
-                              </div>
-                              <button
-                                type="button"
-                                className="chip"
-                                style={{ height: "28px", padding: "0 10px", fontSize: "10.5px", borderRadius: "8px", border: "1px solid #10b981", color: "#047857", background: "#ecfdf5", fontWeight: 700 }}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleSelectSearchResult(item);
-                                }}
-                              >
-                                Anpassen & Übernehmen
-                              </button>
-                            </div>
-                          ))}
-                      </div>
-                    )}
+                    ))}
                   </div>
-                );
-              })()}
-
-              {searchQuery && !isSearching && searchResults.length === 0 && (
-                <div style={{ textAlign: "center", padding: "20px", color: "#64748b", fontSize: "12px" }}>
-                  Keine Artikel für "{searchQuery}" gefunden. Du kannst das Produkt im Tab "Manuell eingeben" anlegen.
                 </div>
               )}
-            </div>
-          )}
-
-          {/* ========================================================
-              VIEW 5: MANUAL INPUT
-              ======================================================== */}
-          {activeMode === "manual" && (
-            <form onSubmit={handleManualSubmit} style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-              <label style={{ fontSize: "11px", fontWeight: 700, color: "#475569" }}>
-                Name des Lebensmittels *
-                <input
-                  required
-                  value={manualName}
-                  onChange={(e) => setManualName(e.target.value)}
-                  placeholder="z. B. Hafermilch, Tofu, Nudeln..."
-                  className="search-field"
-                  style={{ width: "100%", marginTop: "4px" }}
-                />
-              </label>
 
               {/* Dynamic Food Icon Preview */}
               <div
