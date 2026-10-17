@@ -11,6 +11,7 @@ import { UnifiedAddModal } from "./components/UnifiedAddModal";
 import { EditPantryItemModal } from "./components/EditPantryItemModal";
 import { SavedMealsScreen } from "./components/SavedMealsScreen";
 import { HouseholdSyncModal } from "./components/HouseholdSyncModal";
+import { findFoodNutrition } from "./data/foodNutritionDatabase";
 import {
   backupUserDataToSupabase,
   fetchUserDataFromSupabase,
@@ -532,7 +533,7 @@ export interface NutrientSpecs {
 }
 
 export function getItemNutrientSpecs(item: Partial<PantryItem> & { name: string; category?: string }): NutrientSpecs {
-  if (typeof item.caloriesPer100g === "number" && item.caloriesPer100g > 0) {
+  if (typeof item.caloriesPer100g === "number" && item.caloriesPer100g > 0 && item.caloriesPer100g !== 180) {
     return {
       caloriesPer100g: item.caloriesPer100g,
       proteinPer100g: item.proteinPer100g || 0,
@@ -541,59 +542,13 @@ export function getItemNutrientSpecs(item: Partial<PantryItem> & { name: string;
     };
   }
 
-  const tone = item.tone || getFoodTone(item.name, item.category);
-  const lower = item.name.toLowerCase();
-
-  if (tone === "rice" || lower.includes("reis")) {
-    return { caloriesPer100g: 350, proteinPer100g: 8.5, carbsPer100g: 78.0, fatPer100g: 1.0 };
-  }
-  if (tone === "egg" || lower.includes("ei")) {
-    return { caloriesPer100g: 140, proteinPer100g: 12.5, carbsPer100g: 0.8, fatPer100g: 9.8 };
-  }
-  if (tone === "chicken" || lower.includes("hähnchen") || lower.includes("huhn") || lower.includes("fleisch")) {
-    return { caloriesPer100g: 110, proteinPer100g: 24.0, carbsPer100g: 0.0, fatPer100g: 1.5 };
-  }
-  if (tone === "pasta" || lower.includes("nudel") || lower.includes("penne")) {
-    return { caloriesPer100g: 355, proteinPer100g: 12.0, carbsPer100g: 72.0, fatPer100g: 1.5 };
-  }
-  if (tone === "oats" || lower.includes("hafer")) {
-    return { caloriesPer100g: 370, proteinPer100g: 13.5, carbsPer100g: 60.0, fatPer100g: 7.0 };
-  }
-  if (tone === "milk" || lower.includes("milch")) {
-    return { caloriesPer100g: 50, proteinPer100g: 3.4, carbsPer100g: 4.9, fatPer100g: 1.5 };
-  }
-  if (tone === "cheese" || lower.includes("käse")) {
-    return { caloriesPer100g: 350, proteinPer100g: 25.0, carbsPer100g: 1.5, fatPer100g: 28.0 };
-  }
-  if (tone === "peas" || lower.includes("erbse")) {
-    return { caloriesPer100g: 82, proteinPer100g: 6.2, carbsPer100g: 12.5, fatPer100g: 0.5 };
-  }
-  if (tone === "sauce" || lower.includes("soja") || lower.includes("sauce")) {
-    return { caloriesPer100g: 65, proteinPer100g: 10.5, carbsPer100g: 5.5, fatPer100g: 0.1 };
-  }
-  if (tone === "onion" || lower.includes("zwiebel")) {
-    return { caloriesPer100g: 34, proteinPer100g: 1.9, carbsPer100g: 4.8, fatPer100g: 0.3 };
-  }
-  if (tone === "tomato" || lower.includes("tomate")) {
-    return { caloriesPer100g: 20, proteinPer100g: 1.0, carbsPer100g: 3.5, fatPer100g: 0.2 };
-  }
-  if (tone === "oil" || lower.includes("öl")) {
-    return { caloriesPer100g: 820, proteinPer100g: 0.0, carbsPer100g: 0.0, fatPer100g: 92.0 };
-  }
-  if (tone === "bread" || lower.includes("brot")) {
-    return { caloriesPer100g: 260, proteinPer100g: 9.0, carbsPer100g: 48.0, fatPer100g: 2.5 };
-  }
-  if (tone === "apple" || lower.includes("apfel")) {
-    return { caloriesPer100g: 52, proteinPer100g: 0.3, carbsPer100g: 14.0, fatPer100g: 0.2 };
-  }
-  if (tone === "carrot" || lower.includes("karotte")) {
-    return { caloriesPer100g: 41, proteinPer100g: 0.9, carbsPer100g: 9.6, fatPer100g: 0.2 };
-  }
-  if (tone === "broccoli" || lower.includes("brokkoli")) {
-    return { caloriesPer100g: 34, proteinPer100g: 2.8, carbsPer100g: 7.0, fatPer100g: 0.4 };
-  }
-
-  return { caloriesPer100g: 120, proteinPer100g: 5.0, carbsPer100g: 16.0, fatPer100g: 3.0 };
+  const nutrition = findFoodNutrition(item.name || "", item.category);
+  return {
+    caloriesPer100g: nutrition.calories,
+    proteinPer100g: nutrition.protein,
+    carbsPer100g: nutrition.carbs,
+    fatPer100g: nutrition.fat,
+  };
 }
 
 export function calculateItemTotalNutrients(item: PantryItem) {
@@ -609,20 +564,41 @@ export function calculateItemTotalNutrients(item: PantryItem) {
     factor = item.amount / 100;
   } else if (unit === "kg" || unit === "l") {
     factor = (item.amount * 1000) / 100;
+  } else if (unit === "bund") {
+    // 1 Bund (Frühlingszwiebeln, Kräuter) ist typischerweise ~100g
+    factor = (item.amount * 100) / 100;
   } else if (unit.includes("stk") || unit.includes("stück")) {
     const lower = item.name.toLowerCase();
     const weightPerPiece = lower.includes("ei")
       ? 55
+      : lower.includes("frühlingszwiebel") || lower.includes("lauchzwiebel")
+      ? 20
       : lower.includes("zwiebel") || lower.includes("lauch")
-      ? 25
+      ? 100
       : lower.includes("limette") || lower.includes("zitrone")
       ? 60
       : lower.includes("apfel")
-      ? 150
+      ? 180
+      : lower.includes("banane")
+      ? 120
+      : lower.includes("paprika")
+      ? 160
+      : lower.includes("gurke")
+      ? 350
+      : lower.includes("karotte") || lower.includes("möhre")
+      ? 100
       : lower.includes("knoblauch")
-      ? 10
-      : 50;
+      ? 5
+      : 60;
     factor = (item.amount * weightPerPiece) / 100;
+  } else if (unit === "dose") {
+    factor = (item.amount * 400) / 100;
+  } else if (unit === "packung" || unit === "pkg." || unit === "pkg") {
+    factor = (item.amount * 500) / 100;
+  } else if (unit === "flasche") {
+    factor = (item.amount * 750) / 100;
+  } else if (unit === "glas") {
+    factor = (item.amount * 350) / 100;
   } else {
     factor = item.amount / 100;
   }
@@ -866,6 +842,29 @@ function PantryScreen({
                 <span className={`mhd-badge ${getMhdStatus(item.mhd)}`}>
                   {formatMhdDisplay(item.mhd)}
                 </span>
+                {(() => {
+                  const specs = getItemNutrientSpecs(item);
+                  return (
+                    <span
+                      style={{
+                        fontSize: "10.5px",
+                        fontWeight: 600,
+                        color: "#475569",
+                        background: "#f1f5f9",
+                        padding: "1.5px 6px",
+                        borderRadius: "6px",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "3px",
+                      }}
+                      title={`Makros pro 100g: ${specs.caloriesPer100g} kcal · ${specs.proteinPer100g}g Protein · ${specs.carbsPer100g}g Carbs · ${specs.fatPer100g}g Fett`}
+                    >
+                      <strong style={{ color: "#0f172a" }}>{specs.caloriesPer100g}</strong> kcal
+                      <span style={{ color: "#cbd5e1" }}>·</span>
+                      <strong style={{ color: "#059669" }}>{specs.proteinPer100g}g</strong> P
+                    </span>
+                  );
+                })()}
               </div>
             </div>
             <span className={`status ${status.toLowerCase()}`}>
@@ -2306,10 +2305,10 @@ export default function App() {
           return {
             ...item,
             isUnlimited: Boolean(item.isUnlimited || item.name.toLowerCase().includes("wasser") || item.amount >= 99999),
-            caloriesPer100g: item.caloriesPer100g !== undefined ? item.caloriesPer100g : specs.caloriesPer100g,
-            proteinPer100g: item.proteinPer100g !== undefined ? item.proteinPer100g : specs.proteinPer100g,
-            carbsPer100g: item.carbsPer100g !== undefined ? item.carbsPer100g : specs.carbsPer100g,
-            fatPer100g: item.fatPer100g !== undefined ? item.fatPer100g : specs.fatPer100g,
+            caloriesPer100g: (item.caloriesPer100g !== undefined && item.caloriesPer100g !== 180) ? item.caloriesPer100g : specs.caloriesPer100g,
+            proteinPer100g: (item.proteinPer100g !== undefined && item.caloriesPer100g !== 180) ? item.proteinPer100g : specs.proteinPer100g,
+            carbsPer100g: (item.carbsPer100g !== undefined && item.caloriesPer100g !== 180) ? item.carbsPer100g : specs.carbsPer100g,
+            fatPer100g: (item.fatPer100g !== undefined && item.caloriesPer100g !== 180) ? item.fatPer100g : specs.fatPer100g,
           };
         });
         return deduplicatePantry(enhanced);

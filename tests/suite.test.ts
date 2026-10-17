@@ -3,6 +3,7 @@ import { parseReceiptFallback, calculateEstimatedMhd } from "../src/utils/receip
 import { getRecipePantryBreakdown } from "../src/utils/pantryMatching";
 import { FULL_RECIPE_CATALOG } from "../src/data/recipeCatalog";
 import { getFoodTone } from "../src/components/FoodIcons";
+import { findFoodNutrition, calculatePortionNutrition } from "../src/data/foodNutritionDatabase";
 
 let passedCount = 0;
 let failedCount = 0;
@@ -240,6 +241,40 @@ if (friedRice) {
   assert(breakdown.matchPercentage > 0, `Pantry match calculated: ${breakdown.matchPercentage}%`);
   assert(breakdown.inStock.length > 0, `Identified available ingredients in stock (${breakdown.inStock.length})`);
 }
+
+// -----------------------------------------------------------------------------
+// TEST SUITE 7: BLS/USDA FOOD NUTRITION DATABASE & REALISTIC MACROS
+// -----------------------------------------------------------------------------
+console.log("\n🥗 7. Testing BLS/USDA Food Nutrition Database & Accurate Macro Engine...");
+
+const scallion = findFoodNutrition("Frühlingszwiebeln");
+assert(scallion.calories === 32, "Frühlingszwiebeln has 32 kcal/100g (not dummy 180)");
+assert(scallion.protein === 1.8, "Frühlingszwiebeln has 1.8g protein");
+assert(scallion.defaultUnit === "Bund", "Frühlingszwiebeln recommended unit is Bund");
+
+const scallionFuzzy = findFoodNutrition("fruhlingszwiebel");
+assert(scallionFuzzy.calories === 32, "Fuzzy query matches Frühlingszwiebel");
+
+const chicken = findFoodNutrition("Hähnchenbrust");
+assert(chicken.calories === 110, "Hähnchenbrust has 110 kcal/100g");
+assert(chicken.protein === 24.0, "Hähnchenbrust has 24.0g protein");
+
+const eggs = findFoodNutrition("Bio Eier");
+assert(eggs.calories === 143, "Bio Eier has 143 kcal/100g");
+
+const cucumber = findFoodNutrition("Salatgurke");
+assert(cucumber.calories === 15, "Salatgurke has 15 kcal/100g");
+
+const rice = findFoodNutrition("Basmati Reis");
+assert(rice.calories === 355, "Basmati Reis has 355 kcal/100g");
+
+// Testing unit weight calculation (e.g. 10 Bund Frühlingszwiebeln = 1000g = 320 kcal)
+const tenBunds = calculatePortionNutrition(scallion, 10, "Bund");
+assert(tenBunds.calories === 320, "10 Bund Frühlingszwiebeln calculated as 320 kcal (1000g)");
+
+// Testing getItemNutrientSpecs never returns 180 for spring onion
+const springOnionSpecs = getItemNutrientSpecs({ name: "Frühlingszwiebeln", category: "Kühl" });
+assert(springOnionSpecs.caloriesPer100g === 32, "getItemNutrientSpecs returns 32 kcal for Frühlingszwiebeln (never 180)");
 
 // -----------------------------------------------------------------------------
 // SUMMARY

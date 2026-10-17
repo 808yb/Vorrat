@@ -121,19 +121,25 @@ export function calculateRecipeMetrics(
     // Macro & cost calculation
     if (pantryItem) {
       let portionMultiplier = 0;
-      if (ing.unit === 'g' || ing.unit === 'ml') {
-        portionMultiplier = ing.amountPerServing / 100; // caloriesPer100g
+      const ingUnitLower = (ing.unit || '').toLowerCase();
+      if (ingUnitLower === 'g' || ingUnitLower === 'ml') {
+        portionMultiplier = ing.amountPerServing / 100; // per 100g/ml
+      } else if (ingUnitLower === 'bund') {
+        portionMultiplier = (ing.amountPerServing * 100) / 100; // 1 Bund ~ 100g
+      } else if (ingUnitLower === 'dose') {
+        portionMultiplier = (ing.amountPerServing * 400) / 100; // 1 Dose ~ 400g
+      } else if (ingUnitLower === 'stk' || ingUnitLower === 'stück') {
+        portionMultiplier = ing.amountPerServing * 0.6; // assuming average piece ~ 60g
       } else {
-        // piece
-        portionMultiplier = ing.amountPerServing; // assuming macros per piece ~ 60g equivalent
+        portionMultiplier = ing.amountPerServing / 100;
       }
 
-      const ingCalories = pantryItem.caloriesPer100g * (ing.unit === 'stk' ? (ing.amountPerServing * 0.6) : portionMultiplier);
-      const ingProtein = pantryItem.proteinPer100g * (ing.unit === 'stk' ? (ing.amountPerServing * 0.6) : portionMultiplier);
-      const ingCarbs = pantryItem.carbsPer100g * (ing.unit === 'stk' ? (ing.amountPerServing * 0.6) : portionMultiplier);
-      const ingFat = pantryItem.fatPer100g * (ing.unit === 'stk' ? (ing.amountPerServing * 0.6) : portionMultiplier);
+      const ingCalories = (pantryItem.caloriesPer100g || 0) * portionMultiplier;
+      const ingProtein = (pantryItem.proteinPer100g || 0) * portionMultiplier;
+      const ingCarbs = (pantryItem.carbsPer100g || 0) * portionMultiplier;
+      const ingFat = (pantryItem.fatPer100g || 0) * portionMultiplier;
 
-      const ingCost = pantryItem.pricePerUnit * (ing.unit === 'stk' ? ing.amountPerServing : portionMultiplier);
+      const ingCost = (pantryItem.pricePerUnit || 0) * portionMultiplier;
 
       totalCaloriesPerPortion += ingCalories;
       totalProteinPerPortion += ingProtein;

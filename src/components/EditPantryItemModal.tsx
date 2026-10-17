@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { type PantryItem } from "../App";
+import { type PantryItem, getItemNutrientSpecs } from "../App";
 import { ProductMark, getFoodTone } from "./FoodIcons";
+import { findFoodNutrition } from "../data/foodNutritionDatabase";
+import { Sparkles } from "lucide-react";
 
 interface EditPantryItemModalProps {
   isOpen: boolean;
@@ -25,6 +27,11 @@ export function EditPantryItemModal({
   const [mhd, setMhd] = useState("");
   const [isUnlimited, setIsUnlimited] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [calories, setCalories] = useState<number | "">("");
+  const [protein, setProtein] = useState<number | "">("");
+  const [carbs, setCarbs] = useState<number | "">("");
+  const [fat, setFat] = useState<number | "">("");
+  const [macroHint, setMacroHint] = useState<string | null>(null);
 
   useEffect(() => {
     if (item) {
@@ -41,6 +48,18 @@ export function EditPantryItemModal({
       setUnit(item.unit || "g");
       setMhd(item.mhd || "");
       setConfirmDelete(false);
+
+      const specs = getItemNutrientSpecs(item);
+      const realCal = typeof item.caloriesPer100g === "number" && item.caloriesPer100g > 0 && item.caloriesPer100g !== 180 ? item.caloriesPer100g : specs.caloriesPer100g;
+      const realProt = typeof item.proteinPer100g === "number" && item.caloriesPer100g !== 180 ? item.proteinPer100g : specs.proteinPer100g;
+      const realCarb = typeof item.carbsPer100g === "number" && item.caloriesPer100g !== 180 ? item.carbsPer100g : specs.carbsPer100g;
+      const realFat = typeof item.fatPer100g === "number" && item.caloriesPer100g !== 180 ? item.fatPer100g : specs.fatPer100g;
+
+      setCalories(realCal);
+      setProtein(realProt);
+      setCarbs(realCarb);
+      setFat(realFat);
+      setMacroHint(null);
     }
   }, [item]);
 
@@ -70,6 +89,18 @@ export function EditPantryItemModal({
   const numAmount = Number(amountStr);
   const isAmountValid = isUnlimited || (amountStr.trim() !== "" && !isNaN(numAmount) && numAmount > 0);
 
+  const handleAutoMatchMacros = () => {
+    const match = findFoodNutrition(name, category);
+    setCalories(match.calories);
+    setProtein(match.protein);
+    setCarbs(match.carbs);
+    setFat(match.fat);
+    if (match.defaultUnit && ["g", "ml", "Stk.", "Bund"].includes(match.defaultUnit)) {
+      setUnit(match.defaultUnit);
+    }
+    setMacroHint(`Erkannt: ${match.name} (${match.calories} kcal/100g)`);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim() || !isAmountValid) return;
@@ -87,6 +118,10 @@ export function EditPantryItemModal({
       unit: isUnlimited ? (unit || "ml") : unit,
       mhd: isUnlimited ? (mhd.trim() || "Unbegrenzt") : (mhd.trim() || undefined),
       tone: getFoodTone(name.trim(), category),
+      caloriesPer100g: calories !== "" ? Number(calories) : undefined,
+      proteinPer100g: protein !== "" ? Number(protein) : undefined,
+      carbsPer100g: carbs !== "" ? Number(carbs) : undefined,
+      fatPer100g: fat !== "" ? Number(fat) : undefined,
     };
 
     onSave(updated);
@@ -325,6 +360,84 @@ export function EditPantryItemModal({
                 ? "Das Datum wird auf der Vorratskarte übersichtlich als MHD-Badge angezeigt."
                 : "Ohne Angabe wird auf der Karte 'MHD: fehlt' eingeblendet."}
             </small>
+          </div>
+
+          {/* Nährwerte Section */}
+          <div className="edit-field-group" style={{ background: "#f8fafc", padding: "12px", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+              <label className="edit-field-label" style={{ margin: 0 }}>Nährwerte pro 100g / 100ml</label>
+              <button
+                type="button"
+                onClick={handleAutoMatchMacros}
+                style={{
+                  background: "#ecfdf5",
+                  border: "1px solid #a7f3d0",
+                  color: "#047857",
+                  borderRadius: "6px",
+                  padding: "3px 8px",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "4px"
+                }}
+              >
+                <Sparkles size={12} />
+                Makros ermitteln
+              </button>
+            </div>
+            {macroHint && (
+              <div style={{ fontSize: "11px", color: "#15803d", fontWeight: 600, marginBottom: "8px", background: "#dcfce7", padding: "4px 8px", borderRadius: "6px" }}>
+                ✓ {macroHint}
+              </div>
+            )}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "6px" }}>
+              <div>
+                <span style={{ fontSize: "9px", color: "#64748b", fontWeight: 700, display: "block", textAlign: "center", marginBottom: "2px" }}>KCAL</span>
+                <input
+                  type="number"
+                  className="edit-input"
+                  style={{ textAlign: "center", height: "36px", fontSize: "11px", fontWeight: 600 }}
+                  value={calories}
+                  onChange={(e) => setCalories(e.target.value === "" ? "" : Number(e.target.value))}
+                  placeholder="Kcal"
+                />
+              </div>
+              <div>
+                <span style={{ fontSize: "9px", color: "#059669", fontWeight: 700, display: "block", textAlign: "center", marginBottom: "2px" }}>PROT (g)</span>
+                <input
+                  type="number"
+                  className="edit-input"
+                  style={{ textAlign: "center", height: "36px", fontSize: "11px", fontWeight: 600 }}
+                  value={protein}
+                  onChange={(e) => setProtein(e.target.value === "" ? "" : Number(e.target.value))}
+                  placeholder="Prot"
+                />
+              </div>
+              <div>
+                <span style={{ fontSize: "9px", color: "#d97706", fontWeight: 700, display: "block", textAlign: "center", marginBottom: "2px" }}>CARB (g)</span>
+                <input
+                  type="number"
+                  className="edit-input"
+                  style={{ textAlign: "center", height: "36px", fontSize: "11px", fontWeight: 600 }}
+                  value={carbs}
+                  onChange={(e) => setCarbs(e.target.value === "" ? "" : Number(e.target.value))}
+                  placeholder="Carb"
+                />
+              </div>
+              <div>
+                <span style={{ fontSize: "9px", color: "#64748b", fontWeight: 700, display: "block", textAlign: "center", marginBottom: "2px" }}>FETT (g)</span>
+                <input
+                  type="number"
+                  className="edit-input"
+                  style={{ textAlign: "center", height: "36px", fontSize: "11px", fontWeight: 600 }}
+                  value={fat}
+                  onChange={(e) => setFat(e.target.value === "" ? "" : Number(e.target.value))}
+                  placeholder="Fett"
+                />
+              </div>
+            </div>
           </div>
 
           {/* Action Footer */}

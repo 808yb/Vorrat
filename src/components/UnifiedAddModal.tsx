@@ -9,6 +9,7 @@ import {
   calculateEstimatedMhd,
   type ParsedReceiptFoodItem,
 } from "../utils/receiptOcr";
+import { findFoodNutrition, type FoodNutritionInfo } from "../data/foodNutritionDatabase";
 
 export type AddMode = "menu" | "camera" | "receipt" | "database" | "manual";
 
@@ -158,6 +159,41 @@ export function UnifiedAddModal({
   const [manualProtein, setManualProtein] = useState<number | "">("");
   const [manualCarbs, setManualCarbs] = useState<number | "">("");
   const [manualFat, setManualFat] = useState<number | "">("");
+  const [detectedNutrition, setDetectedNutrition] = useState<FoodNutritionInfo | null>(null);
+  const [isMacroAutoFilled, setIsMacroAutoFilled] = useState(false);
+
+  // Auto-detect macros and default packaging when typing food name
+  useEffect(() => {
+    const q = manualName.trim();
+    if (!q || q.length < 2) {
+      setDetectedNutrition(null);
+      return;
+    }
+
+    const match = findFoodNutrition(q, manualCategory);
+    setDetectedNutrition(match);
+
+    if (manualCalories === "" || isMacroAutoFilled) {
+      setManualCalories(match.calories);
+      setManualProtein(match.protein);
+      setManualCarbs(match.carbs);
+      setManualFat(match.fat);
+      setIsMacroAutoFilled(true);
+
+      if (match.source === "bls" || match.source === "usda") {
+        if (match.category && match.category !== "Sonstiges") {
+          setManualCategory(match.category as any);
+        }
+        if (match.defaultUnit) {
+          setManualUnit(match.defaultUnit);
+        }
+        if (match.weightPerUnit && match.defaultUnit !== "g" && match.defaultUnit !== "ml") {
+          setManualAmountStr(String(1));
+          setManualTotalStr(String(1));
+        }
+      }
+    }
+  }, [manualName]);
 
   // Stop camera helper
   const stopLiveCamera = () => {
@@ -431,6 +467,8 @@ export function UnifiedAddModal({
     const parsedAmount = isUnlimited ? 999999 : numAmount;
     const parsedTotal = isUnlimited ? 999999 : Math.max(parsedAmount, Number(manualTotalStr) || parsedAmount);
 
+    const detected = findFoodNutrition(manualName, manualCategory);
+
     onAddProduct({
       name: manualName.trim(),
       category: manualCategory,
@@ -439,10 +477,10 @@ export function UnifiedAddModal({
       unit: manualUnit,
       tone: detectedTone,
       minAmount: isUnlimited ? 0 : Math.round(parsedTotal * 0.3),
-      caloriesPer100g: manualCalories !== "" ? Number(manualCalories) : 180,
-      proteinPer100g: manualProtein !== "" ? Number(manualProtein) : 6.0,
-      carbsPer100g: manualCarbs !== "" ? Number(manualCarbs) : 25.0,
-      fatPer100g: manualFat !== "" ? Number(manualFat) : 3.0,
+      caloriesPer100g: manualCalories !== "" ? Number(manualCalories) : detected.calories,
+      proteinPer100g: manualProtein !== "" ? Number(manualProtein) : detected.protein,
+      carbsPer100g: manualCarbs !== "" ? Number(manualCarbs) : detected.carbs,
+      fatPer100g: manualFat !== "" ? Number(manualFat) : detected.fat,
       isUnlimited,
       mhd: isUnlimited ? "Unbegrenzt" : (manualMhd.trim() || undefined),
     });
@@ -460,6 +498,8 @@ export function UnifiedAddModal({
     setManualProtein("");
     setManualCarbs("");
     setManualFat("");
+    setDetectedNutrition(null);
+    setIsMacroAutoFilled(false);
     handleClose();
   };
 
@@ -2140,44 +2180,147 @@ export function UnifiedAddModal({
                 </div>
               )}
 
-              {/* Optional Nutrients */}
-              <div style={{ background: "#f8fafc", padding: "10px 12px", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
-                <span style={{ fontSize: "10px", fontWeight: 700, color: "#475569", textTransform: "uppercase", display: "block", marginBottom: "6px" }}>
-                  Nährwerte pro 100g / 100ml (Optional)
-                </span>
+              {/* Intelligent Macro Recognition Section */}
+              <div style={{ background: "#f8fafc", padding: "12px", borderRadius: "14px", border: "1px solid #e2e8f0" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
+                  <span style={{ fontSize: "10.5px", fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                    Nährwerte pro 100g / 100ml
+                  </span>
+                  {manualName.trim() && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const match = findFoodNutrition(manualName, manualCategory);
+                        setDetectedNutrition(match);
+                        setManualCalories(match.calories);
+                        setManualProtein(match.protein);
+                        setManualCarbs(match.carbs);
+                        setManualFat(match.fat);
+                        setIsMacroAutoFilled(true);
+                        if (match.defaultUnit) setManualUnit(match.defaultUnit);
+                        if (match.category && match.category !== "Sonstiges") setManualCategory(match.category as any);
+                        if (onNotify) onNotify(`Makros für «${match.name}» aktualisiert (${match.calories} kcal/100g)`);
+                      }}
+                      style={{
+                        background: "#ecfdf5",
+                        border: "1px solid #a7f3d0",
+                        color: "#047857",
+                        borderRadius: "7px",
+                        padding: "3px 8px",
+                        fontSize: "10.5px",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "4px",
+                      }}
+                      title="Nährwerte aus BLS/USDA-Datenbank neu zuweisen"
+                    >
+                      <Sparkles size={12} />
+                      Makros ermitteln
+                    </button>
+                  )}
+                </div>
+
+                {detectedNutrition && (
+                  <div
+                    style={{
+                      marginBottom: "10px",
+                      padding: "8px 10px",
+                      borderRadius: "9px",
+                      background: "#f0fdf4",
+                      border: "1px solid #bbf7d0",
+                      fontSize: "11px",
+                      color: "#166534",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                    }}
+                  >
+                    <span>
+                      <strong style={{ color: "#14532d" }}>{detectedNutrition.name}:</strong> {detectedNutrition.calories} kcal · {detectedNutrition.protein}g Protein · {detectedNutrition.carbs}g Carbs · {detectedNutrition.fat}g Fett
+                    </span>
+                    <span
+                      style={{
+                        fontSize: "9.5px",
+                        fontWeight: 700,
+                        color: "#15803d",
+                        background: "#dcfce7",
+                        padding: "1px 5px",
+                        borderRadius: "4px",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {detectedNutrition.source === "bls" || detectedNutrition.source === "usda" ? "BLS/USDA" : "Erkannt"}
+                    </span>
+                  </div>
+                )}
+
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "6px" }}>
-                  <input
-                    type="number"
-                    placeholder="Kcal"
-                    value={manualCalories}
-                    onChange={(e) => setManualCalories(e.target.value === "" ? "" : Number(e.target.value))}
-                    className="search-field"
-                    style={{ fontSize: "11px", height: "34px", textAlign: "center" }}
-                  />
-                  <input
-                    type="number"
-                    placeholder="Prot (g)"
-                    value={manualProtein}
-                    onChange={(e) => setManualProtein(e.target.value === "" ? "" : Number(e.target.value))}
-                    className="search-field"
-                    style={{ fontSize: "11px", height: "34px", textAlign: "center" }}
-                  />
-                  <input
-                    type="number"
-                    placeholder="Carb (g)"
-                    value={manualCarbs}
-                    onChange={(e) => setManualCarbs(e.target.value === "" ? "" : Number(e.target.value))}
-                    className="search-field"
-                    style={{ fontSize: "11px", height: "34px", textAlign: "center" }}
-                  />
-                  <input
-                    type="number"
-                    placeholder="Fett (g)"
-                    value={manualFat}
-                    onChange={(e) => setManualFat(e.target.value === "" ? "" : Number(e.target.value))}
-                    className="search-field"
-                    style={{ fontSize: "11px", height: "34px", textAlign: "center" }}
-                  />
+                  <div>
+                    <label style={{ fontSize: "9.5px", fontWeight: 700, color: "#64748b", display: "block", textAlign: "center", marginBottom: "3px" }}>
+                      KCAL
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="Kcal"
+                      value={manualCalories}
+                      onChange={(e) => {
+                        setIsMacroAutoFilled(false);
+                        setManualCalories(e.target.value === "" ? "" : Number(e.target.value));
+                      }}
+                      className="search-field"
+                      style={{ fontSize: "11.5px", height: "36px", textAlign: "center", width: "100%", fontWeight: 600 }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: "9.5px", fontWeight: 700, color: "#059669", display: "block", textAlign: "center", marginBottom: "3px" }}>
+                      PROT (g)
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="Prot"
+                      value={manualProtein}
+                      onChange={(e) => {
+                        setIsMacroAutoFilled(false);
+                        setManualProtein(e.target.value === "" ? "" : Number(e.target.value));
+                      }}
+                      className="search-field"
+                      style={{ fontSize: "11.5px", height: "36px", textAlign: "center", width: "100%", fontWeight: 600 }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: "9.5px", fontWeight: 700, color: "#d97706", display: "block", textAlign: "center", marginBottom: "3px" }}>
+                      CARB (g)
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="Carb"
+                      value={manualCarbs}
+                      onChange={(e) => {
+                        setIsMacroAutoFilled(false);
+                        setManualCarbs(e.target.value === "" ? "" : Number(e.target.value));
+                      }}
+                      className="search-field"
+                      style={{ fontSize: "11.5px", height: "36px", textAlign: "center", width: "100%", fontWeight: 600 }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: "9.5px", fontWeight: 700, color: "#64748b", display: "block", textAlign: "center", marginBottom: "3px" }}>
+                      FETT (g)
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="Fett"
+                      value={manualFat}
+                      onChange={(e) => {
+                        setIsMacroAutoFilled(false);
+                        setManualFat(e.target.value === "" ? "" : Number(e.target.value));
+                      }}
+                      className="search-field"
+                      style={{ fontSize: "11.5px", height: "36px", textAlign: "center", width: "100%", fontWeight: 600 }}
+                    />
+                  </div>
                 </div>
               </div>
 

@@ -1,5 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { getFoodTone } from "../components/FoodIcons";
+import { findFoodNutrition } from "../data/foodNutritionDatabase";
 
 export interface EstimatedMhdResult {
   mhd: string; // YYYY-MM-DD
@@ -320,6 +321,8 @@ Antworte AUSSCHLIESSLICH als valides JSON in folgendem Schema ohne Markdown-Back
           const unit = item.unit || "g";
           const mhdEstimate = calculateEstimatedMhd(item.name || "", item.category || "Trocken");
 
+          const nutrition = findFoodNutrition(item.name || "", item.category);
+
           return {
             id: `receipt-item-${Date.now()}-${idx}`,
             name: String(item.name || "Lebensmittel"),
@@ -331,10 +334,10 @@ Antworte AUSSCHLIESSLICH als valides JSON in folgendem Schema ohne Markdown-Back
             category: (item.category as any) || "Trocken",
             selected: true,
             tone,
-            caloriesPer100g: 180,
-            proteinPer100g: 6.5,
-            carbsPer100g: 25.0,
-            fatPer100g: 2.0,
+            caloriesPer100g: nutrition.calories,
+            proteinPer100g: nutrition.protein,
+            carbsPer100g: nutrition.carbs,
+            fatPer100g: nutrition.fat,
             mhd: mhdEstimate.mhd,
             shelfLifeDays: item.shelfLifeDays || mhdEstimate.shelfLifeDays,
             freshnessHint: mhdEstimate.freshnessHint,
@@ -518,6 +521,7 @@ export function parseReceiptFallback(rawText: string): ParsedReceiptFoodItem[] {
 
     const mhdEstimate = calculateEstimatedMhd(cleanName, category);
     const tone = getFoodTone(cleanName, category);
+    const nutrition = findFoodNutrition(cleanName, category);
 
     items.push({
       id: `fallback-${Date.now()}-${idx}`,
@@ -530,10 +534,10 @@ export function parseReceiptFallback(rawText: string): ParsedReceiptFoodItem[] {
       category,
       selected: true,
       tone,
-      caloriesPer100g: 180,
-      proteinPer100g: 6.0,
-      carbsPer100g: 25.0,
-      fatPer100g: 2.0,
+      caloriesPer100g: nutrition.calories,
+      proteinPer100g: nutrition.protein,
+      carbsPer100g: nutrition.carbs,
+      fatPer100g: nutrition.fat,
       mhd: mhdEstimate.mhd,
       shelfLifeDays: mhdEstimate.shelfLifeDays,
       freshnessHint: mhdEstimate.freshnessHint,

@@ -1,3 +1,5 @@
+import { findFoodNutrition, FOOD_NUTRITION_DATABASE } from "../data/foodNutritionDatabase";
+
 export interface OFFProduct {
   code: string;
   name: string;
@@ -522,16 +524,27 @@ export function parseOffApiResponse(product: any, fallbackCode: string = ""): OF
     amount = total = 6;
   }
 
+  const fallbackNutrition = findFoodNutrition(name, category);
   const nutriments = product.nutriments || {};
-  const calories = Math.round(
-    nutriments["energy-kcal_100g"] ||
-    nutriments["energy-kcal"] ||
-    (nutriments["energy_100g"] ? nutriments["energy_100g"] / 4.184 : 180)
+  const hasOffCal = typeof nutriments["energy-kcal_100g"] === "number" || typeof nutriments["energy-kcal"] === "number" || typeof nutriments["energy_100g"] === "number";
+  const rawCalories = Math.round(
+    nutriments["energy-kcal_100g"] ??
+    nutriments["energy-kcal"] ??
+    (nutriments["energy_100g"] ? nutriments["energy_100g"] / 4.184 : fallbackNutrition.calories)
   );
+  const calories = hasOffCal && rawCalories > 0 ? rawCalories : fallbackNutrition.calories;
 
-  const protein = Math.round((nutriments.proteins_100g ?? 6.0) * 10) / 10;
-  const carbs = Math.round((nutriments.carbohydrates_100g ?? 25.0) * 10) / 10;
-  const fat = Math.round((nutriments.fat_100g ?? 3.5) * 10) / 10;
+  const protein = typeof nutriments.proteins_100g === "number"
+    ? Math.round(nutriments.proteins_100g * 10) / 10
+    : fallbackNutrition.protein;
+
+  const carbs = typeof nutriments.carbohydrates_100g === "number"
+    ? Math.round(nutriments.carbohydrates_100g * 10) / 10
+    : fallbackNutrition.carbs;
+
+  const fat = typeof nutriments.fat_100g === "number"
+    ? Math.round(nutriments.fat_100g * 10) / 10
+    : fallbackNutrition.fat;
 
   const nutriScore = (product.nutrition_grades || product.nutriscore_grade || "b").toUpperCase();
 
@@ -545,7 +558,7 @@ export function parseOffApiResponse(product: any, fallbackCode: string = ""): OF
     unit,
     tone,
     nutriScore,
-    calories: Math.max(10, calories),
+    calories: Math.max(0, calories),
     protein,
     carbs,
     fat,
@@ -726,10 +739,10 @@ Antworte NUR mit reinem JSON im folgenden Schema:
         unit: parsed.unit || "g",
         tone: parsed.tone || "generic",
         nutriScore: parsed.nutriScore || "A",
-        calories: Number(parsed.calories) || 180,
-        protein: Number(parsed.protein) || 5,
-        carbs: Number(parsed.carbs) || 25,
-        fat: Number(parsed.fat) || 2,
+        calories: Number(parsed.calories) || findFoodNutrition(parsed.name || queryOrBarcode).calories,
+        protein: Number(parsed.protein) || findFoodNutrition(parsed.name || queryOrBarcode).protein,
+        carbs: Number(parsed.carbs) || findFoodNutrition(parsed.name || queryOrBarcode).carbs,
+        fat: Number(parsed.fat) || findFoodNutrition(parsed.name || queryOrBarcode).fat,
         isCustom: false,
       };
     }
@@ -741,7 +754,7 @@ Antworte NUR mit reinem JSON im folgenden Schema:
 
 /**
  * Robust Name Search:
- * 1. Matches local database items instantly.
+ * 1. Matches local database items & BLS/USDA nutrition database instantly.
  * 2. Queries Open Food Facts live search with timeout.
  * 3. Gemini fallback for unknown searches.
  * 4. Merges results, eliminating duplicates.
@@ -750,13 +763,43 @@ export async function searchProductsInOFF(query: string): Promise<OFFProduct[]> 
   const q = query.trim().toLowerCase();
   if (!q) return [];
 
-  // 1. Local results
+  // 1. Local packaged products
   const localMatches: OFFProduct[] = Object.values(LOCAL_OFF_DATABASE).filter(
     (item) =>
       item.name.toLowerCase().includes(q) ||
       item.brand.toLowerCase().includes(q) ||
       item.category.toLowerCase().includes(q)
   );
+
+  // 1b. BLS / USDA verified nutrition items
+  const foodDbMatches: OFFProduct[] = FOOD_NUTRITION_DATABASE
+    .filter(
+      (f) =>
+        f.name.toLowerCase().includes(q) ||
+        f.synonyms.some((s) => s.toLowerCase().includes(q))
+    )
+    .slice(0, 10)
+    .map((f) => {
+      const appCat: "Kühl" | "Trocken" | "Saucen" | "Tiefkühl" =
+        f.category === "Getränke" || f.category === "Sonstiges"
+          ? "Trocken"
+          : f.category;
+      return {
+        code: `BLS-${f.id}`,
+        name: f.name,
+        brand: "Referenz (BLS / USDA)",
+        category: appCat,
+        amount: f.weightPerUnit,
+        total: f.weightPerUnit,
+        unit: f.defaultUnit,
+        tone: f.tone,
+        nutriScore: "A",
+        calories: f.calories,
+        protein: f.protein,
+        carbs: f.carbs,
+        fat: f.fat,
+      };
+    });
 
   // 2. Online search attempt
   let onlineMatches: OFFProduct[] = [];
@@ -782,8 +825,13 @@ export async function searchProductsInOFF(query: string): Promise<OFFProduct[]> 
     }
   }
 
-  // Merge unique by name or code
+  // Merge unique by name or code: Local > BLS Database > Online OFF
   const combined = [...localMatches];
+  for (const bls of foodDbMatches) {
+    if (!combined.some((c) => c.name.toLowerCase() === bls.name.toLowerCase())) {
+      combined.push(bls);
+    }
+  }
   for (const onl of onlineMatches) {
     if (!combined.some((c) => c.code === onl.code || c.name.toLowerCase() === onl.name.toLowerCase())) {
       combined.push(onl);
@@ -798,23 +846,28 @@ export async function searchProductsInOFF(query: string): Promise<OFFProduct[]> 
     }
   }
 
-  // 4. If still completely empty, generate a helpful instant suggestion
+  // 4. If still completely empty, generate a helpful instant suggestion using findFoodNutrition
   if (combined.length === 0 && query.trim().length >= 2) {
     const { category, tone } = mapOffCategoriesToApp("", query);
+    const dbItem = findFoodNutrition(query.trim(), category);
+    const appCat: "Kühl" | "Trocken" | "Saucen" | "Tiefkühl" =
+      dbItem.category === "Getränke" || dbItem.category === "Sonstiges"
+        ? category
+        : (dbItem.category as any);
     combined.push({
       code: `GEN-${Date.now()}`,
       name: query.trim(),
       brand: "Neu eingeben",
-      category,
-      amount: category === "Saucen" ? 250 : 500,
-      total: category === "Saucen" ? 250 : 500,
-      unit: category === "Saucen" ? "ml" : "g",
-      tone,
+      category: appCat,
+      amount: dbItem.weightPerUnit || (category === "Saucen" ? 250 : 500),
+      total: dbItem.weightPerUnit || (category === "Saucen" ? 250 : 500),
+      unit: dbItem.defaultUnit || (category === "Saucen" ? "ml" : "g"),
+      tone: dbItem.tone || tone,
       nutriScore: "A",
-      calories: 180,
-      protein: 6.0,
-      carbs: 30.0,
-      fat: 2.5,
+      calories: dbItem.calories,
+      protein: dbItem.protein,
+      carbs: dbItem.carbs,
+      fat: dbItem.fat,
       isCustom: true,
     });
   }
