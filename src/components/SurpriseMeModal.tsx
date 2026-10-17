@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { Dices, Check, AlertCircle, Sparkles, X } from "lucide-react";
+import { Dices, Check, AlertCircle, Sparkles, X, ArrowLeft, Clock } from "lucide-react";
 import type { CatalogRecipe } from "../data/recipeCatalog";
 import { getRecipePantryBreakdown } from "../utils/pantryMatching";
 
@@ -30,22 +30,21 @@ export type PreferenceCategory =
 interface PreferenceOption {
   id: PreferenceCategory;
   label: string;
-  icon: string;
   description: string;
 }
 
 const PREFERENCE_OPTIONS: PreferenceOption[] = [
-  { id: "quick", label: "Schnell (≤ 15 Min.)", icon: "⚡", description: "In wenigen Minuten auf dem Tisch" },
-  { id: "meat", label: "Fleisch / Geflügel", icon: "🍗", description: "Hähnchenfilet, Rind oder herzhaft" },
-  { id: "veggie", label: "Vegetarisch / Plant", icon: "🥗", description: "Ohne Fleisch, frisch & grün" },
-  { id: "protein", label: "High Protein (≥ 15g)", icon: "💪", description: "Perfekt für Training & Muskelaufbau" },
-  { id: "lowcarb", label: "Low Carb / Leicht", icon: "🥑", description: "Wenig Kohlenhydrate, leicht bekömmlich" },
-  { id: "pantry100", label: "100% im Vorrat", icon: "🏠", description: "0 Zutaten nachkaufen nötig" },
-  { id: "egg", label: "Eier & Pfanne", icon: "🍳", description: "Omelett, Rührei oder Fried Rice" },
-  { id: "rice", label: "Reis & Bowls", icon: "🍚", description: "Bunte Bowls & asiatische Wok-Hits" },
-  { id: "pasta", label: "Pasta & Nudeln", icon: "🍝", description: "Klassiker & schnelle Nudelgerichte" },
-  { id: "budget", label: "Budget (≤ 1,50 €)", icon: "💰", description: "Maximal preiswert pro Portion" },
-  { id: "spicy", label: "Pikant & Herzhaft", icon: "🔥", description: "Mit Chili, Knoblauch oder Soja" },
+  { id: "quick", label: "Schnell (≤ 15 Min.)", description: "In wenigen Minuten auf dem Tisch" },
+  { id: "meat", label: "Fleisch & Geflügel", description: "Hähnchenfilet, Rind oder herzhaft" },
+  { id: "veggie", label: "Vegetarisch & Plant", description: "Ohne Fleisch, frisch & grün" },
+  { id: "protein", label: "High Protein (≥ 15g)", description: "Perfekt für Training & Muskelaufbau" },
+  { id: "lowcarb", label: "Low Carb & Leicht", description: "Wenig Kohlenhydrate, leicht bekömmlich" },
+  { id: "pantry100", label: "100% im Vorrat", description: "0 Zutaten nachkaufen nötig" },
+  { id: "egg", label: "Eier & Pfanne", description: "Omelett, Rührei oder Fried Rice" },
+  { id: "rice", label: "Reis & Bowls", description: "Bunte Bowls & asiatische Wok-Hits" },
+  { id: "pasta", label: "Pasta & Nudeln", description: "Klassiker & schnelle Nudelgerichte" },
+  { id: "budget", label: "Budget (≤ 1,50 €)", description: "Maximal preiswert pro Portion" },
+  { id: "spicy", label: "Pikant & Herzhaft", description: "Mit Chili, Knoblauch oder Soja" },
 ];
 
 export function SurpriseMeModal({
@@ -240,25 +239,55 @@ export function SurpriseMeModal({
         {/* Header */}
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "16px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <div
-              style={{
-                width: "42px",
-                height: "42px",
-                borderRadius: "12px",
-                background: "#ebf3ee",
-                color: "#2d5a3e",
-                display: "grid",
-                placeItems: "center",
-              }}
-            >
-              <Dices size={22} />
-            </div>
+            {pickedRecipe ? (
+              <button
+                type="button"
+                onClick={() => setPickedRecipe(null)}
+                style={{
+                  width: "40px",
+                  height: "40px",
+                  borderRadius: "12px",
+                  background: "#ebf3ee",
+                  color: "#2d5a3e",
+                  border: "1px solid #c6dcce",
+                  display: "grid",
+                  placeItems: "center",
+                  cursor: "pointer",
+                }}
+                aria-label="Zurück zur Auswahl"
+                title="Zurück zu den Kriterien"
+              >
+                <ArrowLeft size={20} />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onClose}
+                style={{
+                  width: "40px",
+                  height: "40px",
+                  borderRadius: "12px",
+                  background: "#ebf3ee",
+                  color: "#2d5a3e",
+                  border: "1px solid #c6dcce",
+                  display: "grid",
+                  placeItems: "center",
+                  cursor: "pointer",
+                }}
+                aria-label="Zurück zum Rezeptbildschirm"
+                title="Zurück"
+              >
+                <ArrowLeft size={20} />
+              </button>
+            )}
             <div>
               <h2 style={{ margin: 0, fontSize: "17px", fontWeight: 800, color: "#0f172a" }}>
-                Überrasch mich!
+                {pickedRecipe ? "Dein Treffer" : "Überrasch mich"}
               </h2>
               <p style={{ margin: "2px 0 0", fontSize: "11px", color: "#64748b" }}>
-                Was möchtest du heute essen? Wähle deine Wünsche:
+                {pickedRecipe
+                  ? "Passt zu deinen Vorlieben aus dem Vorrat"
+                  : "Was möchtest du heute essen? Wähle deine Wünsche:"}
               </p>
             </div>
           </div>
@@ -266,7 +295,8 @@ export function SurpriseMeModal({
             type="button"
             onClick={onClose}
             className="clear-button"
-            style={{ border: "none", background: "transparent", cursor: "pointer", color: "#64748b", fontSize: "16px" }}
+            style={{ border: "none", background: "transparent", cursor: "pointer", color: "#64748b", fontSize: "16px", padding: "6px" }}
+            aria-label="Schließen"
           >
             <X size={18} />
           </button>
@@ -321,7 +351,7 @@ export function SurpriseMeModal({
                       type="button"
                       onClick={() => togglePreference(opt.id)}
                       style={{
-                        padding: "7px 11px",
+                        padding: "7px 12px",
                         borderRadius: "11px",
                         border: isSelected ? "1.5px solid #2d5a3e" : "1px solid #cbd5e1",
                         background: isSelected ? "#2d5a3e" : "#f8fafc",
@@ -336,7 +366,7 @@ export function SurpriseMeModal({
                         transition: "all 0.15s ease",
                       }}
                     >
-                      <span>{opt.icon}</span>
+                      {isSelected && <Check size={12} strokeWidth={2.8} />}
                       <span>{opt.label}</span>
                     </button>
                   );
@@ -450,9 +480,13 @@ export function SurpriseMeModal({
                       padding: "3px 8px",
                       borderRadius: "6px",
                       backdropFilter: "blur(6px)",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
                     }}
                   >
-                    ⏱ {pickedRecipe.time}
+                    <Clock size={11} />
+                    <span>{pickedRecipe.time}</span>
                   </span>
                 </div>
               )}
@@ -503,8 +537,15 @@ export function SurpriseMeModal({
                         fontSize: "11px",
                       }}
                     >
-                      <span style={{ color: pct === 100 ? "#047857" : "#334155", fontWeight: 700 }}>
-                        {pct === 100 ? "✓ Alle Zutaten vorrätig!" : `${inStock} von ${total} Zutaten im Vorrat`}
+                      <span style={{ color: pct === 100 ? "#047857" : "#334155", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "5px" }}>
+                        {pct === 100 ? (
+                          <>
+                            <Check size={13} strokeWidth={2.5} />
+                            <span>Alle Zutaten vorrätig!</span>
+                          </>
+                        ) : (
+                          <span>{inStock} von {total} Zutaten im Vorrat</span>
+                        )}
                       </span>
                       <span style={{ fontWeight: 800, color: pct === 100 ? "#059669" : "#0284c7" }}>
                         {pct}% Match
@@ -532,7 +573,7 @@ export function SurpriseMeModal({
                       background: "#2d5a3e",
                     }}
                   >
-                    Jetzt kochen →
+                    Jetzt kochen
                   </button>
                 )}
                 <button
@@ -554,27 +595,53 @@ export function SurpriseMeModal({
                 </button>
               </div>
 
-              <button
-                type="button"
-                onClick={handlePickRandom}
-                style={{
-                  height: "36px",
-                  border: "none",
-                  background: "#f1f5f9",
-                  borderRadius: "10px",
-                  color: "#475569",
-                  fontSize: "11.5px",
-                  fontWeight: 700,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "6px",
-                }}
-              >
-                <Dices size={15} />
-                Nochmal würfeln
-              </button>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button
+                  type="button"
+                  onClick={() => setPickedRecipe(null)}
+                  style={{
+                    flex: 1,
+                    height: "38px",
+                    border: "1.5px solid #cbd5e1",
+                    background: "#ffffff",
+                    borderRadius: "10px",
+                    color: "#334155",
+                    fontSize: "11.5px",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "6px",
+                  }}
+                >
+                  <ArrowLeft size={14} />
+                  <span>Zurück zu Kriterien</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handlePickRandom}
+                  style={{
+                    flex: 1,
+                    height: "38px",
+                    border: "none",
+                    background: "#f1f5f9",
+                    borderRadius: "10px",
+                    color: "#475569",
+                    fontSize: "11.5px",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "6px",
+                  }}
+                >
+                  <Dices size={15} />
+                  <span>Nochmal würfeln</span>
+                </button>
+              </div>
             </div>
           </div>
         )}

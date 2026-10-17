@@ -1520,8 +1520,8 @@ function CookScreen({
                 boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
               }}
             >
-              <option value="swipe">🃏 TinderSwipe (Karten)</option>
-              <option value="list">📋 Listenansicht (Alle)</option>
+              <option value="swipe">TinderSwipe (Karten)</option>
+              <option value="list">Listenansicht (Alle)</option>
             </select>
             <span
               style={{
