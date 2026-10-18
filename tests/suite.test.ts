@@ -638,6 +638,14 @@ assert(editedList.length === 17, `Edited recipe has 17 ingredients (found ${edit
 const pilzeItem = editedList.find((i) => i.name.includes("Pilze"));
 assert(Boolean(pilzeItem && pilzeItem.amount === "150 g"), "Added Pilze scaled to 150 g for 2 portions");
 
+// 4. Test custom cover photo assignment
+const customPhotoRecipe = {
+  ...mockImportedRecipe,
+  imageUrl: "data:image/jpeg;base64,mockCustomFoodPhoto123",
+};
+const rehydratedPhotoRecipe = rehydrateRecipe(customPhotoRecipe);
+assert(rehydratedPhotoRecipe.imageUrl === "data:image/jpeg;base64,mockCustomFoodPhoto123", "Custom photo cover is preserved in rehydrated recipe");
+
 // -----------------------------------------------------------------------------
 // SUMMARY
 // -----------------------------------------------------------------------------

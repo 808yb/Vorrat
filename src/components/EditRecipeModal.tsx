@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from "react";
-import { X, Plus, Trash2, Check, ChefHat, Clock, AlertCircle } from "lucide-react";
+import { X, Plus, Trash2, Check, ChefHat, Clock, AlertCircle, Camera, RotateCcw } from "lucide-react";
 import type { CatalogRecipe, RecipeStep } from "../data/recipeCatalog";
 import { getSafeIngredientsList, getSafeSteps } from "../utils/recipeHelpers";
+import { compressImageFile } from "../utils/imageUtils";
+import { resolveRecipeFoodImage } from "../utils/geminiRecipes";
 
 interface EditRecipeModalProps {
   isOpen: boolean;
@@ -30,6 +32,7 @@ export function EditRecipeModal({
 
   const [title, setTitle] = useState(recipe.title || "");
   const [subtitle, setSubtitle] = useState(recipe.subtitle || "");
+  const [imageUrl, setImageUrl] = useState(recipe.imageUrl || "");
   const [time, setTime] = useState(recipe.time || "25 Min.");
   const [difficulty, setDifficulty] = useState<"Einfach" | "Mittel" | "Super Einfach">(
     recipe.difficulty || "Einfach"
@@ -85,6 +88,7 @@ export function EditRecipeModal({
     if (recipe) {
       setTitle(recipe.title || "");
       setSubtitle(recipe.subtitle || "");
+      setImageUrl(recipe.imageUrl || "");
       setTime(recipe.time || "25 Min.");
       setDifficulty(recipe.difficulty || "Einfach");
       setChefTip(recipe.chefTip || "");
@@ -177,6 +181,7 @@ export function EditRecipeModal({
       ...recipe,
       title: title.trim(),
       subtitle: subtitle.trim(),
+      imageUrl: imageUrl.trim() || undefined,
       time: time.trim() || "20 Min.",
       difficulty,
       chefTip: chefTip.trim(),
@@ -231,6 +236,63 @@ export function EditRecipeModal({
 
         {/* Scrollable Form Content */}
         <div className="p-5 overflow-y-auto space-y-5 flex-1">
+          {/* Cover Photo Preview & Upload */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
+                <Camera size={13} className="text-emerald-700" />
+                <span>Rezept-Cover / Eigenes Foto</span>
+              </label>
+              {imageUrl && (
+                <button
+                  type="button"
+                  onClick={() => setImageUrl("")}
+                  className="text-[11px] text-slate-500 hover:text-rose-600 flex items-center gap-1 font-medium transition-colors"
+                  title="Eigenes Foto entfernen & Standard verwenden"
+                >
+                  <RotateCcw size={11} /> Zurücksetzen
+                </button>
+              )}
+            </div>
+
+            <div className="relative h-36 w-full rounded-2xl overflow-hidden bg-slate-100 border border-slate-200 shadow-sm">
+              <img
+                src={imageUrl || resolveRecipeFoodImage(title, subtitle)}
+                alt={title}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src = resolveRecipeFoodImage(title);
+                }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-transparent flex items-end justify-between p-3">
+                <span className="text-[11px] font-semibold text-white drop-shadow">
+                  {imageUrl ? "✓ Eigenes Foto aktiv" : "Automatisches Bild (Unsplash)"}
+                </span>
+                <label className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-800 bg-white hover:bg-slate-50 rounded-xl shadow cursor-pointer transition-transform active:scale-95 border border-slate-200">
+                  <Camera size={14} className="text-emerald-700" />
+                  <span>Foto aufnehmen / ändern</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        try {
+                          const dataUrl = await compressImageFile(file, 1200, 900, 0.82);
+                          setImageUrl(dataUrl);
+                        } catch (err) {
+                          console.error("Fehler beim Komprimieren:", err);
+                        }
+                      }
+                    }}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            </div>
+          </div>
+
           {/* Recipe Name & Subtitle */}
           <div className="space-y-3">
             <div>

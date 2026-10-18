@@ -6,6 +6,7 @@ import { EditRecipeModal } from "./EditRecipeModal";
 import { getRecipePantryBreakdown, findMatchingPantryItem } from "../utils/pantryMatching";
 import { getSafeIngredientsList, getSafeSteps } from "../utils/recipeHelpers";
 import { resolveRecipeFoodImage } from "../utils/geminiRecipes";
+import { compressImageFile } from "../utils/imageUtils";
 import { type WeekdayId } from "./WeeklyMealPlannerScreen";
 
 export interface SavedMealsScreenProps {
@@ -91,6 +92,30 @@ export function SavedMealsScreen({
     }));
     if (onNotify) {
       onNotify(`«${recipe.title}» gekocht! Vorräte wurden aktualisiert`);
+    }
+  };
+
+  const handleCoverPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !activeRecipe) return;
+
+    try {
+      const compressedDataUrl = await compressImageFile(file, 1200, 900, 0.82);
+      const updated: CatalogRecipe = {
+        ...activeRecipe,
+        imageUrl: compressedDataUrl,
+      };
+      if (onUpdateRecipe) {
+        onUpdateRecipe(updated);
+      }
+      if (onNotify) {
+        onNotify("📸 Eigenes Foto erfolgreich als Rezept-Cover gespeichert!");
+      }
+    } catch (err) {
+      console.error(err);
+      if (onNotify) {
+        onNotify("Fehler beim Verarbeiten des Fotos.");
+      }
     }
   };
 
@@ -292,7 +317,7 @@ export function SavedMealsScreen({
                 </button>
               </div>
 
-              <div style={{ width: "100%", height: "175px", borderRadius: "16px", overflow: "hidden", margin: "14px 0 8px", background: "#f1f5f9" }}>
+              <div style={{ width: "100%", height: "185px", borderRadius: "16px", overflow: "hidden", margin: "14px 0 8px", background: "#f1f5f9", position: "relative" }}>
                 <img
                   src={activeRecipe.imageUrl || resolveRecipeFoodImage(activeRecipe.title, activeRecipe.subtitle)}
                   alt={activeRecipe.title}
@@ -301,6 +326,41 @@ export function SavedMealsScreen({
                     (e.currentTarget as HTMLImageElement).src = resolveRecipeFoodImage(activeRecipe.title);
                   }}
                 />
+                <label
+                  style={{
+                    position: "absolute",
+                    bottom: "10px",
+                    right: "10px",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    padding: "6px 12px",
+                    background: "rgba(15, 23, 42, 0.78)",
+                    backdropFilter: "blur(6px)",
+                    color: "#ffffff",
+                    borderRadius: "10px",
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    border: "1px solid rgba(255, 255, 255, 0.25)",
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.25)",
+                    transition: "all 150ms ease",
+                  }}
+                  title="Eigenes Foto aufnehmen oder hochladen"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                    <circle cx="12" cy="13" r="4" />
+                  </svg>
+                  <span>Foto aufnehmen / ändern</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handleCoverPhotoUpload}
+                    style={{ display: "none" }}
+                  />
+                </label>
               </div>
 
               <div className="saved-hero-title-group">
@@ -332,11 +392,50 @@ export function SavedMealsScreen({
             {/* Body */}
             <div className="saved-card-body">
               {cookedRecipeTitles[activeRecipe.id] ? (
-                <div className="cooked-status-banner">
+                <div
+                  className="cooked-status-banner"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "12px",
+                    flexWrap: "wrap",
+                  }}
+                >
                   <div>
                     <strong>Dieses Gericht wurde gekocht!</strong>
                     <p>Vorräte für {servings} Pers. wurden erfolgreich abgebucht.</p>
                   </div>
+                  <label
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      background: "#059669",
+                      color: "#ffffff",
+                      padding: "8px 14px",
+                      borderRadius: "10px",
+                      fontSize: "12px",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      boxShadow: "0 2px 8px rgba(5, 150, 105, 0.3)",
+                      whiteSpace: "nowrap",
+                    }}
+                    title="Foto von deinem gekochten Gericht als Cover speichern"
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                      <circle cx="12" cy="13" r="4" />
+                    </svg>
+                    <span>📸 Eigenes Foto als Cover</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={handleCoverPhotoUpload}
+                      style={{ display: "none" }}
+                    />
+                  </label>
                 </div>
               ) : null}
 
