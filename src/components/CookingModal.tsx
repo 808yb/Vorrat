@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import type { CatalogRecipe, RecipeStep } from "../data/recipeCatalog";
 import { getRecipePantryBreakdown } from "../utils/pantryMatching";
-import { getSafeSteps } from "../utils/recipeHelpers";
+import { getSafeSteps, getSafeIngredientsList } from "../utils/recipeHelpers";
 
 interface CookingModalProps {
   recipe: CatalogRecipe | null;
@@ -32,6 +32,7 @@ export function CookingModal({
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [checkedSteps, setCheckedSteps] = useState<Record<number, boolean>>({});
   const [checkedIngredients, setCheckedIngredients] = useState<Record<string, boolean>>({});
+  const [showFocusIngredients, setShowFocusIngredients] = useState(true);
 
   // Kitchen Timer state
   const [timerSeconds, setTimerSeconds] = useState(180); // 3 mins default
@@ -105,6 +106,7 @@ export function CookingModal({
   };
 
   const steps = getSafeSteps(recipe);
+  const safeIngredients = getSafeIngredientsList(recipe, servings);
   const currentStep = steps[currentStepIndex] || steps[0];
   const completedCount = Object.values(checkedSteps).filter(Boolean).length;
   const progressPercent = Math.round((completedCount / Math.max(1, steps.length)) * 100);
@@ -705,6 +707,77 @@ export function CookingModal({
                 <p style={{ margin: 0, fontSize: "13px", lineHeight: 1.6, color: "#334155" }}>
                   {currentStep.instruction}
                 </p>
+              </div>
+
+              {/* Zutaten-Checkliste direkt im Koch-Modus */}
+              <div style={{ background: "#f8fafc", borderRadius: "12px", border: "1px solid #e2e8f0", overflow: "hidden" }}>
+                <button
+                  type="button"
+                  onClick={() => setShowFocusIngredients(!showFocusIngredients)}
+                  style={{
+                    width: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "8px 12px",
+                    background: "transparent",
+                    border: 0,
+                    cursor: "pointer",
+                    fontSize: "11px",
+                    fontWeight: 750,
+                    color: "#1e293b",
+                  }}
+                >
+                  <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <span style={{ color: "#059669" }}>🛒</span>
+                    <span>Zutaten für {servings} {servings === 1 ? "Person" : "Personen"} ({safeIngredients.length})</span>
+                  </span>
+                  <span style={{ fontSize: "10px", color: "#059669", fontWeight: 700 }}>
+                    {showFocusIngredients ? "Einklappen ▲" : "Anzeigen ▼"}
+                  </span>
+                </button>
+                {showFocusIngredients && (
+                  <div style={{ padding: "0 10px 10px", display: "grid", gap: "5px" }}>
+                    {safeIngredients.map((ing, idx) => {
+                      const isChecked = !!checkedIngredients[ing.name];
+                      return (
+                        <div
+                          key={idx}
+                          onClick={() => toggleIngredient(ing.name)}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            padding: "6px 9px",
+                            background: isChecked ? "#f0fdf4" : "#ffffff",
+                            borderRadius: "8px",
+                            border: isChecked ? "1px solid #86efac" : "1px solid #e2e8f0",
+                            cursor: "pointer",
+                            fontSize: "11px",
+                            transition: "all 120ms ease",
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <span style={{ color: isChecked ? "#059669" : "#94a3b8", fontWeight: 800, fontSize: "11.5px" }}>
+                              {isChecked ? "✓" : "○"}
+                            </span>
+                            <span style={{ color: isChecked ? "#15803d" : "#1e293b", textDecoration: isChecked ? "line-through" : "none", fontWeight: 600 }}>
+                              {ing.name}
+                            </span>
+                            {ing.optional && (
+                              <span style={{ fontSize: "8.5px", background: "#e2e8f0", padding: "1px 4px", borderRadius: "4px", color: "#64748b" }}>
+                                opt.
+                              </span>
+                            )}
+                          </div>
+                          <strong style={{ color: isChecked ? "#15803d" : "#0f172a", fontSize: "11px", fontWeight: 750 }}>
+                            {ing.amount}
+                          </strong>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Step completion button in focus mode */}

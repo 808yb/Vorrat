@@ -2149,7 +2149,7 @@ function BottomNav({
     { id: "pantry", label: "Vorrat", icon: "archive", count: pantryBadge > 0 ? pantryBadge : undefined },
     { id: "discover", label: "Entdecken", icon: "sparkles" },
     { id: "planner", label: "Planer", icon: "calendar", count: plannedCount > 0 ? plannedCount : undefined },
-    { id: "cook", label: "Kochen", icon: "chef", count: savedCount > 0 ? savedCount : undefined },
+    { id: "cook", label: "Kochbuch", icon: "book", count: savedCount > 0 ? savedCount : undefined },
     { id: "shop", label: "Einkauf", icon: "cart", count: shoppingCount > 0 ? shoppingCount : undefined },
   ];
 

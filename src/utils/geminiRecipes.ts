@@ -3,6 +3,15 @@ import { type CatalogRecipe, type RecipeStep } from '../data/recipeCatalog';
 
 // High-resolution food images from Unsplash (matching common dishes)
 export const FOOD_IMAGE_PRESETS: Record<string, string> = {
+  calamarata: "https://images.unsplash.com/photo-1621996346565-e3d5d6281691?auto=format&fit=crop&w=800&q=80",
+  kirschtomate: "https://images.unsplash.com/photo-1592924357228-91a4daadcfea?auto=format&fit=crop&w=800&q=80",
+  kirschtomaten: "https://images.unsplash.com/photo-1592924357228-91a4daadcfea?auto=format&fit=crop&w=800&q=80",
+  cherrytomate: "https://images.unsplash.com/photo-1592924357228-91a4daadcfea?auto=format&fit=crop&w=800&q=80",
+  cherrytomaten: "https://images.unsplash.com/photo-1592924357228-91a4daadcfea?auto=format&fit=crop&w=800&q=80",
+  frischkäse: "https://images.unsplash.com/photo-1645112411341-6c4fd023714a?auto=format&fit=crop&w=800&q=80",
+  geschnetzeltes: "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=800&q=80",
+  primavera: "https://images.unsplash.com/photo-1621996346565-e3d5d6281691?auto=format&fit=crop&w=800&q=80",
+  asia: "https://images.unsplash.com/photo-1512058564366-18510be2db19?auto=format&fit=crop&w=800&q=80",
   kimbap: "https://images.unsplash.com/photo-1590301157890-4810ed352733?auto=format&fit=crop&w=800&q=80",
   gimbap: "https://images.unsplash.com/photo-1590301157890-4810ed352733?auto=format&fit=crop&w=800&q=80",
   mochi: "https://images.unsplash.com/photo-1582293041079-7814c2f12063?auto=format&fit=crop&w=800&q=80",
@@ -55,7 +64,7 @@ export const FOOD_IMAGE_PRESETS: Record<string, string> = {
 };
 
 export function resolveRecipeFoodImage(title: string, keywords?: string): string {
-  const query = `${title} ${keywords || ""}`.toLowerCase();
+  const query = `${title || ""} ${keywords || ""}`.toLowerCase();
   for (const [key, url] of Object.entries(FOOD_IMAGE_PRESETS)) {
     if (query.includes(key)) {
       return url;
@@ -97,13 +106,78 @@ interface RawGeminiRecipe {
 const STORAGE_CUSTOM_RECIPES_KEY = "forret_custom_recipes";
 
 /**
+ * Intelligently extracts authentic ingredients from dish title & subtitle
+ * if an AI recipe was saved without explicit rawIngredients array.
+ */
+export function extractIngredientsFromDishText(title: string, subtitle: string = ""): RawGeminiIngredient[] {
+  const text = `${title} ${subtitle}`.toLowerCase();
+  const list: RawGeminiIngredient[] = [];
+
+  // Pasta / Calamarata / Nudeln / Reis
+  if (text.includes("calamarata")) {
+    list.push({ name: "Calamarata Pasta", baseAmountPerPortion: 100, unit: "g" });
+  } else if (text.includes("penne")) {
+    list.push({ name: "Penne Rigate", baseAmountPerPortion: 100, unit: "g" });
+  } else if (text.includes("spaghetti")) {
+    list.push({ name: "Spaghetti", baseAmountPerPortion: 100, unit: "g" });
+  } else if (text.includes("pasta") || text.includes("nudel") || text.includes("ramen")) {
+    list.push({ name: "Pasta / Nudeln", baseAmountPerPortion: 100, unit: "g" });
+  } else if (text.includes("reis") || text.includes("rice")) {
+    list.push({ name: "Basmati Reis", baseAmountPerPortion: 80, unit: "g" });
+  }
+
+  // Protein: Chicken / Hähnchen / Beef / Egg
+  if (text.includes("hähnchen") || text.includes("chicken") || text.includes("huhn") || text.includes("geflügel")) {
+    list.push({ name: "Hähnchenbrustfilet", baseAmountPerPortion: 125, unit: "g" });
+  } else if (text.includes("rind") || text.includes("geschnetzelt") || text.includes("fleisch")) {
+    list.push({ name: "Rindfleischstreifen", baseAmountPerPortion: 125, unit: "g" });
+  } else if (text.includes("hackfleisch") || text.includes("bolognese")) {
+    list.push({ name: "Rinderhackfleisch", baseAmountPerPortion: 120, unit: "g" });
+  } else if (text.includes("ei") || text.includes("eier") || text.includes("shakshuka") || text.includes("omelett") || text.includes("rührei")) {
+    list.push({ name: "Bio Eier", baseAmountPerPortion: 2, unit: "Stk." });
+  }
+
+  // Veggies & Sauces
+  if (text.includes("kirschtomate") || text.includes("cherrytomate") || text.includes("tomate")) {
+    list.push({ name: "Cherry-Kirschtomaten", baseAmountPerPortion: 100, unit: "g" });
+  }
+  if (text.includes("frischkäse")) {
+    list.push({ name: "Frischkäse (Kräuter)", baseAmountPerPortion: 60, unit: "g" });
+  } else if (text.includes("sahne") || text.includes("cremig") || text.includes("alfredo")) {
+    list.push({ name: "Kochsahne / Frischkäse", baseAmountPerPortion: 80, unit: "ml" });
+  }
+  if (text.includes("erbsen") || text.includes("primavera")) {
+    list.push({ name: "Junge Erbsen (TK)", baseAmountPerPortion: 50, unit: "g" });
+  }
+  if (text.includes("soja") || text.includes("teriyaki") || text.includes("asia") || text.includes("wok")) {
+    list.push({ name: "Sojasauce", baseAmountPerPortion: 15, unit: "ml" });
+  }
+  if (text.includes("zwiebel") || text.includes("lauch") || text.includes("frühlingszwiebel")) {
+    list.push({ name: "Frühlingszwiebeln / Zwiebel", baseAmountPerPortion: 1, unit: "Stk." });
+  }
+
+  // Fallbacks if nothing matched
+  if (list.length === 0) {
+    list.push(
+      { name: "Hauptzutat nach Rezept", baseAmountPerPortion: 100, unit: "g" },
+      { name: "Sauce / Würzöl", baseAmountPerPortion: 30, unit: "ml" },
+      { name: "Frische Kräuter & Gewürze", baseAmountPerPortion: 1, unit: "Prise", optional: true }
+    );
+  } else {
+    list.push({ name: "Olivenöl / Gewürze", baseAmountPerPortion: 10, unit: "ml", optional: true });
+  }
+
+  return list;
+}
+
+/**
  * Rehydrates a single custom recipe JSON object restoring callable methods, images, and steps.
  */
 export function rehydrateCustomRecipe(item: any): CatalogRecipe {
   const title = item.title || "Leckeres Rezept";
-  const rawIngredients: RawGeminiIngredient[] = Array.isArray(item.rawIngredients)
+  let rawIngredients: RawGeminiIngredient[] = Array.isArray(item.rawIngredients) && item.rawIngredients.length > 0
     ? item.rawIngredients
-    : Array.isArray(item.ingredients)
+    : Array.isArray(item.ingredients) && item.ingredients.length > 0
     ? item.ingredients.map((ing: any) => ({
         name: ing.name || String(ing),
         baseAmountPerPortion: Number(ing.baseAmountPerPortion) || 100,
@@ -111,6 +185,11 @@ export function rehydrateCustomRecipe(item: any): CatalogRecipe {
         optional: Boolean(ing.optional),
       }))
     : [];
+
+  // If ingredients are still empty, reconstruct from title and subtitle
+  if (rawIngredients.length === 0) {
+    rawIngredients = extractIngredientsFromDishText(title, item.subtitle || "");
+  }
 
   const imageUrl = item.imageUrl || resolveRecipeFoodImage(title, item.imageKeywords);
 
@@ -164,6 +243,8 @@ export function rehydrateCustomRecipe(item: any): CatalogRecipe {
     isAiGenerated: true,
     matchScore: Number(item.matchScore) || 95,
     optional: item.optional || "Nach Wunsch anpassen",
+    rawIngredients,
+    ingredients: rawIngredients,
     steps,
     available: (s: number) => {
       if (rawIngredients.length > 0) {
@@ -182,7 +263,11 @@ export function rehydrateCustomRecipe(item: any): CatalogRecipe {
           optional: Boolean(ing.optional),
         }));
       }
-      return [];
+      return extractIngredientsFromDishText(title, item.subtitle || "").map((ing) => ({
+        name: ing.name,
+        amount: `${Math.round(ing.baseAmountPerPortion * s)} ${ing.unit}`,
+        optional: Boolean(ing.optional),
+      }));
     },
   };
 }
@@ -659,6 +744,8 @@ async function callGeminiCascade(apiKey: string, prompt: string): Promise<RawGem
     imageUrl,
     isAiGenerated: true,
     matchScore: calculatedMatchScore,
+    rawIngredients: parsed.ingredients,
+    ingredients: parsed.ingredients,
     optional:
       missingIngredients.length > 0
         ? `Fehlt: ${missingIngredients.map((m) => m.name).slice(0, 3).join(", ")}`

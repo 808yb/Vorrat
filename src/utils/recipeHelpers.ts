@@ -49,28 +49,65 @@ export function getSafeIngredientsList(
     }));
   }
 
-  // 4. Default fallback ingredients based on recipe title
+  // 4. Default smart fallback ingredients based on recipe title and subtitle
   const title = (recipe.title || "").toLowerCase();
-  if (title.includes("pasta") || title.includes("penne") || title.includes("spaghetti")) {
-    return [
-      { name: "Pasta (Penne oder Spaghetti)", amount: `${80 * servings} g` },
-      { name: "Tomatensauce / Sahne", amount: `${100 * servings} ml` },
-      { name: "Olivenöl / Kräuter", amount: `${10 * servings} ml`, optional: true },
-    ];
+  const sub = (recipe.subtitle || "").toLowerCase();
+  const fullText = `${title} ${sub}`;
+
+  const customList: SafeIngredientItem[] = [];
+
+  // Pasta / Calamarata / Nudeln / Reis
+  if (fullText.includes("calamarata")) {
+    customList.push({ name: "Calamarata Pasta", amount: `${100 * servings} g` });
+  } else if (fullText.includes("penne")) {
+    customList.push({ name: "Penne Rigate", amount: `${90 * servings} g` });
+  } else if (fullText.includes("spaghetti")) {
+    customList.push({ name: "Spaghetti", amount: `${90 * servings} g` });
+  } else if (fullText.includes("pasta") || fullText.includes("nudel") || fullText.includes("ramen")) {
+    customList.push({ name: "Pasta / Nudeln", amount: `${90 * servings} g` });
+  } else if (fullText.includes("reis") || fullText.includes("rice")) {
+    customList.push({ name: "Basmati Reis", amount: `${80 * servings} g` });
   }
 
-  if (title.includes("reis") || title.includes("rice")) {
-    return [
-      { name: "Basmati Reis", amount: `${80 * servings} g` },
-      { name: "Gemüse & Ei", amount: `${servings} Portion` },
-      { name: "Sojasauce", amount: `${10 * servings} ml`, optional: true },
-    ];
+  // Protein: Chicken / Hähnchen / Beef / Egg
+  if (fullText.includes("hähnchen") || fullText.includes("chicken") || fullText.includes("huhn") || fullText.includes("geflügel")) {
+    customList.push({ name: "Hähnchenbrustfilet", amount: `${125 * servings} g` });
+  } else if (fullText.includes("rind") || fullText.includes("geschnetzelt") || fullText.includes("fleisch")) {
+    customList.push({ name: "Rindfleischstreifen", amount: `${125 * servings} g` });
+  } else if (fullText.includes("hackfleisch") || fullText.includes("bolognese")) {
+    customList.push({ name: "Rinderhackfleisch", amount: `${120 * servings} g` });
+  } else if (fullText.includes("ei") || fullText.includes("eier") || fullText.includes("shakshuka") || fullText.includes("omelett") || fullText.includes("rührei")) {
+    customList.push({ name: "Bio Eier", amount: `${2 * servings} Stk.` });
+  }
+
+  // Veggies & Sauces
+  if (fullText.includes("kirschtomate") || fullText.includes("cherrytomate") || fullText.includes("tomate")) {
+    customList.push({ name: "Cherry-Kirschtomaten", amount: `${100 * servings} g` });
+  }
+  if (fullText.includes("frischkäse")) {
+    customList.push({ name: "Frischkäse (Kräuter)", amount: `${60 * servings} g` });
+  } else if (fullText.includes("sahne") || fullText.includes("cremig") || fullText.includes("alfredo")) {
+    customList.push({ name: "Kochsahne / Frischkäse", amount: `${80 * servings} ml` });
+  }
+  if (fullText.includes("erbsen") || fullText.includes("primavera")) {
+    customList.push({ name: "Junge Erbsen (TK)", amount: `${50 * servings} g` });
+  }
+  if (fullText.includes("soja") || fullText.includes("teriyaki") || fullText.includes("asia") || fullText.includes("wok")) {
+    customList.push({ name: "Sojasauce", amount: `${15 * servings} ml` });
+  }
+  if (fullText.includes("zwiebel") || fullText.includes("lauch") || fullText.includes("frühlingszwiebel")) {
+    customList.push({ name: "Frühlingszwiebeln / Zwiebel", amount: `${1 * servings} Stk.` });
+  }
+
+  if (customList.length > 0) {
+    customList.push({ name: "Olivenöl / Gewürze", amount: `${10 * servings} ml`, optional: true });
+    return customList;
   }
 
   return [
     { name: "Hauptzutat nach Rezept", amount: `${100 * servings} g` },
-    { name: "Würzige Sauce oder Öl", amount: `${15 * servings} ml` },
-    { name: "Frische Kräuter / Gewürze", amount: "nach Geschmack", optional: true },
+    { name: "Würzige Sauce oder Öl", amount: `${25 * servings} ml` },
+    { name: "Frische Kräuter & Gewürze", amount: "nach Geschmack", optional: true },
   ];
 }
 

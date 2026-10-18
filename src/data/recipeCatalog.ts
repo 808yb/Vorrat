@@ -23,6 +23,9 @@ export interface CatalogRecipe {
   imageUrl?: string;
   isAiGenerated?: boolean;
   matchScore?: number;
+  imageKeywords?: string;
+  rawIngredients?: Array<{ name: string; baseAmountPerPortion: number; unit: string; optional?: boolean }>;
+  ingredients?: Array<{ name: string; baseAmountPerPortion?: number; unit?: string; optional?: boolean; amount?: string }>;
   steps: RecipeStep[];
   ingredientsList: (s: number) => Array<{ name: string; amount: string; optional?: boolean }>;
 }

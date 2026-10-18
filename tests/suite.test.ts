@@ -5,6 +5,7 @@ import { FULL_RECIPE_CATALOG } from "../src/data/recipeCatalog";
 import { getFoodTone } from "../src/components/FoodIcons";
 import { findFoodNutrition, calculatePortionNutrition } from "../src/data/foodNutritionDatabase";
 import { getSafeIngredientsList, getSafeSteps, getSafeAvailable, rehydrateRecipe, getCurrentMealTimeSlot } from "../src/utils/recipeHelpers";
+import { extractIngredientsFromDishText, resolveRecipeFoodImage } from "../src/utils/geminiRecipes";
 
 let passedCount = 0;
 let failedCount = 0;
@@ -410,6 +411,38 @@ const eveningOffset = dayOfYear * 11 + 2 * 17;
 
 assert(morningOffset !== middayOffset, "Morning offset differs from midday offset");
 assert(middayOffset !== eveningOffset, "Midday offset differs from evening offset");
+
+// -----------------------------------------------------------------------------
+// TEST SUITE 11: DISH TEXT EXTRACTION & SAFE INGREDIENTS RECOVERY
+// -----------------------------------------------------------------------------
+console.log("\n🍲 11. Testing Dish Text Ingredient Extraction & Food Image Presets...");
+
+const calamarataIngredients = extractIngredientsFromDishText(
+  "Cremige Calamarata mit Hähnchen & Kirschtomaten",
+  "Zarte Hähnchenstreifen in feiner Frischkäse-Kräutersauce mit süßen Cherrytomaten"
+);
+assert(calamarataIngredients.length >= 4, "Extracted at least 4 ingredients from Calamarata text");
+assert(calamarataIngredients.some((i) => i.name.includes("Calamarata")), "Extracted Calamarata Pasta");
+assert(calamarataIngredients.some((i) => i.name.includes("Hähnchen")), "Extracted Hähnchenbrustfilet");
+assert(calamarataIngredients.some((i) => i.name.includes("Kirschtomaten") || i.name.includes("Cherry")), "Extracted Kirschtomaten");
+assert(calamarataIngredients.some((i) => i.name.includes("Frischkäse")), "Extracted Frischkäse");
+
+// Test getSafeIngredientsList on custom recipe with no rawIngredients
+const emptyCustomRecipe = {
+  id: "custom-test-1",
+  title: "Cremige Calamarata mit Hähnchen & Kirschtomaten",
+  subtitle: "Frisch zubereitet mit Kräutern",
+};
+const recoveredList = getSafeIngredientsList(emptyCustomRecipe, 2);
+assert(recoveredList.length >= 3, "getSafeIngredientsList recovered ingredients for custom recipe");
+assert(recoveredList.some((i) => i.name.includes("Calamarata")), "Recovered Calamarata in ingredients list");
+
+// Test resolveRecipeFoodImage
+const calamarataImg = resolveRecipeFoodImage("Cremige Calamarata mit Hähnchen");
+assert(calamarataImg.includes("unsplash.com"), "Resolved high-res Unsplash image for Calamarata");
+
+const pastaImg = resolveRecipeFoodImage("Penne Primavera");
+assert(pastaImg.includes("unsplash.com"), "Resolved high-res Unsplash image for Primavera");
 
 // -----------------------------------------------------------------------------
 // SUMMARY
