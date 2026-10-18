@@ -843,7 +843,7 @@ export function CookingModal({
                 <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                   <span style={{ color: "#d97706", fontSize: "14px" }}>★</span>
                   <span style={{ fontSize: "11px", color: "#92400e", fontWeight: 650 }}>
-                    Frage zu Schritt {currentStep.stepNumber}? (z. B. Gewürz oder Pesto?)
+                    Frage zu Schritt {currentStep.stepNumber}? (Zutaten, Alternativen, Zubereitung)
                   </span>
                 </div>
                 <button
@@ -1242,10 +1242,10 @@ export function CookingModal({
                   </span>
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
                     {[
-                      "★ Ist Gewürz oder Pesto gemeint?",
                       "★ Alternative für eine Zutat?",
                       "★ Welche Herd-Stufe / Hitze?",
-                      "★ Wie lange genau kochen?",
+                      "★ Wie lange genau zubereiten?",
+                      "★ Konsistenz & Profi-Tipp?",
                     ].map((chip) => {
                       const qText = chip.replace(/^★\s*/, "");
                       return (
@@ -1297,9 +1297,9 @@ export function CookingModal({
                         Frage deinen KI-Küchenchef
                       </strong>
                       <p style={{ margin: 0, fontSize: "11px", color: "#64748b", lineHeight: 1.45 }}>
-                        Unsicher bei Zutaten oder Garzeit? Frag z. B.:
+                        Unsicher bei Zutaten, Mengen oder Zubereitung? Frag z. B.:
                         <br />
-                        <span style={{ fontStyle: "italic", color: "#0f172a" }}>„Basilikum einrühren: Ist Gewürz oder Pesto gemeint?“</span>
+                        <span style={{ fontStyle: "italic", color: "#0f172a" }}>„Was kann ich als Alternative nehmen?“ oder „Welche Herd-Stufe ist optimal?“</span>
                         <br />
                         <span style={{ color: "#059669", fontWeight: 650, display: "inline-block", marginTop: "4px" }}>
                           ✓ Dein Rezept-Fortschritt & Timer bleiben voll erhalten!
@@ -1391,7 +1391,7 @@ export function CookingModal({
                     type="text"
                     value={askInput}
                     onChange={(e) => setAskInput(e.target.value)}
-                    placeholder="Frage stellen, z.B. Ist Gewürz oder Pesto gemeint?..."
+                    placeholder="Frage zu Zutaten, Alternativen oder Zubereitung stellen..."
                     disabled={isAsking}
                     style={{
                       flex: 1,
