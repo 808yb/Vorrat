@@ -1133,7 +1133,7 @@ function CookScreen({
   const [activeSearchedRecipe, setActiveSearchedRecipe] = useState<CatalogRecipe | null>(null);
   const [deckKey, setDeckKey] = useState(0);
 
-  const [expandedRecipeId, setExpandedRecipeId] = useState<string | null>(null);
+
   const [activeModalRecipe, setActiveModalRecipe] = useState<CatalogRecipe | null>(null);
   const [isSurpriseModalOpen, setIsSurpriseModalOpen] = useState(false);
 
@@ -1160,7 +1160,7 @@ function CookScreen({
     }));
   }, [activeSearchedRecipe, favorites, servings]);
 
-  const [viewMode, setViewMode] = useState<"swipe" | "list">("swipe");
+  const [isSwipeExpanded, setIsSwipeExpanded] = useState(true);
   const [stockFilter, setStockFilter] = useState<"all" | "perfect" | "max2">("all");
 
   // All catalog recipes formatted for the Tinder Swipe Deck (calories & macros per portion)
@@ -1212,45 +1212,7 @@ function CookScreen({
     return allCatalogRecipesFormatted;
   }, [stockFilter, recipesWithStockStats, allCatalogRecipesFormatted]);
 
-  // Active 3 recipes selected from catalog based on shuffle index (for list view)
-  const recipes = useMemo(() => {
-    const list: Array<
-      CatalogRecipe & {
-        calories: string;
-        protein: string;
-        carbs: string;
-        cost: string;
-        availableFormatted: string;
-      }
-    > = [];
 
-    if (activeSearchedRecipe) {
-      list.push({
-        ...activeSearchedRecipe,
-        calories: `${Math.round(activeSearchedRecipe.baseCal)}`,
-        protein: `${Math.round(activeSearchedRecipe.baseProt)}g`,
-        carbs: `${Math.round(activeSearchedRecipe.baseCarb)}g`,
-        cost: `${activeSearchedRecipe.baseCost.toFixed(2).replace(".", ",")} €`,
-        availableFormatted: activeSearchedRecipe.available(servings),
-      });
-    }
-
-    const total = FULL_RECIPE_CATALOG.length;
-    const count = Math.min(3, total);
-    for (let i = 0; i < count; i++) {
-      const item = FULL_RECIPE_CATALOG[(shuffleIndex * 3 + i) % total];
-      if (activeSearchedRecipe && item.id === activeSearchedRecipe.id) continue;
-      list.push({
-        ...item,
-        calories: `${Math.round(item.baseCal)}`,
-        protein: `${Math.round(item.baseProt)}g`,
-        carbs: `${Math.round(item.baseCarb)}g`,
-        cost: `${item.baseCost.toFixed(2).replace(".", ",")} €`,
-        availableFormatted: item.available(servings),
-      });
-    }
-    return list;
-  }, [activeSearchedRecipe, shuffleIndex, servings]);
 
   // Überrasch mich Handler: Open interactive preference dialog
   const handleSurpriseMe = () => {
@@ -1276,7 +1238,7 @@ function CookScreen({
       if (catalogMatch) {
         setActiveSearchedRecipe(catalogMatch);
         setDeckKey((k) => k + 1);
-        setViewMode("swipe");
+        setIsSwipeExpanded(true);
         setGenerated(true);
         setIntent("");
         if (onNotify) onNotify(`«${catalogMatch.title}» als aktuelle Karte geöffnet`);
@@ -1294,7 +1256,7 @@ function CookScreen({
         // Set search result as current active card and reset deck index to 0
         setActiveSearchedRecipe(newRecipe);
         setDeckKey((k) => k + 1);
-        setViewMode("swipe");
+        setIsSwipeExpanded(true);
         setGenerated(true);
         setIntent("");
         if (onNotify) {
@@ -1498,45 +1460,6 @@ function CookScreen({
           </button>
         </div>
 
-        {/* View Mode Dropdown (TinderSwipe vs Liste) */}
-        <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
-          <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
-            <select
-              aria-label="Rezept-Ansicht wählen"
-              value={viewMode}
-              onChange={(e) => setViewMode(e.target.value as "swipe" | "list")}
-              style={{
-                height: "32px",
-                padding: "0 28px 0 10px",
-                background: "#ffffff",
-                border: "1.5px solid #cbd5e1",
-                borderRadius: "10px",
-                fontSize: "11.5px",
-                fontWeight: 750,
-                color: "#1e293b",
-                cursor: "pointer",
-                appearance: "none",
-                WebkitAppearance: "none",
-                boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
-              }}
-            >
-              <option value="swipe">TinderSwipe (Karten)</option>
-              <option value="list">Listenansicht (Alle)</option>
-            </select>
-            <span
-              style={{
-                position: "absolute",
-                right: "9px",
-                pointerEvents: "none",
-                fontSize: "9px",
-                color: "#64748b",
-              }}
-            >
-              ▼
-            </span>
-          </div>
-        </div>
-
         {stockFilter === "perfect" && (
           <div
             style={{
@@ -1563,292 +1486,132 @@ function CookScreen({
         )}
       </div>
 
-      {viewMode === "swipe" ? (
-        <RecipeSwipeDeck
-          key={`${deckKey}-${stockFilter}`}
-          recipes={filteredDeckRecipes}
-          servings={servings}
-          pantry={pantry}
-          favorites={favorites}
-          onToggleFavorite={onToggleFavorite}
-          onBookmark={onBookmark}
-          onCook={(title, s) => onCook(title, s)}
-          onOpenDetails={(rec) => setActiveModalRecipe(rec)}
-          onAddMissingToGroceries={onAddMissingToGroceries}
-          onNotify={onNotify}
-          onShuffle={handleSurpriseMe}
-          onNavigateToSaved={onNavigateToCook}
-        />
-      ) : (
-        <>
-          <div className="section-heading recipe-heading">
-            <div>
-              <h2>{generated ? "Frisch für dich erstellt" : "Passt zu deinem Vorrat"}</h2>
-              <p>Runde {(shuffleIndex % 3) + 1} von 3 · Preiswert und ohne Verschwendung</p>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-              <span className="match-badge">{matchScore}% Match</span>
-              <Button
-                className="secondary-button"
-                style={{
-                  height: "30px",
-                  padding: "0 9px",
-                  fontSize: "10px",
-                  gap: "4px",
-                  background: "#fff",
-                  borderColor: "#cbd5e1",
-                  color: "#334155",
-                }}
-                onClick={handleSurpriseMe}
-                title="Zufälliges Rezept aus Vorrat vorschlagen"
-              >
-                <Icon name="dice" size={15} />
-                Überrasch mich
-              </Button>
-            </div>
-          </div>
-
-          <div className="recipe-list">
-            {recipes.map((recipe, index) => (
-              <article className="recipe-card" key={recipe.id}>
-                <div className={`recipe-visual ${recipe.tone}`}>
-                  {/* Bookmark / Favorite Button */}
-                  <button
-                    type="button"
-                    className={`recipe-bookmark-button ${favorites.includes(recipe.id) ? "active" : ""}`}
-                    title={favorites.includes(recipe.id) ? "Aus Favoriten entfernen" : "Als Favorit speichern"}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onToggleFavorite(recipe.id, recipe.title);
-                    }}
-                  >
-                    <Icon
-                      name={favorites.includes(recipe.id) ? "bookmarkFilled" : "bookmark"}
-                      size={16}
-                    />
-                  </button>
-
-                  {recipe.imageUrl ? (
-                    <img
-                      src={recipe.imageUrl}
-                      alt={recipe.title}
-                      className="recipe-card-img"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <div className="plate">
-                      <span className="rice-grain one" /><span className="rice-grain two" /><span className="rice-grain three" />
-                      <span className="yolk" /><span className="green one" /><span className="green two" />
-                    </div>
-                  )}
-                  <span className="recipe-number">0{index + 1}</span>
-                </div>
-                <div className="recipe-body">
-                  <div className="recipe-topline">
-                    <span><Icon name="clock" size={14} /> {recipe.time}</span>
-                    <span>{recipe.difficulty}</span>
-                    {favorites.includes(recipe.id) && (
-                      <span className="favorite-badge">
-                        <Icon name="bookmarkFilled" size={10} /> Favorit
-                      </span>
-                    )}
-                  </div>
-                  <h3>{recipe.title}</h3>
-                  <p className="recipe-subtitle">{recipe.subtitle}</p>
-                  <div className="metric-grid">
-                    <div><span>Kalorien</span><strong>{recipe.calories}<small> kcal</small></strong></div>
-                    <div><span>Protein</span><strong>{recipe.protein}</strong></div>
-                    <div><span>Carbs</span><strong>{recipe.carbs}</strong></div>
-                    <div className="cost"><span>Kosten / Port.</span><strong>{recipe.cost}</strong></div>
-                  </div>
-                  {(() => {
-                    const breakdown = getRecipePantryBreakdown(recipe, pantry, servings);
-                    return (
-                      <div className="swipe-pantry-breakdown" style={{ margin: "8px 0" }}>
-                        {breakdown.missing.length > 0 ? (
-                          <>
-                            <div className="pantry-status-box missing">
-                              <div className="pantry-status-header">
-                                <div className="pantry-status-title missing">
-                                  <Icon name="cart" size={13} />
-                                  <span>Fehlt im Vorrat ({breakdown.missing.length})</span>
-                                </div>
-                                {onAddMissingToGroceries && (
-                                  <button
-                                    type="button"
-                                    className="add-to-groceries-btn"
-                                    onClick={() => onAddMissingToGroceries(breakdown.missing)}
-                                    title="Fehlende Zutaten auf Einkaufsliste setzen"
-                                  >
-                                    + Auf Einkaufsliste
-                                  </button>
-                                )}
-                              </div>
-                              <div className="pantry-chips-wrap">
-                                {breakdown.missing.map((item, idx) => (
-                                  <span key={idx} className="pantry-chip missing">
-                                    <span className="chip-bullet">•</span>
-                                    <strong className="chip-name">{item.name}</strong>
-                                    <span className="chip-amount">{item.amount}</span>
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-
-                            {breakdown.inStock.length > 0 && (
-                              <div className="pantry-status-box instock">
-                                <div className="pantry-status-header">
-                                  <div className="pantry-status-title instock">
-                                    <Icon name="check" size={13} />
-                                    <span>Im Vorrat ({breakdown.inStock.length})</span>
-                                  </div>
-                                </div>
-                                <div className="pantry-chips-wrap">
-                                  {breakdown.inStock.map((item, idx) => (
-                                    <span key={idx} className="pantry-chip instock">
-                                      <span className="chip-bullet">✓</span>
-                                      <span className="chip-name">
-                                        {item.name}
-                                        {item.matchedByAlternative && (
-                                          <small style={{ opacity: 0.85, marginLeft: "4px", fontSize: "9px", color: "#047857" }}>
-                                            (Vorrat: {item.matchedByAlternative})
-                                          </small>
-                                        )}
-                                      </span>
-                                      <span className="chip-amount">{item.amount}</span>
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </>
-                        ) : (
-                          <div className="pantry-status-box all-matched">
-                            <div className="pantry-status-header">
-                              <div className="pantry-status-title instock">
-                                <Icon name="check" size={13} />
-                                <span>Alle {breakdown.all.length} Zutaten im Vorrat vorhanden (100% Match)</span>
-                              </div>
-                            </div>
-                            <div className="pantry-chips-wrap">
-                              {breakdown.all.map((item, idx) => (
-                                <span key={idx} className="pantry-chip instock">
-                                  <span className="chip-bullet">✓</span>
-                                  <span className="chip-name">
-                                    {item.name}
-                                    {item.matchedByAlternative && (
-                                      <small style={{ opacity: 0.85, marginLeft: "4px", fontSize: "9px", color: "#047857" }}>
-                                        (Vorrat: {item.matchedByAlternative})
-                                      </small>
-                                    )}
-                                  </span>
-                                  <span className="chip-amount">{item.amount}</span>
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })()}
-
-                  {/* Inline Step-by-Step Instructions Accordion */}
-                  <RecipeStepsAccordion
-                    recipe={recipe}
-                    servings={servings}
-                    isOpen={expandedRecipeId === recipe.id}
-                    onToggle={() => setExpandedRecipeId((prev) => (prev === recipe.id ? null : recipe.id))}
-                    onOpenModal={() => setActiveModalRecipe(recipe)}
-                    onBookmark={(id, title) => onBookmark(id, title)}
-                    isBookmarked={favorites.includes(recipe.id)}
-                  />
-
-                  {/* Action buttons */}
-                  <div style={{ display: "flex", gap: "8px", marginTop: "10px" }}>
-                    <Button
-                      className="secondary-button"
-                      style={{
-                        flex: 1,
-                        height: "40px",
-                        background: "#ffffff",
-                        borderColor: "#cbd5e1",
-                        color: "#0f172a",
-                        fontSize: "10.5px",
-                        fontWeight: 700,
-                        gap: "6px",
-                      }}
-                      onClick={() => setActiveModalRecipe(recipe)}
-                    >
-                      <Icon name="book" size={15} />
-                      Koch-Modus & Timer
-                    </Button>
-                    <Button
-                      className={favorites.includes(recipe.id) ? "secondary-button" : "cook-button"}
-                      style={{
-                        flex: 1,
-                        height: "40px",
-                        margin: 0,
-                        background: favorites.includes(recipe.id) ? "#ecfdf5" : undefined,
-                        borderColor: favorites.includes(recipe.id) ? "#a7f3d0" : undefined,
-                        color: favorites.includes(recipe.id) ? "#047857" : undefined,
-                        fontWeight: 750,
-                      }}
-                      onClick={() => onBookmark(recipe.id, recipe.title)}
-                    >
-                      <Icon name="bookmarkFilled" size={15} />
-                      <span>{favorites.includes(recipe.id) ? "Gemerkt" : "Merken"}</span>
-                    </Button>
-                  </div>
-                </div>
-              </article>
-            ))}
-
-            {/* Dedicated Bottom Shuffle Card */}
+      {/* TinderSwipe Collapsible Container (Cards & Action Buttons) */}
+      <div
+        className="tinderswipe-collapsible-wrapper"
+        style={{
+          margin: "8px 0 16px",
+          background: "#ffffff",
+          border: "1.5px solid #e2e8f0",
+          borderRadius: "16px",
+          overflow: "hidden",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.03)",
+          transition: "border-color 0.2s ease",
+        }}
+      >
+        {/* Accordion / Dropdown Toggle Bar */}
+        <button
+          type="button"
+          onClick={() => setIsSwipeExpanded((prev) => !prev)}
+          aria-expanded={isSwipeExpanded}
+          style={{
+            width: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "12px 16px",
+            background: isSwipeExpanded ? "#f8fafc" : "#ffffff",
+            border: "none",
+            borderBottom: isSwipeExpanded ? "1px solid #e2e8f0" : "none",
+            cursor: "pointer",
+            textAlign: "left",
+            transition: "background 0.15s ease",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0, flexShrink: 1 }}>
             <div
               style={{
-                padding: "16px 14px",
-                background: "#ffffff",
-                border: "1px dashed #cbd5e1",
-                borderRadius: "18px",
-                textAlign: "center",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                gap: "7px",
-                marginTop: "6px",
+                width: "30px",
+                height: "30px",
+                borderRadius: "8px",
+                background: isSwipeExpanded ? "#ebf3ee" : "#f1f5f9",
+                color: isSwipeExpanded ? "#2d5a3e" : "#64748b",
+                display: "grid",
+                placeItems: "center",
+                flexShrink: 0,
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "#475569", fontSize: "11px", fontWeight: 700 }}>
-                <Icon name="shuffle" size={15} />
-                <span>Gefällt dir keiner der Vorschläge?</span>
-              </div>
-              <p style={{ margin: 0, fontSize: "10px", color: "#94a3b8" }}>
-                Tippe auf Shuffle für weitere 3 Rezept-Kombinationen aus deinem Vorrat.
-              </p>
-              <Button
-                className="secondary-button"
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <rect x="5" y="4" width="14" height="17" rx="2" />
+                <path d="M9 2h6" />
+              </svg>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0 }}>
+              <span style={{ fontSize: "13px", fontWeight: 800, color: "#0f172a", whiteSpace: "nowrap" }}>
+                TinderSwipe
+              </span>
+              <span
                 style={{
-                  width: "100%",
-                  height: "40px",
-                  justifyContent: "center",
-                  gap: "6px",
-                  background: "#ecfdf5",
-                  borderColor: "#6ee7b7",
-                  color: "#047857",
-                  fontSize: "11px",
+                  fontSize: "10px",
                   fontWeight: 750,
+                  padding: "2px 6px",
+                  borderRadius: "6px",
+                  background: isSwipeExpanded ? "#dcfce7" : "#f1f5f9",
+                  color: isSwipeExpanded ? "#15803d" : "#64748b",
+                  whiteSpace: "nowrap",
+                  flexShrink: 0,
                 }}
-                onClick={handleSurpriseMe}
               >
-                <Icon name="dice" size={14} />
-                Zufälliges Rezept vorschlagen (Überrasch mich)
-              </Button>
+                {filteredDeckRecipes.length} Rezepte
+              </span>
             </div>
           </div>
-        </>
-      )}
 
-      {/* Full-screen / Rich Step-by-Step Cooking Modal */}
+          <div
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "4px",
+              padding: "5px 9px",
+              borderRadius: "8px",
+              background: isSwipeExpanded ? "#ffffff" : "#ebf3ee",
+              border: `1px solid ${isSwipeExpanded ? "#cbd5e1" : "#c6dcce"}`,
+              color: isSwipeExpanded ? "#475569" : "#2d5a3e",
+              fontSize: "11px",
+              fontWeight: 750,
+              flexShrink: 0,
+              whiteSpace: "nowrap",
+            }}
+          >
+            <span>{isSwipeExpanded ? "Einklappen" : "Aufklappen"}</span>
+            <span
+              style={{
+                display: "inline-block",
+                transform: isSwipeExpanded ? "rotate(180deg)" : "rotate(0deg)",
+                transition: "transform 0.2s ease",
+                fontSize: "9px",
+              }}
+            >
+              ▼
+            </span>
+          </div>
+        </button>
+
+        {/* Collapsible Swipe Content (Cards + Control Action Buttons) */}
+        {isSwipeExpanded && (
+          <div style={{ padding: "14px 10px 10px", background: "#f8fafc" }}>
+            <RecipeSwipeDeck
+              key={`${deckKey}-${stockFilter}`}
+              recipes={filteredDeckRecipes}
+              servings={servings}
+              pantry={pantry}
+              favorites={favorites}
+              onToggleFavorite={onToggleFavorite}
+              onBookmark={onBookmark}
+              onCook={(title, s) => onCook(title, s)}
+              onOpenDetails={(rec) => setActiveModalRecipe(rec)}
+              onAddMissingToGroceries={onAddMissingToGroceries}
+              onNotify={onNotify}
+              onShuffle={handleSurpriseMe}
+              onNavigateToSaved={onNavigateToCook}
+            />
+          </div>
+        )}
+      </div>
+
+
+
+          {/* Full-screen / Rich Step-by-Step Cooking Modal */}
       <CookingModal
         recipe={activeModalRecipe}
         isOpen={Boolean(activeModalRecipe)}
@@ -1870,7 +1633,7 @@ function CookScreen({
         onSelectRecipe={(rec) => {
           setActiveSearchedRecipe(rec);
           setDeckKey((k) => k + 1);
-          setViewMode("swipe");
+          setIsSwipeExpanded(true);
           setGenerated(true);
         }}
         onCookRecipe={(rec) => {

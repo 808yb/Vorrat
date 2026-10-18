@@ -2203,9 +2203,12 @@ h2 {
   position: absolute;
   top: 12px;
   left: 12px;
+  right: 48px;
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   z-index: 5;
+  pointer-events: none;
 }
 
 .swipe-match-badge {
