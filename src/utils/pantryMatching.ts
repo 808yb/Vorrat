@@ -1,4 +1,5 @@
 import { type CatalogRecipe } from "../data/recipeCatalog";
+import { getSafeIngredientsList } from "./recipeHelpers";
 
 export interface IngredientMatch {
   name: string;
@@ -70,7 +71,9 @@ export function getRecipePantryBreakdown(
   pantry: Array<{ name: string; amount?: number; unit?: string; isUnlimited?: boolean }>,
   servings: number
 ): RecipePantryBreakdown {
-  const allIngredients = recipe.ingredientsList(servings);
+  const allIngredients = typeof recipe?.ingredientsList === "function"
+    ? recipe.ingredientsList(servings)
+    : getSafeIngredientsList(recipe, servings);
 
   const inStock: IngredientMatch[] = [];
   const missing: IngredientMatch[] = [];

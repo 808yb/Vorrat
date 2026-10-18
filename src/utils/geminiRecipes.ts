@@ -26,6 +26,9 @@ export const FOOD_IMAGE_PRESETS: Record<string, string> = {
   pasta: "https://images.unsplash.com/photo-1621996346565-e3d5d6281691?auto=format&fit=crop&w=800&q=80",
   penne: "https://images.unsplash.com/photo-1621996346565-e3d5d6281691?auto=format&fit=crop&w=800&q=80",
   spaghetti: "https://images.unsplash.com/photo-1551183053-bf91a1d81141?auto=format&fit=crop&w=800&q=80",
+  bolognese: "https://images.unsplash.com/photo-1551183053-bf91a1d81141?auto=format&fit=crop&w=800&q=80",
+  alfredo: "https://images.unsplash.com/photo-1645112411341-6c4fd023714a?auto=format&fit=crop&w=800&q=80",
+  carbonara: "https://images.unsplash.com/photo-1612874742237-6526221588e3?auto=format&fit=crop&w=800&q=80",
   curry: "https://images.unsplash.com/photo-1455619452474-d2be8b1e70cd?auto=format&fit=crop&w=800&q=80",
   wok: "https://images.unsplash.com/photo-1512058564366-18510be2db19?auto=format&fit=crop&w=800&q=80",
   pfanne: "https://images.unsplash.com/photo-1512058564366-18510be2db19?auto=format&fit=crop&w=800&q=80",
@@ -34,6 +37,13 @@ export const FOOD_IMAGE_PRESETS: Record<string, string> = {
   supp: "https://images.unsplash.com/photo-1547592166-23ac45744acd?auto=format&fit=crop&w=800&q=80",
   hähnchen: "https://images.unsplash.com/photo-1532550907401-a500c9a57435?auto=format&fit=crop&w=800&q=80",
   huhn: "https://images.unsplash.com/photo-1532550907401-a500c9a57435?auto=format&fit=crop&w=800&q=80",
+  chicken: "https://images.unsplash.com/photo-1532550907401-a500c9a57435?auto=format&fit=crop&w=800&q=80",
+  geflügel: "https://images.unsplash.com/photo-1532550907401-a500c9a57435?auto=format&fit=crop&w=800&q=80",
+  fleisch: "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=800&q=80",
+  rind: "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=800&q=80",
+  hackfleisch: "https://images.unsplash.com/photo-1551183053-bf91a1d81141?auto=format&fit=crop&w=800&q=80",
+  schnitzel: "https://images.unsplash.com/photo-1599921841143-819065a55cc6?auto=format&fit=crop&w=800&q=80",
+  speck: "https://images.unsplash.com/photo-1528607929212-2636ec44253e?auto=format&fit=crop&w=800&q=80",
   salat: "https://images.unsplash.com/photo-1540420773420-3366772f4999?auto=format&fit=crop&w=800&q=80",
   pizza: "https://images.unsplash.com/photo-1513104890138-7c749659a591?auto=format&fit=crop&w=800&q=80",
   tacos: "https://images.unsplash.com/photo-1565299585323-38d6b0865b47?auto=format&fit=crop&w=800&q=80",
@@ -86,6 +96,97 @@ interface RawGeminiRecipe {
 
 const STORAGE_CUSTOM_RECIPES_KEY = "forret_custom_recipes";
 
+/**
+ * Rehydrates a single custom recipe JSON object restoring callable methods, images, and steps.
+ */
+export function rehydrateCustomRecipe(item: any): CatalogRecipe {
+  const title = item.title || "Leckeres Rezept";
+  const rawIngredients: RawGeminiIngredient[] = Array.isArray(item.rawIngredients)
+    ? item.rawIngredients
+    : Array.isArray(item.ingredients)
+    ? item.ingredients.map((ing: any) => ({
+        name: ing.name || String(ing),
+        baseAmountPerPortion: Number(ing.baseAmountPerPortion) || 100,
+        unit: ing.unit || "g",
+        optional: Boolean(ing.optional),
+      }))
+    : [];
+
+  const imageUrl = item.imageUrl || resolveRecipeFoodImage(title, item.imageKeywords);
+
+  const steps: RecipeStep[] =
+    Array.isArray(item.steps) && item.steps.length > 0
+      ? item.steps.map((st: any, idx: number) => ({
+          stepNumber: Number(st.stepNumber) || idx + 1,
+          title: st.title || `Schritt ${idx + 1}`,
+          instruction: st.instruction || "Zutaten wie gewünscht zubereiten.",
+          duration: st.duration || "4 Min.",
+          tag: st.tag || "Kochen",
+        }))
+      : [
+          {
+            stepNumber: 1,
+            title: "Zutaten vorbereiten",
+            instruction: "Alle Zutaten abmessen, waschen und mundgerecht bereitstellen.",
+            duration: "3 Min.",
+            tag: "Vorbereitung",
+          },
+          {
+            stepNumber: 2,
+            title: "Zubereitung & Garen",
+            instruction: "Die Komponenten in Pfanne oder Topf auf mittlerer Hitze garen und gut vermengen.",
+            duration: "10 Min.",
+            tag: "Kochen",
+          },
+          {
+            stepNumber: 3,
+            title: "Abschmecken & Servieren",
+            instruction: "Mit Kräutern und Gewürzen nach Belieben abschmecken und frisch anrichten.",
+            duration: "2 Min.",
+            tag: "Finish",
+          },
+        ];
+
+  return {
+    ...item,
+    id: item.id || `custom-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    title,
+    subtitle: item.subtitle || "Frisch kreiert mit deiner AI",
+    time: item.time || "20 Min.",
+    difficulty: item.difficulty || "Einfach",
+    baseCal: Math.round(Number(item.baseCal) || 400),
+    baseProt: Math.round(Number(item.baseProt) || 18),
+    baseCarb: Math.round(Number(item.baseCarb) || 45),
+    baseCost: Number(item.baseCost) || 2.5,
+    tone: item.tone || "mint",
+    chefTip: item.chefTip || "Frisch zubereitet schmeckt es am besten!",
+    imageUrl,
+    isAiGenerated: true,
+    matchScore: Number(item.matchScore) || 95,
+    optional: item.optional || "Nach Wunsch anpassen",
+    steps,
+    available: (s: number) => {
+      if (rawIngredients.length > 0) {
+        return rawIngredients
+          .slice(0, 3)
+          .map((ing) => `${Math.round(ing.baseAmountPerPortion * s)} ${ing.unit} ${ing.name}`)
+          .join(" · ");
+      }
+      return "Zutaten vorhanden";
+    },
+    ingredientsList: (s: number) => {
+      if (rawIngredients.length > 0) {
+        return rawIngredients.map((ing) => ({
+          name: ing.name,
+          amount: `${Math.round(ing.baseAmountPerPortion * s)} ${ing.unit}`,
+          optional: Boolean(ing.optional),
+        }));
+      }
+      return [];
+    },
+  };
+}
+
 export function getStoredCustomRecipes(): CatalogRecipe[] {
   try {
     const raw = localStorage.getItem(STORAGE_CUSTOM_RECIPES_KEY);
@@ -93,25 +194,7 @@ export function getStoredCustomRecipes(): CatalogRecipe[] {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
 
-    // Rehydrate dynamic functions
-    return parsed.map((item: any) => ({
-      ...item,
-      available: (s: number) => {
-        if (!item.rawIngredients) return "Zutaten vorhanden";
-        return item.rawIngredients
-          .slice(0, 3)
-          .map((ing: RawGeminiIngredient) => `${Math.round(ing.baseAmountPerPortion * s)} ${ing.unit} ${ing.name}`)
-          .join(" · ");
-      },
-      ingredientsList: (s: number) => {
-        if (!item.rawIngredients) return [];
-        return item.rawIngredients.map((ing: RawGeminiIngredient) => ({
-          name: ing.name,
-          amount: `${Math.round(ing.baseAmountPerPortion * s)} ${ing.unit}`,
-          optional: Boolean(ing.optional),
-        }));
-      },
-    }));
+    return parsed.map(rehydrateCustomRecipe);
   } catch {
     return [];
   }
@@ -123,6 +206,7 @@ export function saveCustomRecipe(recipe: CatalogRecipe, rawIngredients: RawGemin
     const serializable = {
       ...recipe,
       rawIngredients,
+      // Ensure functions are omitted in JSON without errors
     };
     const next = [serializable, ...existing.filter((r) => r.id !== recipe.id)];
     localStorage.setItem(STORAGE_CUSTOM_RECIPES_KEY, JSON.stringify(next));

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { FULL_RECIPE_CATALOG, type CatalogRecipe } from "../data/recipeCatalog";
 import { type PantryItem } from "../App";
 import { CookingModal } from "./CookingModal";
+import { getSafeIngredientsList, getSafeSteps } from "../utils/recipeHelpers";
 
 import { type WeekdayId, WEEKDAYS } from "./WeeklyMealPlannerScreen";
 
@@ -87,7 +88,9 @@ export function SavedMealsScreen({
 
   // Helper to check stock status of ingredients for a recipe
   const checkIngredientStock = (recipe: CatalogRecipe, s: number) => {
-    const list = recipe.ingredientsList(s);
+    const list = typeof recipe?.ingredientsList === "function"
+      ? recipe.ingredientsList(s)
+      : getSafeIngredientsList(recipe, s);
     return list.map((ing) => {
       const ingLower = ing.name.toLowerCase();
 
@@ -363,56 +366,61 @@ export function SavedMealsScreen({
                 </section>
 
                 {/* 3. Interaktiver Koch-Modus */}
-                <section className="saved-section-block interactive-cooking-section">
-                  <div className="section-block-title">
-                    <h3>Interaktiver Koch-Modus</h3>
-                    <span className="step-counter-pill">
-                      {Object.values(completedSteps[activeRecipe.id] || {}).filter(Boolean).length} / {activeRecipe.steps.length} erledigt
-                    </span>
-                  </div>
+                {(() => {
+                  const safeSteps = getSafeSteps(activeRecipe);
+                  return (
+                    <section className="saved-section-block interactive-cooking-section">
+                      <div className="section-block-title">
+                        <h3>Interaktiver Koch-Modus</h3>
+                        <span className="step-counter-pill">
+                          {Object.values(completedSteps[activeRecipe.id] || {}).filter(Boolean).length} / {safeSteps.length} erledigt
+                        </span>
+                      </div>
 
-                  <div className="saved-steps-list">
-                    {activeRecipe.steps.map((step) => {
-                      const isDone = !!completedSteps[activeRecipe.id]?.[step.stepNumber];
-                      return (
-                        <div
-                          key={step.stepNumber}
-                          className={`step-item ${isDone ? "done" : ""}`}
-                          onClick={() => toggleStep(activeRecipe.id, step.stepNumber)}
-                        >
-                          <div className={`step-check-circle ${isDone ? "checked" : ""}`}>
-                            <span>{isDone ? "✓" : step.stepNumber}</span>
-                          </div>
-                          <div className="step-text-wrap">
-                            <div className="step-header-line">
-                              <strong>{step.title}</strong>
-                              {step.duration && (
-                                <span className="step-time-pill">{step.duration}</span>
-                              )}
+                      <div className="saved-steps-list">
+                        {safeSteps.map((step) => {
+                          const isDone = !!completedSteps[activeRecipe.id]?.[step.stepNumber];
+                          return (
+                            <div
+                              key={step.stepNumber}
+                              className={`step-item ${isDone ? "done" : ""}`}
+                              onClick={() => toggleStep(activeRecipe.id, step.stepNumber)}
+                            >
+                              <div className={`step-check-circle ${isDone ? "checked" : ""}`}>
+                                <span>{isDone ? "✓" : step.stepNumber}</span>
+                              </div>
+                              <div className="step-text-wrap">
+                                <div className="step-header-line">
+                                  <strong>{step.title}</strong>
+                                  {step.duration && (
+                                    <span className="step-time-pill">{step.duration}</span>
+                                  )}
+                                </div>
+                                <p>{step.instruction}</p>
+                              </div>
                             </div>
-                            <p>{step.instruction}</p>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                          );
+                        })}
+                      </div>
 
-                  {/* PRIMARY ACTION BAR: Interaktiver Koch-Modus */}
-                  <div className="saved-actions-footer" style={{ marginTop: "14px" }}>
-                    <button
-                      type="button"
-                      className="primary-button cook-cta-button"
-                      onClick={() => setActiveModalRecipe(activeRecipe)}
-                      style={{ width: "100%", justifyContent: "center", gap: "8px" }}
-                    >
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3">
-                        <circle cx="12" cy="12" r="10" />
-                        <polyline points="12 6 12 12 16 14" />
-                      </svg>
-                      <span>Interaktiver Koch-Modus</span>
-                    </button>
-                  </div>
-                </section>
+                      {/* PRIMARY ACTION BAR: Interaktiver Koch-Modus */}
+                      <div className="saved-actions-footer" style={{ marginTop: "14px" }}>
+                        <button
+                          type="button"
+                          className="primary-button cook-cta-button"
+                          onClick={() => setActiveModalRecipe(activeRecipe)}
+                          style={{ width: "100%", justifyContent: "center", gap: "8px" }}
+                        >
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3">
+                            <circle cx="12" cy="12" r="10" />
+                            <polyline points="12 6 12 12 16 14" />
+                          </svg>
+                          <span>Interaktiver Koch-Modus</span>
+                        </button>
+                      </div>
+                    </section>
+                  );
+                })()}
               </div>
             </article>
           )}

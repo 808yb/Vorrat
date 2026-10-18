@@ -2,6 +2,7 @@ import React, { useState, useMemo } from "react";
 import { Dices, Check, AlertCircle, Sparkles, X, ArrowLeft, Clock } from "lucide-react";
 import type { CatalogRecipe } from "../data/recipeCatalog";
 import { getRecipePantryBreakdown } from "../utils/pantryMatching";
+import { getSafeIngredientsList } from "../utils/recipeHelpers";
 
 interface SurpriseMeModalProps {
   isOpen: boolean;
@@ -65,7 +66,11 @@ export function SurpriseMeModal({
   const matchesCategory = (recipe: CatalogRecipe, cat: PreferenceCategory): boolean => {
     const titleLower = recipe.title.toLowerCase();
     const subLower = recipe.subtitle.toLowerCase();
-    const fullText = `${titleLower} ${subLower}`;
+    const ings = typeof recipe.ingredientsList === "function"
+      ? recipe.ingredientsList(1)
+      : getSafeIngredientsList(recipe, 1);
+    const ingsText = ings.map((i) => i.name).join(" ").toLowerCase();
+    const fullText = `${titleLower} ${subLower} ${ingsText}`;
 
     // Extract minutes from recipe time like "15 Min." -> 15
     const timeMatch = recipe.time.match(/\d+/);
@@ -82,7 +87,10 @@ export function SurpriseMeModal({
           fullText.includes("speck") ||
           fullText.includes("filet") ||
           fullText.includes("chicken") ||
-          fullText.includes("wurst")
+          fullText.includes("wurst") ||
+          fullText.includes("hackfleisch") ||
+          fullText.includes("schinken") ||
+          fullText.includes("bacon")
         );
       case "veggie":
         return !(
@@ -91,7 +99,11 @@ export function SurpriseMeModal({
           fullText.includes("rind") ||
           fullText.includes("speck") ||
           fullText.includes("filet") ||
-          fullText.includes("chicken")
+          fullText.includes("chicken") ||
+          fullText.includes("wurst") ||
+          fullText.includes("hackfleisch") ||
+          fullText.includes("schinken") ||
+          fullText.includes("bacon")
         );
       case "protein":
         return recipe.baseProt >= 14;
@@ -114,14 +126,22 @@ export function SurpriseMeModal({
       case "rice":
         return fullText.includes("reis") || fullText.includes("bowl") || fullText.includes("rice");
       case "pasta":
-        return fullText.includes("pasta") || fullText.includes("nudel") || fullText.includes("penne");
+        return (
+          fullText.includes("pasta") ||
+          fullText.includes("nudel") ||
+          fullText.includes("penne") ||
+          fullText.includes("spaghetti") ||
+          fullText.includes("alfredo") ||
+          fullText.includes("bolognese")
+        );
       case "spicy":
         return (
           fullText.includes("chili") ||
           fullText.includes("knoblauch") ||
           fullText.includes("scharf") ||
           fullText.includes("teriyaki") ||
-          fullText.includes("pikant")
+          fullText.includes("pikant") ||
+          fullText.includes("arrabbiata")
         );
       default:
         return true;
@@ -161,6 +181,7 @@ export function SurpriseMeModal({
       setPickedRecipe(null);
       return;
     }
+
     if (cat === "veggie") {
       setSelectedPreferences((prev) =>
         prev.includes("veggie")
@@ -178,7 +199,33 @@ export function SurpriseMeModal({
   };
 
   const handlePickRandom = () => {
-    const pool = matchingPool.length > 0 ? matchingPool : recipes;
+    let pool = matchingPool;
+    let isPartialFallback = false;
+
+    // If no exact match for this multi-filter combination, find best partial matches
+    if (pool.length === 0 && selectedPreferences.length > 0) {
+      const scored = recipes.map((r) => {
+        const matchesCount = selectedPreferences.filter((cat) => matchesCategory(r, cat)).length;
+        const breakdown = getRecipePantryBreakdown(r, pantry, servings);
+        const inStock = breakdown.inStock.length;
+        const total = breakdown.inStock.length + breakdown.missing.length;
+        const pct = total > 0 ? inStock / total : 0;
+        return { recipe: r, matchesCount, pct };
+      });
+
+      const maxMatches = Math.max(...scored.map((s) => s.matchesCount));
+      if (maxMatches > 0) {
+        const bestCandidates = scored.filter((s) => s.matchesCount === maxMatches);
+        bestCandidates.sort((a, b) => b.pct - a.pct + (Math.random() * 0.3 - 0.15));
+        pool = bestCandidates.map((c) => c.recipe);
+        isPartialFallback = true;
+      }
+    }
+
+    if (pool.length === 0) {
+      pool = recipes;
+    }
+
     if (pool.length === 0) return;
 
     // Weight selection towards higher pantry match
@@ -199,7 +246,11 @@ export function SurpriseMeModal({
       const breakdown = getRecipePantryBreakdown(chosen, pantry, servings);
       const total = breakdown.inStock.length + breakdown.missing.length;
       const pct = total > 0 ? Math.round((breakdown.inStock.length / total) * 100) : 0;
-      onNotify(`Überraschung: «${chosen.title}» (${pct}% vorrätig)!`);
+      if (isPartialFallback) {
+        onNotify(`Bester Treffer für deine Wünsche: «${chosen.title}» (${pct}% vorrätig)!`);
+      } else {
+        onNotify(`Überraschung: «${chosen.title}» (${pct}% vorrätig)!`);
+      }
     }
   };
 
@@ -467,6 +518,9 @@ export function SurpriseMeModal({
                     src={pickedRecipe.imageUrl}
                     alt={pickedRecipe.title}
                     style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).src = "https://images.unsplash.com/photo-1498837167922-ddd27525d352?auto=format&fit=crop&w=800&q=80";
+                    }}
                   />
                   <span
                     style={{

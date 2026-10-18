@@ -3,7 +3,8 @@ import { BrowserMultiFormatReader } from "@zxing/library";
 import { motion } from "motion/react";
 import { ProductMark, getFoodTone } from "./components/FoodIcons";
 import { FULL_RECIPE_CATALOG, type CatalogRecipe } from "./data/recipeCatalog";
-import { getStoredCustomRecipes, generateRecipeWithGemini } from "./utils/geminiRecipes";
+import { getStoredCustomRecipes, generateRecipeWithGemini, rehydrateCustomRecipe } from "./utils/geminiRecipes";
+import { getSafeIngredientsList, getSafeAvailable, getCurrentMealTimeSlot } from "./utils/recipeHelpers";
 import { CookingModal, RecipeStepsAccordion } from "./components/CookingModal";
 import { RecipeSwipeDeck } from "./components/RecipeSwipeDeck";
 import { getRecipePantryBreakdown } from "./utils/pantryMatching";
@@ -1126,7 +1127,7 @@ function CookScreen({
   const [servings, setServings] = useState(3);
   const [intent, setIntent] = useState("");
   const [generated, setGenerated] = useState(false);
-  const [shuffleIndex, setShuffleIndex] = useState(0);
+  const [shuffleIndex, setShuffleIndex] = useState(() => Math.floor(Math.random() * 12));
   const [matchScore, setMatchScore] = useState(98);
   const [isRotating, setIsRotating] = useState(false);
   const [isAiGenerating, setIsAiGenerating] = useState(false);
@@ -1137,15 +1138,75 @@ function CookScreen({
   const [activeModalRecipe, setActiveModalRecipe] = useState<CatalogRecipe | null>(null);
   const [isSurpriseModalOpen, setIsSurpriseModalOpen] = useState(false);
 
-  // Pure curated catalog recipes for the shuffle deck (always the 9 standard catalog proposals)
+  const currentMealSlot = useMemo(() => getCurrentMealTimeSlot(), []);
+
+  // Dynamic curated recipes for the Tinder Swipe Deck:
+  // Automatically rotates 3× daily (Morgens, Mittags, Abends) + shifts every day + prioritizes pantry matches
   const catalogShuffleList = useMemo(() => {
-    const total = FULL_RECIPE_CATALOG.length;
-    const reordered: CatalogRecipe[] = [];
-    for (let i = 0; i < total; i++) {
-      reordered.push(FULL_RECIPE_CATALOG[(i + shuffleIndex * 3) % total]);
-    }
-    return reordered;
-  }, [shuffleIndex]);
+    // Include all catalog recipes plus any custom/AI recipes saved by user
+    const custom = getStoredCustomRecipes();
+    const combined = [...FULL_RECIPE_CATALOG, ...custom];
+
+    const now = new Date();
+    const startOfYear = new Date(now.getFullYear(), 0, 0);
+    const dayOfYear = Math.floor((now.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24));
+    // Time slot offset (0 = Morning, 1 = Midday, 2 = Evening) plus shuffleIndex for manual reshuffling
+    const timeSlotBonusOffset = dayOfYear * 11 + currentMealSlot.slotId * 17 + shuffleIndex * 19;
+
+    const scored = combined.map((rec, origIdx) => {
+      const breakdown = getRecipePantryBreakdown(rec, pantry, servings);
+      const total = breakdown.inStock.length + breakdown.missing.length;
+      const matchPct = total > 0 ? breakdown.inStock.length / total : 0;
+
+      // Slot suitability bonus
+      const titleLower = rec.title.toLowerCase();
+      let slotBonus = 0;
+      if (currentMealSlot.slotId === 0) {
+        // Morning / Fast lunch
+        if (
+          titleLower.includes("ei") ||
+          titleLower.includes("omelett") ||
+          titleLower.includes("shakshuka") ||
+          titleLower.includes("bowl") ||
+          titleLower.includes("toast")
+        ) {
+          slotBonus = 0.22;
+        }
+      } else if (currentMealSlot.slotId === 1) {
+        // Midday / Lunch
+        if (
+          titleLower.includes("pasta") ||
+          titleLower.includes("penne") ||
+          titleLower.includes("reis") ||
+          titleLower.includes("wok") ||
+          titleLower.includes("bolognese") ||
+          titleLower.includes("alfredo")
+        ) {
+          slotBonus = 0.22;
+        }
+      } else {
+        // Evening / Dinner
+        if (
+          titleLower.includes("hähnchen") ||
+          titleLower.includes("rind") ||
+          titleLower.includes("speck") ||
+          titleLower.includes("teriyaki") ||
+          titleLower.includes("arrabbiata") ||
+          titleLower.includes("geschnetzeltes") ||
+          rec.baseProt >= 20
+        ) {
+          slotBonus = 0.22;
+        }
+      }
+
+      // Rotational hash with time slot variance to cycle top recipes 3× a day
+      const variance = ((origIdx * 23 + timeSlotBonusOffset) % 100) / 350;
+      return { rec, score: matchPct + slotBonus + variance };
+    });
+
+    scored.sort((a, b) => b.score - a.score);
+    return scored.map((s) => s.rec);
+  }, [shuffleIndex, pantry, servings, currentMealSlot]);
 
   // Pre-calculated list of bookmarked favorite recipes (calories & macros remain constant per portion)
   const favoriteRecipes = useMemo(() => {
@@ -1156,7 +1217,7 @@ function CookScreen({
       protein: `${Math.round(item.baseProt)}g`,
       carbs: `${Math.round(item.baseCarb)}g`,
       cost: `${item.baseCost.toFixed(2).replace(".", ",")} €`,
-      availableFormatted: item.available(servings),
+      availableFormatted: typeof item.available === "function" ? item.available(servings) : getSafeAvailable(item, servings),
     }));
   }, [activeSearchedRecipe, favorites, servings]);
 
@@ -1177,7 +1238,7 @@ function CookScreen({
       protein: `${Math.round(item.baseProt)}g`,
       carbs: `${Math.round(item.baseCarb)}g`,
       cost: `${item.baseCost.toFixed(2).replace(".", ",")} €`,
-      availableFormatted: item.available(servings),
+      availableFormatted: typeof item.available === "function" ? item.available(servings) : getSafeAvailable(item, servings),
     }));
   }, [activeSearchedRecipe, catalogShuffleList, servings]);
 
@@ -1536,7 +1597,7 @@ function CookScreen({
                 <path d="M9 2h6" />
               </svg>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0, flexWrap: "wrap" }}>
               <span style={{ fontSize: "13px", fontWeight: 800, color: "#0f172a", whiteSpace: "nowrap" }}>
                 TinderSwipe
               </span>
@@ -1544,16 +1605,45 @@ function CookScreen({
                 style={{
                   fontSize: "10px",
                   fontWeight: 750,
-                  padding: "2px 6px",
+                  padding: "2px 7px",
                   borderRadius: "6px",
                   background: isSwipeExpanded ? "#dcfce7" : "#f1f5f9",
                   color: isSwipeExpanded ? "#15803d" : "#64748b",
                   whiteSpace: "nowrap",
                   flexShrink: 0,
                 }}
+                title={`Wechselt 3× täglich (Morgens, Mittags, Abends) · Aktuell: ${currentMealSlot.title}`}
               >
-                {filteredDeckRecipes.length} Rezepte
+                {currentMealSlot.badge} · {filteredDeckRecipes.length} Rezepte
               </span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShuffleIndex((prev) => prev + 1);
+                  setDeckKey((k) => k + 1);
+                  if (onNotify) {
+                    onNotify(`Vorschläge für ${currentMealSlot.badge} neu gemischt`);
+                  }
+                }}
+                style={{
+                  background: "#f1f5f9",
+                  border: "1px solid #cbd5e1",
+                  borderRadius: "6px",
+                  padding: "2px 7px",
+                  fontSize: "10.5px",
+                  fontWeight: 700,
+                  color: "#475569",
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "3px",
+                  whiteSpace: "nowrap",
+                }}
+                title="Deck für diesen Slot jetzt neu mischen"
+              >
+                ↻ Neu mischen
+              </button>
             </div>
           </div>
 
@@ -2139,7 +2229,8 @@ export default function App() {
   }, [customRecipes]);
 
   const handleAddCustomRecipe = (recipe: CatalogRecipe) => {
-    setCustomRecipes((prev) => [recipe, ...prev.filter((r) => r.id !== recipe.id)]);
+    const safeRecipe = rehydrateCustomRecipe(recipe);
+    setCustomRecipes((prev) => [safeRecipe, ...prev.filter((r) => r.id !== safeRecipe.id)]);
   };
 
   const [cookSelectedRecipeId, setCookSelectedRecipeId] = useState<string | null>(null);
@@ -2298,7 +2389,7 @@ export default function App() {
               setGroceries(cloudData.groceries as GroceryItem[]);
             }
             if (Array.isArray(cloudData.customRecipes)) {
-              setCustomRecipes(cloudData.customRecipes as CatalogRecipe[]);
+              setCustomRecipes((cloudData.customRecipes as any[]).map(rehydrateCustomRecipe));
             }
             if (Array.isArray(cloudData.mealPlan)) {
               setPlannedMeals(cloudData.mealPlan as PlannedMeal[]);
@@ -2441,7 +2532,9 @@ export default function App() {
         const itemNameLower = item.name.toLowerCase();
 
         if (recipe) {
-          const ingList = recipe.ingredientsList(servings);
+          const ingList = typeof recipe.ingredientsList === "function"
+            ? recipe.ingredientsList(servings)
+            : getSafeIngredientsList(recipe, servings);
           const matchingIng = ingList.find((ing) => {
             const ingLower = ing.name.toLowerCase();
             return (
@@ -2908,7 +3001,7 @@ export default function App() {
         onRestoreData={(cloud) => {
           if (Array.isArray(cloud.pantry)) setPantry(cloud.pantry as PantryItem[]);
           if (Array.isArray(cloud.groceries)) setGroceries(cloud.groceries as GroceryItem[]);
-          if (Array.isArray(cloud.customRecipes)) setCustomRecipes(cloud.customRecipes as CatalogRecipe[]);
+          if (Array.isArray(cloud.customRecipes)) setCustomRecipes((cloud.customRecipes as any[]).map(rehydrateCustomRecipe));
           if (Array.isArray(cloud.mealPlan)) setPlannedMeals(cloud.mealPlan as PlannedMeal[]);
           if (Array.isArray(cloud.favorites)) setFavorites(cloud.favorites as string[]);
         }}

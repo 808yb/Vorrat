@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import type { CatalogRecipe, RecipeStep } from "../data/recipeCatalog";
 import { getRecipePantryBreakdown } from "../utils/pantryMatching";
+import { getSafeSteps } from "../utils/recipeHelpers";
 
 interface CookingModalProps {
   recipe: CatalogRecipe | null;
@@ -103,8 +104,10 @@ export function CookingModal({
     onClose();
   };
 
+  const steps = getSafeSteps(recipe);
+  const currentStep = steps[currentStepIndex] || steps[0];
   const completedCount = Object.values(checkedSteps).filter(Boolean).length;
-  const progressPercent = Math.round((completedCount / recipe.steps.length) * 100);
+  const progressPercent = Math.round((completedCount / Math.max(1, steps.length)) * 100);
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -509,7 +512,7 @@ export function CookingModal({
                 Schritt-für-Schritt Anleitung
               </span>
               <span style={{ fontSize: "10px", color: "#059669", marginLeft: "6px", fontWeight: 650 }}>
-                ({completedCount} von {recipe.steps.length} erledigt)
+                ({completedCount} von {steps.length} erledigt)
               </span>
             </div>
             <div
@@ -568,7 +571,7 @@ export function CookingModal({
           {/* Mode 1: ALL STEPS VIEW */}
           {mode === "all" && (
             <div style={{ display: "grid", gap: "10px" }}>
-              {recipe.steps.map((step) => {
+              {steps.map((step) => {
                 const isChecked = !!checkedSteps[step.stepNumber];
                 return (
                   <div
@@ -686,34 +689,34 @@ export function CookingModal({
                     borderRadius: "6px",
                   }}
                 >
-                  Schritt {currentStepIndex + 1} von {recipe.steps.length}
+                  Schritt {currentStepIndex + 1} von {steps.length}
                 </span>
-                {recipe.steps[currentStepIndex].duration && (
+                {currentStep.duration && (
                   <span style={{ fontSize: "10.5px", color: "#64748b", fontWeight: 650 }}>
-                    Richtzeit: {recipe.steps[currentStepIndex].duration}
+                    Richtzeit: {currentStep.duration}
                   </span>
                 )}
               </div>
 
               <div>
                 <h3 style={{ margin: "0 0 6px", fontSize: "16px", color: "#0f172a", fontWeight: 750 }}>
-                  {recipe.steps[currentStepIndex].title}
+                  {currentStep.title}
                 </h3>
                 <p style={{ margin: 0, fontSize: "13px", lineHeight: 1.6, color: "#334155" }}>
-                  {recipe.steps[currentStepIndex].instruction}
+                  {currentStep.instruction}
                 </p>
               </div>
 
               {/* Step completion button in focus mode */}
               <button
                 type="button"
-                onClick={() => toggleStep(recipe.steps[currentStepIndex].stepNumber)}
+                onClick={() => toggleStep(currentStep.stepNumber)}
                 style={{
                   padding: "9px 14px",
                   borderRadius: "10px",
-                  background: checkedSteps[recipe.steps[currentStepIndex].stepNumber] ? "#f0fdf4" : "#f8fafc",
-                  border: checkedSteps[recipe.steps[currentStepIndex].stepNumber] ? "1px solid #86efac" : "1px solid #cbd5e1",
-                  color: checkedSteps[recipe.steps[currentStepIndex].stepNumber] ? "#15803d" : "#475569",
+                  background: checkedSteps[currentStep.stepNumber] ? "#f0fdf4" : "#f8fafc",
+                  border: checkedSteps[currentStep.stepNumber] ? "1px solid #86efac" : "1px solid #cbd5e1",
+                  color: checkedSteps[currentStep.stepNumber] ? "#15803d" : "#475569",
                   fontWeight: 700,
                   fontSize: "11.5px",
                   cursor: "pointer",
@@ -723,7 +726,7 @@ export function CookingModal({
                   gap: "6px",
                 }}
               >
-                <span>{checkedSteps[recipe.steps[currentStepIndex].stepNumber] ? "✓ Schritt erledigt!" : "Als erledigt abhaken"}</span>
+                <span>{checkedSteps[currentStep.stepNumber] ? "✓ Schritt erledigt!" : "Als erledigt abhaken"}</span>
               </button>
 
               {/* Step Navigation buttons */}
@@ -748,18 +751,18 @@ export function CookingModal({
                 </button>
                 <button
                   type="button"
-                  disabled={currentStepIndex === recipe.steps.length - 1}
-                  onClick={() => setCurrentStepIndex((prev) => Math.min(recipe.steps.length - 1, prev + 1))}
+                  disabled={currentStepIndex >= steps.length - 1}
+                  onClick={() => setCurrentStepIndex((prev) => Math.min(steps.length - 1, prev + 1))}
                   style={{
                     flex: 1,
                     padding: "9px",
                     borderRadius: "10px",
-                    background: currentStepIndex === recipe.steps.length - 1 ? "#f1f5f9" : "#059669",
-                    color: currentStepIndex === recipe.steps.length - 1 ? "#cbd5e1" : "#ffffff",
+                    background: currentStepIndex >= steps.length - 1 ? "#f1f5f9" : "#059669",
+                    color: currentStepIndex >= steps.length - 1 ? "#cbd5e1" : "#ffffff",
                     border: 0,
                     fontWeight: 750,
                     fontSize: "11px",
-                    cursor: currentStepIndex === recipe.steps.length - 1 ? "not-allowed" : "pointer",
+                    cursor: currentStepIndex >= steps.length - 1 ? "not-allowed" : "pointer",
                   }}
                 >
                   Nächster Schritt →
@@ -873,6 +876,8 @@ export function RecipeStepsAccordion({
 }: RecipeStepsAccordionProps) {
   const [completedSteps, setCompletedSteps] = useState<Record<number, boolean>>({});
 
+  const steps = getSafeSteps(recipe);
+
   const toggleStep = (stepNum: number, e: React.MouseEvent) => {
     e.stopPropagation();
     setCompletedSteps((prev) => ({ ...prev, [stepNum]: !prev[stepNum] }));
@@ -907,7 +912,7 @@ export function RecipeStepsAccordion({
               color: isOpen ? "#047857" : "#334155",
             }}
           >
-            Zubereitung & Anleitung ({recipe.steps.length} Schritte)
+            Zubereitung & Anleitung ({steps.length} Schritte)
           </span>
           {completedCount > 0 && (
             <span
@@ -920,7 +925,7 @@ export function RecipeStepsAccordion({
                 fontWeight: 700,
               }}
             >
-              {completedCount}/{recipe.steps.length} ✓
+              {completedCount}/{steps.length} ✓
             </span>
           )}
         </div>
@@ -954,7 +959,7 @@ export function RecipeStepsAccordion({
             style={{ overflow: "hidden" }}
           >
             <div style={{ display: "flex", flexDirection: "column", gap: "8px", paddingTop: "10px" }}>
-              {recipe.steps.map((step) => {
+              {steps.map((step) => {
                 const isChecked = !!completedSteps[step.stepNumber];
                 return (
                   <div

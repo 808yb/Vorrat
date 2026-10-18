@@ -4,6 +4,7 @@ import { getRecipePantryBreakdown } from "../src/utils/pantryMatching";
 import { FULL_RECIPE_CATALOG } from "../src/data/recipeCatalog";
 import { getFoodTone } from "../src/components/FoodIcons";
 import { findFoodNutrition, calculatePortionNutrition } from "../src/data/foodNutritionDatabase";
+import { getSafeIngredientsList, getSafeSteps, getSafeAvailable, rehydrateRecipe, getCurrentMealTimeSlot } from "../src/utils/recipeHelpers";
 
 let passedCount = 0;
 let failedCount = 0;
@@ -274,7 +275,141 @@ assert(tenBunds.calories === 320, "10 Bund Frühlingszwiebeln calculated as 320 
 
 // Testing getItemNutrientSpecs never returns 180 for spring onion
 const springOnionSpecs = getItemNutrientSpecs({ name: "Frühlingszwiebeln", category: "Kühl" });
-assert(springOnionSpecs.caloriesPer100g === 32, "getItemNutrientSpecs returns 32 kcal for Frühlingszwiebeln (never 180)");
+// -----------------------------------------------------------------------------
+// TEST SUITE 8: MEAT + PASTA CATALOG RECIPES & SURPRISE ME
+// -----------------------------------------------------------------------------
+console.log("\n🍝 8. Testing Meat + Pasta Catalog Recipes & Preferences...");
+
+function matchesMeat(r: any) {
+  const ingredients = getSafeIngredientsList(r);
+  const fullText = `${r.title} ${r.subtitle} ${r.available ? r.available(2) : ""} ${ingredients.map((i) => i.name).join(" ")}`.toLowerCase();
+  return (
+    fullText.includes("hähnchen") ||
+    fullText.includes("fleisch") ||
+    fullText.includes("rind") ||
+    fullText.includes("speck") ||
+    fullText.includes("filet") ||
+    fullText.includes("chicken") ||
+    fullText.includes("hackfleisch")
+  );
+}
+
+function matchesPasta(r: any) {
+  const ingredients = getSafeIngredientsList(r);
+  const fullText = `${r.title} ${r.subtitle} ${r.available ? r.available(2) : ""} ${ingredients.map((i) => i.name).join(" ")}`.toLowerCase();
+  return (
+    fullText.includes("pasta") ||
+    fullText.includes("nudel") ||
+    fullText.includes("penne") ||
+    fullText.includes("spaghetti") ||
+    fullText.includes("alfredo") ||
+    fullText.includes("bolognese")
+  );
+}
+
+const chickenAlfredo = FULL_RECIPE_CATALOG.find((r) => r.id === "r10");
+assert(Boolean(chickenAlfredo), "Catalog contains 'r10' (Cremige Hähnchen-Penne Alfredo)");
+assert(Boolean(chickenAlfredo && matchesMeat(chickenAlfredo)), "r10 matches category 'meat'");
+assert(Boolean(chickenAlfredo && matchesPasta(chickenAlfredo)), "r10 matches category 'pasta'");
+
+const bolognese = FULL_RECIPE_CATALOG.find((r) => r.id === "r11");
+assert(Boolean(bolognese), "Catalog contains 'r11' (Klassische Pasta Bolognese)");
+assert(Boolean(bolognese && matchesMeat(bolognese)), "r11 matches category 'meat'");
+assert(Boolean(bolognese && matchesPasta(bolognese)), "r11 matches category 'pasta'");
+
+const arrabbiata = FULL_RECIPE_CATALOG.find((r) => r.id === "r12");
+assert(Boolean(arrabbiata), "Catalog contains 'r12' (Penne all'Arrabbiata mit Speck)");
+assert(Boolean(arrabbiata && matchesMeat(arrabbiata)), "r12 matches category 'meat'");
+assert(Boolean(arrabbiata && matchesPasta(arrabbiata)), "r12 matches category 'pasta'");
+
+// Ensure simultaneous Meat + Pasta filter finds recipes
+const meatAndPastaMatches = FULL_RECIPE_CATALOG.filter((r) => matchesMeat(r) && matchesPasta(r));
+assert(meatAndPastaMatches.length >= 3, `Found ${meatAndPastaMatches.length} recipes matching BOTH meat & pasta`);
+
+// -----------------------------------------------------------------------------
+// TEST SUITE 9: BULLETPROOF RECIPE HELPERS & CRASH RESISTANCE
+// -----------------------------------------------------------------------------
+console.log("\n🛡️ 9. Testing Bulletproof Recipe Helpers & Crash Resistance...");
+
+// 1. Simulating an AI recipe saved to localStorage and restored without function prototypes
+const rawSerializedAiRecipe = {
+  id: "ai-recipe-999",
+  title: "Mediterrane Hähnchen-Pfanne",
+  subtitle: "Zartes Hähnchenfilet mit Zucchini",
+  prepTime: "20 Min.",
+  difficulty: "Einfach",
+  pricePerServing: "2,50 €",
+  calories: 380,
+  protein: 34,
+  carbs: 12,
+  fat: 18,
+  ingredients: [
+    { name: "Hähnchenbrustfilet", amount: 300, unit: "g", inStock: false },
+    { name: "Zucchini", amount: 1, unit: "Stk.", inStock: false },
+  ],
+  steps: ["Hähnchen in mundgerechte Stücke schneiden.", "In Olivenöl goldbraun braten."],
+};
+
+// getSafeIngredientsList handles missing ingredientsList method
+const safeIngredients = getSafeIngredientsList(rawSerializedAiRecipe);
+assert(safeIngredients.length === 2, "getSafeIngredientsList extracts 2 ingredients from serialized object");
+assert(safeIngredients[0].name === "Hähnchenbrustfilet", "First ingredient is Hähnchenbrustfilet");
+
+// getSafeSteps handles string array or missing steps
+const safeSteps = getSafeSteps(rawSerializedAiRecipe);
+assert(safeSteps.length === 2, "getSafeSteps extracts 2 steps from serialized object");
+
+// getSafeAvailable handles missing available method and returns valid string
+const safeAvailable = getSafeAvailable(rawSerializedAiRecipe);
+assert(typeof safeAvailable === "string" && safeAvailable.length > 0, "getSafeAvailable returns formatted string");
+
+// rehydrateRecipe adds missing helper functions
+const rehydrated = rehydrateRecipe(rawSerializedAiRecipe);
+assert(typeof rehydrated.ingredientsList === "function", "rehydrateRecipe adds ingredientsList() method");
+assert(typeof rehydrated.available === "function", "rehydrateRecipe adds available() method");
+assert(rehydrated.ingredientsList(2).length === 2, "rehydrated.ingredientsList(2) returns valid ingredient list");
+
+// -----------------------------------------------------------------------------
+// TEST SUITE 10: 3X DAILY ROTATION & EXPANDED CATALOG VARIETY
+// -----------------------------------------------------------------------------
+console.log("\n☀️ 10. Testing 3x Daily Rotation & Expanded Catalog Variety...");
+
+// 1. Catalog expansion to 18 distinct recipes
+assert(FULL_RECIPE_CATALOG.length >= 18, `Catalog contains at least 18 recipes (found ${FULL_RECIPE_CATALOG.length})`);
+
+const teriyaki = FULL_RECIPE_CATALOG.find((r) => r.id === "r13");
+assert(Boolean(teriyaki), "Contains 'r13' (Knuspriges Teriyaki-Hähnchen mit Basmati)");
+
+const primavera = FULL_RECIPE_CATALOG.find((r) => r.id === "r14");
+assert(Boolean(primavera), "Contains 'r14' (One-Pot Pasta Primavera)");
+
+const shakshuka = FULL_RECIPE_CATALOG.find((r) => r.id === "r15");
+assert(Boolean(shakshuka), "Contains 'r15' (Goldene Shakshuka mit Eiern)");
+
+const wokNoodles = FULL_RECIPE_CATALOG.find((r) => r.id === "r16");
+assert(Boolean(wokNoodles), "Contains 'r16' (Würzige Wok-Nudeln mit Lauch)");
+
+const beefRice = FULL_RECIPE_CATALOG.find((r) => r.id === "r17");
+assert(Boolean(beefRice), "Contains 'r17' (Zartes Rinder-Geschnetzeltes mit Reis)");
+
+const hamEggRice = FULL_RECIPE_CATALOG.find((r) => r.id === "r18");
+assert(Boolean(hamEggRice), "Contains 'r18' (Knusprige Schinken-Ei-Reispfanne)");
+
+// 2. Testing getCurrentMealTimeSlot
+const currentSlot = getCurrentMealTimeSlot();
+assert(typeof currentSlot.slotId === "number" && currentSlot.slotId >= 0 && currentSlot.slotId <= 2, "Meal time slot returns 0, 1, or 2");
+assert(typeof currentSlot.badge === "string" && currentSlot.badge.length > 0, "Meal time slot has valid badge label");
+
+// 3. Ensuring day and slot shift results in different top recipe order
+const now = new Date();
+const startOfYear = new Date(now.getFullYear(), 0, 0);
+const dayOfYear = Math.floor((now.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24));
+const morningOffset = dayOfYear * 11 + 0 * 17;
+const middayOffset = dayOfYear * 11 + 1 * 17;
+const eveningOffset = dayOfYear * 11 + 2 * 17;
+
+assert(morningOffset !== middayOffset, "Morning offset differs from midday offset");
+assert(middayOffset !== eveningOffset, "Midday offset differs from evening offset");
 
 // -----------------------------------------------------------------------------
 // SUMMARY

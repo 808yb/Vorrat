@@ -2,6 +2,7 @@ import React, { useState, useMemo } from "react";
 import { FULL_RECIPE_CATALOG, type CatalogRecipe } from "../data/recipeCatalog";
 import { type PantryItem, type GroceryItem } from "../App";
 import { ProductMark, getFoodTone } from "./FoodIcons";
+import { getSafeIngredientsList } from "../utils/recipeHelpers";
 
 export type WeekdayId = "mo" | "di" | "mi" | "do" | "fr" | "sa" | "so";
 
@@ -180,7 +181,9 @@ export function WeeklyMealPlannerScreen({
       const recipe = catalog.find((r) => r.id === planned.recipeId);
       if (!recipe) return;
 
-      const ingList = recipe.ingredientsList(planned.servings);
+      const ingList = typeof recipe.ingredientsList === "function"
+        ? recipe.ingredientsList(planned.servings)
+        : getSafeIngredientsList(recipe, planned.servings);
       ingList.forEach((ing) => {
         // Clean name for grouping
         let cleanName = ing.name
@@ -607,7 +610,9 @@ export function WeeklyMealPlannerScreen({
                     if (!recipe) return null;
 
                     // Check stock for this specific planned dish
-                    const ingList = recipe.ingredientsList(planned.servings);
+                    const ingList = typeof recipe.ingredientsList === "function"
+                      ? recipe.ingredientsList(planned.servings)
+                      : getSafeIngredientsList(recipe, planned.servings);
                     const missingForMeal = ingList.filter((ing) => {
                       if (ing.optional) return false;
                       const lower = ing.name.toLowerCase();
