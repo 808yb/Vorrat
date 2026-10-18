@@ -270,11 +270,10 @@ export function EditRecipeModal({
                 </span>
                 <label className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-800 bg-white hover:bg-slate-50 rounded-xl shadow cursor-pointer transition-transform active:scale-95 border border-slate-200">
                   <Camera size={14} className="text-emerald-700" />
-                  <span>Foto aufnehmen / ändern</span>
+                  <span>Foto wählen / aufnehmen</span>
                   <input
                     type="file"
                     accept="image/*"
-                    capture="environment"
                     onChange={async (e) => {
                       const file = e.target.files?.[0];
                       if (file) {

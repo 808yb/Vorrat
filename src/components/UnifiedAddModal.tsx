@@ -1201,7 +1201,6 @@ export function UnifiedAddModal({
                         <input
                           type="file"
                           accept="image/*"
-                          capture="environment"
                           style={{ display: "none" }}
                           onChange={handlePhotoUpload}
                         />
