@@ -2233,13 +2233,31 @@ export default function App() {
   const [customRecipes, setCustomRecipes] = useState<CatalogRecipe[]>(() => getStoredCustomRecipes());
 
   const allRecipes = useMemo(() => {
-    return [...customRecipes, ...FULL_RECIPE_CATALOG];
+    const customIds = new Set(customRecipes.map((r) => r.id));
+    return [...customRecipes, ...FULL_RECIPE_CATALOG.filter((r) => !customIds.has(r.id))];
   }, [customRecipes]);
 
   const handleAddCustomRecipe = (recipe: CatalogRecipe) => {
     const safeRecipe = rehydrateCustomRecipe(recipe);
     setCustomRecipes((prev) => [safeRecipe, ...prev.filter((r) => r.id !== safeRecipe.id)]);
   };
+
+  const handleUpdateCustomRecipe = (recipe: CatalogRecipe) => {
+    const safeRecipe = rehydrateCustomRecipe(recipe);
+    setCustomRecipes((prev) => {
+      const exists = prev.some((r) => r.id === safeRecipe.id);
+      if (exists) {
+        return prev.map((r) => (r.id === safeRecipe.id ? safeRecipe : r));
+      }
+      return [safeRecipe, ...prev];
+    });
+  };
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("forret_custom_recipes", JSON.stringify(customRecipes));
+    } catch {}
+  }, [customRecipes]);
 
   const [cookSelectedRecipeId, setCookSelectedRecipeId] = useState<string | null>(null);
   const [cookSelectedServings, setCookSelectedServings] = useState<number>(2);
@@ -2962,6 +2980,7 @@ export default function App() {
           onPlanMeal={(recipeId, recipeTitle, dayId, servings) =>
             addPlannedMeal({ recipeId, recipeTitle, dayId, servings })
           }
+          onUpdateRecipe={handleUpdateCustomRecipe}
           onNotify={notify}
         />
       )}

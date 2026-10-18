@@ -2,7 +2,8 @@ import React, { useState, useEffect } from "react";
 import { FULL_RECIPE_CATALOG, type CatalogRecipe } from "../data/recipeCatalog";
 import { type PantryItem } from "../App";
 import { CookingModal } from "./CookingModal";
-import { getRecipePantryBreakdown } from "../utils/pantryMatching";
+import { EditRecipeModal } from "./EditRecipeModal";
+import { getRecipePantryBreakdown, findMatchingPantryItem } from "../utils/pantryMatching";
 import { getSafeIngredientsList, getSafeSteps } from "../utils/recipeHelpers";
 import { resolveRecipeFoodImage } from "../utils/geminiRecipes";
 import { type WeekdayId } from "./WeeklyMealPlannerScreen";
@@ -18,6 +19,7 @@ export interface SavedMealsScreenProps {
   onNavigateToDiscover: () => void;
   onNavigateToPlanner?: () => void;
   onPlanMeal?: (recipeId: string, recipeTitle: string, dayId: WeekdayId, servings: number) => void;
+  onUpdateRecipe?: (updatedRecipe: CatalogRecipe) => void;
   onNotify?: (message: string) => void;
 }
 
@@ -32,6 +34,7 @@ export function SavedMealsScreen({
   onNavigateToDiscover,
   onNavigateToPlanner,
   onPlanMeal,
+  onUpdateRecipe,
   onNotify,
 }: SavedMealsScreenProps) {
   const catalog = recipes || FULL_RECIPE_CATALOG;
@@ -42,6 +45,7 @@ export function SavedMealsScreen({
   const [openAskDirectly, setOpenAskDirectly] = useState<boolean>(false);
   const [cookedRecipeTitles, setCookedRecipeTitles] = useState<Record<string, number>>({});
   const [isDetailsCollapsed, setIsDetailsCollapsed] = useState<boolean>(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
 
   // Sync when coming from planner with specific recipe and portions
   useEffect(() => {
@@ -110,52 +114,48 @@ export function SavedMealsScreen({
         return {
           ...ing,
           inStock: true,
-          pantryText: "Immer vorrätig",
+          pantryText: "∞ Immer vorrätig (Leitung)",
           statusColor: "#059669",
         };
       }
 
-      const matchedPantry = pantry.find((p) => {
-        const pLower = p.name.toLowerCase();
-        return (
-          pLower.includes(ingLower) ||
-          ingLower.includes(pLower) ||
-          (ingLower.includes("reis") && pLower.includes("reis")) ||
-          (ingLower.includes("eier") && pLower.includes("ei")) ||
-          (ingLower.includes("soja") && pLower.includes("soja")) ||
-          (ingLower.includes("erbsen") && pLower.includes("erbse")) ||
-          (ingLower.includes("hähnchen") && pLower.includes("hähnchen")) ||
-          (ingLower.includes("zwiebel") && pLower.includes("zwiebel"))
-        );
-      });
-
-      if (!matchedPantry) {
+      const match = findMatchingPantryItem(ing.name, pantry);
+      if (!match) {
         return {
           ...ing,
           inStock: !ing.optional ? false : true,
-          pantryText: ing.optional ? "Optional" : "Fehlt im Vorrat",
+          pantryText: ing.optional ? "Optional" : "Nicht im Vorrat",
           statusColor: ing.optional ? "#64748b" : "#e11d48",
         };
       }
 
-      if (matchedPantry.isUnlimited || matchedPantry.amount >= 9999) {
+      const matchedPantry = match.pantryItem;
+      const isAlt = Boolean(match.matchedByAlternative && match.matchedByAlternative.toLowerCase() !== ing.name.toLowerCase());
+
+      if (matchedPantry.isUnlimited || (matchedPantry.amount ?? 0) >= 9999) {
         return {
           ...ing,
           inStock: true,
-          pantryText: "Vorrätig",
+          pantryText: isAlt ? `${matchedPantry.name} vorrätig` : "Vorrätig",
           statusColor: "#059669",
         };
       }
 
       // Check amount
-      const reqAmountMatch = ing.amount.match(/^(\d+)/);
-      const reqAmount = reqAmountMatch ? parseInt(reqAmountMatch[1], 10) : 0;
-      const isSufficient = matchedPantry.amount >= reqAmount;
+      const reqAmountMatch = ing.amount.match(/^(\d+(?:[.,]\d+)?)/);
+      const reqAmount = reqAmountMatch ? parseFloat(reqAmountMatch[1].replace(",", ".")) : 0;
+      const currentStock = matchedPantry.amount ?? 0;
+      const isSufficient = currentStock >= reqAmount || reqAmount === 0;
+
+      const displayAmount = `${currentStock}${matchedPantry.unit || ""}`;
+      const altNote = isAlt ? ` (${matchedPantry.name})` : "";
 
       return {
         ...ing,
         inStock: isSufficient,
-        pantryText: `${matchedPantry.amount}${matchedPantry.unit} vorrätig`,
+        pantryText: isSufficient
+          ? `${displayAmount} vorhanden${altNote}`
+          : `Nur ${displayAmount} (${reqAmount - currentStock} fehlt)`,
         statusColor: isSufficient ? "#059669" : "#d97706",
       };
     });
@@ -251,6 +251,31 @@ export function SavedMealsScreen({
                     </span>
                   );
                 })()}
+                <button
+                  type="button"
+                  className="saved-edit-btn"
+                  title="Rezept & Zutaten anpassen"
+                  onClick={() => setIsEditModalOpen(true)}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "5px",
+                    padding: "6px 11px",
+                    borderRadius: "10px",
+                    border: "1px solid #cbd5e1",
+                    background: "#ffffff",
+                    fontSize: "12px",
+                    fontWeight: 600,
+                    color: "#334155",
+                    cursor: "pointer",
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 20h9" />
+                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                  </svg>
+                  <span>Anpassen</span>
+                </button>
                 <button
                   type="button"
                   className="saved-unbookmark-btn"
@@ -377,8 +402,32 @@ export function SavedMealsScreen({
                 <>
                   {/* 2. Zutaten & Vorrats-Abgleich */}
                   <section className="saved-section-block">
-                    <div className="section-block-title">
+                    <div className="section-block-title" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                       <h3>Zutaten ({servings} {servings === 1 ? "Person" : "Personen"})</h3>
+                      <button
+                        type="button"
+                        onClick={() => setIsEditModalOpen(true)}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          fontSize: "11px",
+                          fontWeight: 600,
+                          color: "#059669",
+                          background: "#ecfdf5",
+                          border: "1px solid #a7f3d0",
+                          borderRadius: "8px",
+                          padding: "3px 8px",
+                          cursor: "pointer",
+                        }}
+                        title="Zutaten hinzufügen oder Mengen anpassen"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M12 20h9" />
+                          <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                        </svg>
+                        <span>Zutat hinzufügen / bearbeiten</span>
+                      </button>
                     </div>
 
                     <div className="ingredients-check-grid">
@@ -430,11 +479,13 @@ export function SavedMealsScreen({
                                 fontWeight: 750,
                                 cursor: "pointer",
                                 transition: "all 150ms ease",
+                                whiteSpace: "nowrap",
+                                flexShrink: 0,
                               }}
                               title="Ask about recipe"
                             >
                               <span style={{ color: "#d97706", fontSize: "12px" }}>★</span>
-                              <span>Ask about recipe</span>
+                              <span>Ask recipe</span>
                             </button>
                             <span className="step-counter-pill">
                               {Object.values(completedSteps[activeRecipe.id] || {}).filter(Boolean).length} / {safeSteps.length} erledigt
@@ -590,6 +641,21 @@ export function SavedMealsScreen({
         initialServings={servings}
         pantry={pantry}
         initialOpenAsk={openAskDirectly}
+      />
+
+      {/* Edit Recipe Modal */}
+      <EditRecipeModal
+        isOpen={isEditModalOpen}
+        recipe={activeRecipe}
+        onClose={() => setIsEditModalOpen(false)}
+        onSave={(updated) => {
+          if (onUpdateRecipe) {
+            onUpdateRecipe(updated);
+          }
+          if (onNotify) {
+            onNotify(`«${updated.title}» erfolgreich aktualisiert!`);
+          }
+        }}
       />
     </main>
   );

@@ -1,5 +1,6 @@
 import { GoogleGenAI } from '@google/genai';
 import { type CatalogRecipe, type RecipeStep } from '../data/recipeCatalog';
+import { findMatchingPantryItem } from './pantryMatching';
 
 // High-resolution food images from Unsplash (matching common dishes)
 export const FOOD_IMAGE_PRESETS: Record<string, string> = {
@@ -184,6 +185,26 @@ export function rehydrateCustomRecipe(item: any): CatalogRecipe {
         unit: ing.unit || "g",
         optional: Boolean(ing.optional),
       }))
+    : typeof item.ingredientsList === "function"
+    ? (() => {
+        try {
+          const list = item.ingredientsList(1);
+          if (Array.isArray(list) && list.length > 0) {
+            return list.map((ing: any) => {
+              const match = String(ing.amount || "").trim().match(/^([\d.,]+)\s*(.*)$/);
+              const amountNum = match ? parseFloat(match[1].replace(",", ".")) : 100;
+              const unitStr = match && match[2] ? match[2].trim() : "g";
+              return {
+                name: ing.name,
+                baseAmountPerPortion: isNaN(amountNum) ? 100 : amountNum,
+                unit: unitStr || "g",
+                optional: Boolean(ing.optional),
+              };
+            });
+          }
+        } catch {}
+        return [];
+      })()
     : [];
 
   // If ingredients are still empty, reconstruct from title and subtitle
@@ -301,11 +322,15 @@ export function saveCustomRecipe(recipe: CatalogRecipe, rawIngredients: RawGemin
 }
 
 export function getGeminiApiKey(): string {
-  return (
+  const raw = (
     (import.meta as any).env?.VITE_GEMINI_API_KEY ||
     (typeof process !== "undefined" && process.env?.GEMINI_API_KEY) ||
     ""
-  );
+  ).trim();
+  if ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'"))) {
+    return raw.slice(1, -1).trim();
+  }
+  return raw;
 }
 
 export async function generateRecipeWithGemini(
@@ -716,13 +741,9 @@ async function callGeminiCascade(apiKey: string, prompt: string): Promise<RawGem
   const recipeId = `ai-${Date.now()}`;
   const imageUrl = resolveRecipeFoodImage(parsed.title, parsed.imageKeywords);
 
-  // Honest pantry comparison
+  // Honest pantry comparison using culinary equivalents & alternatives
   const inStockIngredients = parsed.ingredients.filter((ing) =>
-    pantry.some((p) => {
-      const pLower = p.name.toLowerCase();
-      const iLower = ing.name.toLowerCase();
-      return pLower.includes(iLower) || iLower.includes(pLower);
-    })
+    findMatchingPantryItem(ing.name, pantry as any) !== null
   );
   const missingIngredients = parsed.ingredients.filter((ing) => !inStockIngredients.includes(ing));
   const calculatedMatchScore = Math.round(
@@ -855,11 +876,9 @@ Antworte AUSSCHLIESSLICH mit gültigem JSON im folgenden Schema ohne Markdown-Fo
   const recipeId = "imported-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6);
   const imageUrl = resolveRecipeFoodImage(parsed.title, parsed.imageKeywords);
 
-  const pantryNames = pantryItems.map((p) => p.name.toLowerCase().trim());
-  const inStockIngredients = parsed.ingredients.filter((ing) => {
-    const iLower = ing.name.toLowerCase().trim();
-    return pantryNames.some((pLower) => pLower.includes(iLower) || iLower.includes(pLower));
-  });
+  const inStockIngredients = parsed.ingredients.filter((ing) =>
+    findMatchingPantryItem(ing.name, pantryItems as any) !== null
+  );
 
   const missingIngredients = parsed.ingredients.filter((ing) => !inStockIngredients.includes(ing));
   const calculatedMatchScore = Math.round(
@@ -881,6 +900,8 @@ Antworte AUSSCHLIESSLICH mit gültigem JSON im folgenden Schema ohne Markdown-Fo
     imageUrl,
     isAiGenerated: true,
     matchScore: calculatedMatchScore,
+    rawIngredients: parsed.ingredients,
+    ingredients: parsed.ingredients,
     optional:
       missingIngredients.length > 0
         ? `Fehlt: ${missingIngredients.map((m) => m.name).slice(0, 3).join(", ")}`
@@ -1023,11 +1044,9 @@ Antworte AUSSCHLIESSLICH mit gültigem JSON im folgenden Schema ohne Markdown-Fo
   const recipeId = "video-recipe-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6);
   const imageUrl = resolveRecipeFoodImage(parsed.title, parsed.imageKeywords);
 
-  const pantryNames = pantryItems.map((p) => p.name.toLowerCase().trim());
-  const inStockIngredients = parsed.ingredients.filter((ing) => {
-    const iLower = ing.name.toLowerCase().trim();
-    return pantryNames.some((pLower) => pLower.includes(iLower) || iLower.includes(pLower));
-  });
+  const inStockIngredients = parsed.ingredients.filter((ing) =>
+    findMatchingPantryItem(ing.name, pantryItems as any) !== null
+  );
 
   const missingIngredients = parsed.ingredients.filter((ing) => !inStockIngredients.includes(ing));
   const calculatedMatchScore = Math.round(
@@ -1049,6 +1068,8 @@ Antworte AUSSCHLIESSLICH mit gültigem JSON im folgenden Schema ohne Markdown-Fo
     imageUrl,
     isAiGenerated: true,
     matchScore: calculatedMatchScore,
+    rawIngredients: parsed.ingredients,
+    ingredients: parsed.ingredients,
     optional:
       missingIngredients.length > 0
         ? `Fehlt: ${missingIngredients.map((m) => m.name).slice(0, 3).join(", ")}`
@@ -1111,9 +1132,7 @@ export async function askAboutRecipeWithGemini(
   // 1. Try Gemini AI first if API key is present
   const apiKey = getGeminiApiKey();
   if (apiKey) {
-    try {
-      const ai = new GoogleGenAI({ apiKey });
-      const prompt = `Du bist ein erfahrener, sympathischer Küchenchef in einer smarten Koch-App.
+    const prompt = `Du bist ein erfahrener, sympathischer Küchenchef in einer smarten Koch-App.
 Der Nutzer kocht gerade folgendes Rezept:
 - Gericht: "${context.recipeTitle}"
 - Aktueller Schritt (${context.stepNumber ? `Schritt ${context.stepNumber}` : "Aktuell"}): "${context.stepTitle || "Zubereitung"}"
@@ -1127,39 +1146,49 @@ Frage des Nutzers:
 ANWEISUNG AN DICH ALS CHEFKOCH:
 1. Antworte sofort direkt und praxisnah auf Deutsch. Maximal 2 bis 4 kurze Sätze.
 2. Wenn der Nutzer nach Gewürz vs. Pesto fragt (z. B. Basilikum): Kläre auf, was das Original meint (z. B. frische Blätter oder getrocknetes Gewürz) und wie Pesto stattdessen dosiert werden kann (z. B. 1–2 TL Pesto, Salz dann reduzieren).
-3. Wenn nach Alternativen gefragt wird: Nenne konkrete Vorrats-Substituten.
-4. Wenn nach Hitze, Garzeit oder Konsistenz gefragt wird: Gib präzise Herd-Stufen oder Minuten an.
-5. Kein langes Vorgeplänkel, direkt die Lösung für die Küche.`;
+3. Wenn nach Alternativen für Pasta / Nudeln gefragt wird (z. B. andere Nudelarten wie Penne, Rigatoni, Paccheri oder Spaghetti statt Calamarata): Beantworte direkt welche Nudelformen ideal passen (z. B. kurze Röhrennudeln für cremige Saucen) und worauf man achten soll (al dente Kochzeit laut Packung).
+4. Wenn nach Alternativen für Zutaten gefragt wird: Nenne konkrete Vorrats-Substituten.
+5. Wenn nach Hitze, Garzeit oder Konsistenz gefragt wird: Gib präzise Herd-Stufen oder Minuten an.
+6. Kein langes Vorgeplänkel, direkt die Lösung für die Küche.`;
 
-      const resp = await ai.models.generateContent({
-        model: "gemini-2.5-flash-lite",
-        contents: prompt,
-        config: {
-          temperature: 0.3,
-        },
-      });
+    const candidateModels = ["gemini-flash-latest", "gemini-3.8-flash", "gemini-flash-lite-latest", "gemini-2.5-flash"];
+    for (const model of candidateModels) {
+      try {
+        const ai = new GoogleGenAI({ apiKey });
+        const resp = await ai.models.generateContent({
+          model,
+          contents: prompt,
+          config: {
+            temperature: 0.3,
+          },
+        });
 
-      const text = resp.text?.trim();
-      if (text) return text;
-    } catch (err) {
-      console.warn("[askAboutRecipeWithGemini] Gemini error, using smart fallback:", err);
+        const text = resp.text?.trim();
+        if (text) return text;
+      } catch (err) {
+        console.warn(`[askAboutRecipeWithGemini] Model ${model} failed, trying next:`, err);
+      }
     }
   }
 
-  // 2. Intelligent culinary rule-based fallback
+  // 2. Intelligent culinary rule-based fallback (for offline or key issues)
   if (q.includes("basilikum") || q.includes("pesto") || q.includes("gewürz") || q.includes("gewurz")) {
     return "Im Rezept ist standardmäßig frisches Basilikum (oder alternativ getrocknetes Basilikum-Gewürz) gemeint. Wenn du Basilikum-Pesto da hast, kannst du wunderbar 1–2 TL Pesto unterrühren – das verleiht eine herrlich aromatische, nussige Note. Reduziere dann etwas das zusätzliche Salz, da Pesto bereits gewürzt ist!";
   }
 
-  if (q.includes("ersatz") || q.includes("ersetzen") || q.includes("alternative") || q.includes("kein") || q.includes("fehlt")) {
+  if (q.includes("nudel") || q.includes("pasta") || q.includes("calamarata") || q.includes("penne") || q.includes("spaghetti") || q.includes("rigatoni") || q.includes("fusilli") || q.includes("teigwaren")) {
+    return "Na klar, du kannst problemlos auch eine andere Nudelsorte verwenden! Für cremige Saucen wie hier passen kurze Röhren- oder Spiralnudeln wie Penne Rigate, Rigatoni, Paccheri oder Fusilli besonders gut, weil die Sauce perfekt haften bleibt. Aber auch Spaghetti oder Tagliatelle funktionieren wunderbar – halte dich einfach an die Kochzeit auf der Packung für 'al dente'.";
+  }
+
+  if (q.includes("ersatz") || q.includes("ersetzen") || q.includes("alternative") || q.includes("kein") || q.includes("fehlt") || q.includes("austauschen")) {
     return "Kein Problem: Sahne kannst du durch Milch mit 1 TL Butter oder etwas Frischkäse ersetzen; frische Zwiebeln durch Schalotten oder Lauch; Tomaten durch passierte Tomaten oder Paprika. Das Gericht gelingt trotzdem hervorragend!";
   }
 
-  if (q.includes("hitze") || q.includes("temperatur") || q.includes("stufe") || q.includes("anbraten") || q.includes("kochen")) {
+  if (q.includes("hitze") || q.includes("temperatur") || q.includes("stufe") || q.includes("anbraten") || q.includes("kochen") || q.includes("herd")) {
     return "Für das Anbraten (z. B. Fleisch oder Zwiebeln) wähle mittlere bis hohe Hitze (Stufe 7 von 9), um Röstaromen zu bekommen. Sobald Sauce oder Flüssigkeit dazukommt, auf kleine Hitze (Stufe 3–4) herunterschalten und sanft ziehen lassen.";
   }
 
-  if (q.includes("dauer") || q.includes("lange") || q.includes("zeit") || q.includes("wann fertig")) {
+  if (q.includes("dauer") || q.includes("lange") || q.includes("zeit") || q.includes("wann fertig") || q.includes("gar")) {
     return `Orientier dich an ca. ${context.stepInstruction?.match(/\d+\s*Min/)?.[0] || "3-5 Minuten"}. Das Gericht ist fertig, wenn die Textur cremig ist und alles heiß durchgezogen ist.`;
   }
 

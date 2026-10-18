@@ -2,6 +2,7 @@ import React, { useState, useRef } from "react";
 import { X, Sparkles, Link as LinkIcon, FileText, CheckCircle2, ShoppingCart, AlertCircle, ChefHat, Clock, Flame, Video, UploadCloud, Play, Film } from "lucide-react";
 import { type CatalogRecipe } from "../data/recipeCatalog";
 import { importRecipeFromTextOrUrlWithGemini, importRecipeFromVideoWithGemini, type RawGeminiIngredient } from "../utils/geminiRecipes";
+import { findMatchingPantryItem } from "../utils/pantryMatching";
 
 interface RecipeImportModalProps {
   isOpen: boolean;
@@ -86,7 +87,6 @@ export function RecipeImportModal({
       ],
     };
 
-    const pantryNames = pantryItems.map((p) => p.name.toLowerCase().trim());
     const rawIngs: RawGeminiIngredient[] = [
       { name: "Hähnchenbrust", baseAmountPerPortion: 150, unit: "g", optional: false },
       { name: "Tortilla Wraps", baseAmountPerPortion: 1, unit: "Stk.", optional: false },
@@ -95,9 +95,11 @@ export function RecipeImportModal({
       { name: "Joghurt mild", baseAmountPerPortion: 50, unit: "g", optional: false },
       { name: "Olivenöl", baseAmountPerPortion: 10, unit: "ml", optional: false },
     ];
-    const missing = rawIngs.filter(
-      (ing) => !pantryNames.some((p) => p.includes(ing.name.toLowerCase()) || ing.name.toLowerCase().includes(p))
-    );
+    demoRecipe.rawIngredients = rawIngs;
+    demoRecipe.ingredients = rawIngs;
+
+    const inStock = rawIngs.filter((ing) => findMatchingPantryItem(ing.name, pantryItems) !== null);
+    const missing = rawIngs.filter((ing) => !inStock.includes(ing));
 
     setImportedData({
       recipe: demoRecipe,
@@ -437,11 +439,14 @@ export function RecipeImportModal({
                   </span>
                 </h5>
 
-                <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
                   {importedData.recipe.ingredientsList(1).map((ing, idx) => {
-                    const isMissing = importedData.missingIngredients.some(
-                      (m) => m.name.toLowerCase().trim() === ing.name.toLowerCase().trim()
-                    );
+                    const match = findMatchingPantryItem(ing.name, pantryItems);
+                    const isMissing = !match;
+                    const altName = match?.matchedByAlternative && match.matchedByAlternative.toLowerCase() !== ing.name.toLowerCase()
+                      ? match.matchedByAlternative
+                      : null;
+
                     return (
                       <div
                         key={idx}
@@ -455,11 +460,18 @@ export function RecipeImportModal({
                           {isMissing ? (
                             <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
                           ) : (
-                            <CheckCircle2 size={13} className="text-emerald-600" />
+                            <CheckCircle2 size={13} className="text-emerald-600 shrink-0" />
                           )}
-                          <span>{ing.name}</span>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span>{ing.name}</span>
+                            {altName && (
+                              <span className="inline-block px-1.5 py-0.5 text-[10px] font-semibold bg-emerald-100/90 text-emerald-800 rounded">
+                                ({altName} im Vorrat)
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        <span className="text-slate-500 font-medium">{ing.amount}</span>
+                        <span className="text-slate-500 font-medium shrink-0 ml-2">{ing.amount}</span>
                       </div>
                     );
                   })}

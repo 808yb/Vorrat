@@ -3,6 +3,7 @@ import { FULL_RECIPE_CATALOG, type CatalogRecipe } from "../data/recipeCatalog";
 import { type PantryItem, type GroceryItem } from "../App";
 import { ProductMark, getFoodTone } from "./FoodIcons";
 import { getSafeIngredientsList } from "../utils/recipeHelpers";
+import { findMatchingPantryItem } from "../utils/pantryMatching";
 
 export type WeekdayId = "mo" | "di" | "mi" | "do" | "fr" | "sa" | "so";
 
@@ -247,23 +248,12 @@ export function WeeklyMealPlannerScreen({
     const result: AggregatedIngredient[] = [];
     map.forEach((item, key) => {
       // Find matching item in user's pantry
-      const pantryMatch = pantry.find((p) => {
-        const pLower = p.name.toLowerCase();
-        return (
-          pLower.includes(key) ||
-          key.includes(pLower) ||
-          (key === "reis" && pLower.includes("reis")) ||
-          (key === "eier" && pLower.includes("ei")) ||
-          (key === "sojasauce" && pLower.includes("soja")) ||
-          (key === "erbsen" && pLower.includes("erbse")) ||
-          (key === "hähnchenbrust" && pLower.includes("hähnchen")) ||
-          (key === "frühlingszwiebeln" && pLower.includes("zwiebel"))
-        );
-      });
+      const matchRes = findMatchingPantryItem(key, pantry);
+      const pantryMatch = matchRes?.pantryItem;
 
       const isWater = key.includes("wasser") || key.includes("water") || key.includes("leitung");
-      const isUnlimited = isWater || Boolean(pantryMatch?.isUnlimited) || (pantryMatch ? pantryMatch.amount >= 99999 : false);
-      const inStock = isUnlimited ? 999999 : (pantryMatch ? pantryMatch.amount : 0);
+      const isUnlimited = isWater || Boolean(pantryMatch?.isUnlimited) || (pantryMatch ? (pantryMatch.amount ?? 0) >= 99999 : false);
+      const inStock = isUnlimited ? 999999 : (pantryMatch?.amount ?? 0);
       const missingAmount = isUnlimited ? 0 : Math.max(0, item.totalNeeded - inStock);
       const isCovered = isUnlimited || missingAmount <= 0;
 
@@ -615,15 +605,12 @@ export function WeeklyMealPlannerScreen({
                       : getSafeIngredientsList(recipe, planned.servings);
                     const missingForMeal = ingList.filter((ing) => {
                       if (ing.optional) return false;
-                      const lower = ing.name.toLowerCase();
-                      const match = pantry.find((p) => {
-                        const pLower = p.name.toLowerCase();
-                        return pLower.includes(lower) || lower.includes(pLower);
-                      });
-                      if (!match) return true;
-                      const reqMatch = ing.amount.match(/^(\d+)/);
-                      const req = reqMatch ? parseInt(reqMatch[1], 10) : 0;
-                      return match.amount < req;
+                      const matchRes = findMatchingPantryItem(ing.name, pantry);
+                      if (!matchRes) return true;
+                      if (matchRes.pantryItem.isUnlimited) return false;
+                      const reqMatch = ing.amount.match(/^(\d+(?:[.,]\d+)?)/);
+                      const req = reqMatch ? parseFloat(reqMatch[1].replace(",", ".")) : 0;
+                      return (matchRes.pantryItem.amount ?? 0) < req;
                     });
 
                     const isAllInStock = missingForMeal.length === 0;

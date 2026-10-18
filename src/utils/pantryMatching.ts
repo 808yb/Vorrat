@@ -18,31 +18,33 @@ export interface RecipePantryBreakdown {
 // Culinary equivalence groups: Items in the same array can substitute for one another
 const EQUIVALENCE_GROUPS: string[][] = [
   // Fresh tomatoes
-  ["kirschtomate", "kirschtomaten", "cherrytomate", "cherrytomaten", "cocktailtomate", "cocktailtomaten", "rispentomate", "rispentomaten", "strauchtomate", "strauchtomaten", "tomate", "tomaten"],
+  ["kirschtomate", "kirschtomaten", "cherrytomate", "cherrytomaten", "cocktailtomate", "cocktailtomaten", "rispentomate", "rispentomaten", "strauchtomate", "strauchtomaten", "tomate", "tomaten", "cherry-kirschtomaten"],
   // Canned / Processed tomatoes
   ["gehackte tomaten", "passierte tomaten", "dosentomaten", "stückige tomaten", "polpa", "tomatensauce", "tomatenmark", "pelati"],
   // Cooking oils
-  ["olivenöl", "sonnenblumenöl", "rapsöl", "pflanzenöl", "bratöl", "speiseöl", "keimöl", "sesamöl"],
+  ["öl", "speiseöl", "pflanzenöl", "bratöl", "frittieröl", "olivenöl", "sonnenblumenöl", "rapsöl", "keimöl", "sesamöl", "distelöl", "kokosöl", "erdnussöl"],
   // Butter & Margarine
-  ["butter", "margarine", "pflanzenbutter", "butterreinfett"],
+  ["butter", "margarine", "pflanzenbutter", "butterreinfett", "markenbutter", "süßrahmbutter", "sauerrahmbutter"],
+  // Mayonnaise & Remoulade
+  ["mayo", "mayonnaise", "salatmayo", "salatmayonnaise", "remoulade", "aioli", "miracel whip", "pommes-sauce", "pommessauce", "trüffelmayo"],
   // Onions & Alliums
   ["zwiebel", "zwiebeln", "schalotte", "schalotten", "frühlingszwiebel", "frühlingszwiebeln", "lauch", "porree", "gemüsezwiebel", "rote zwiebel"],
   // Milk & Plant milk
-  ["milch", "hafermilch", "sojamilch", "mandelmilch", "kuhmilch", "vollmilch", "fettarme milch"],
-  // Cream / Sahne
-  ["sahne", "schlagsahne", "kochcreme", "hafersahne", "sojasahne", "creme fraiche", "crème fraîche", "schmand", "sauerrahm"],
+  ["milch", "hafermilch", "sojamilch", "mandelmilch", "kuhmilch", "vollmilch", "fettarme milch", "pflanzendrink"],
+  // Cream / Sahne / Frischkäse
+  ["sahne", "schlagsahne", "kochcreme", "hafersahne", "sojasahne", "creme fraiche", "crème fraîche", "schmand", "sauerrahm", "frischkäse"],
   // Hard cheese / Parmesan
   ["parmesan", "grana padano", "pecorino", "hartkäse"],
   // Grated / Melting cheese
   ["geriebener käse", "streukäse", "gouda", "mozzarella", "pizzakäse", "emmentaler", "cheddar"],
   // Rice varieties
-  ["basmatireis", "jasminreis", "langkornreis", "reis", "parboiled reis", "naturreis", "sushi-reis"],
+  ["basmatireis", "jasminreis", "langkornreis", "reis", "parboiled reis", "naturreis", "sushi-reis", "basmati reis"],
   // Pasta varieties
-  ["pasta", "nudeln", "spaghetti", "penne", "fusilli", "tagliatelle", "macaroni", "rigatoni"],
+  ["pasta", "nudeln", "spaghetti", "penne", "fusilli", "tagliatelle", "macaroni", "rigatoni", "calamarata", "paccheri"],
   // Minced meat
   ["hackfleisch", "rinderhack", "gemischtes hack", "tatar", "hackfleisch gemischt", "schweinehack"],
   // Poultry
-  ["hähnchen", "hähnchenbrust", "hähnchenbrustfilet", "huhn", "geflügel", "putenbrust", "pute"],
+  ["hähnchen", "hähnchenbrust", "hähnchenbrustfilet", "huhn", "geflügel", "putenbrust", "pute", "hähnchenschnitzel", "minuten-schnitzel"],
   // Sweetener / Sugar
   ["zucker", "rohrzucker", "brauner zucker", "puderzucker", "agavendicksaft", "ahornsirup", "honig"],
   // Flour
@@ -50,26 +52,26 @@ const EQUIVALENCE_GROUPS: string[][] = [
   // Vinegar
   ["essig", "balsamico", "aceto balsamico", "weißweinessig", "apfelessig", "rotweinessig"],
   // Soy sauce
-  ["sojasauce", "sojasoße", "shoyu", "tamari"],
+  ["sojasauce", "sojasoße", "shoyu", "tamari", "kikkoman"],
   // Eggs
   ["ei", "eier", "bio eier", "hühnerei", "hühnereier"],
+  // Peas
+  ["erbsen", "erbse", "tk-erbsen", "junge erbsen", "tiefkühlerbsen"],
 ];
 
-function areCulinaryEquivalents(ingA: string, ingB: string): boolean {
+export function areCulinaryEquivalents(ingA: string, ingB: string): boolean {
   if (!ingA || !ingB) return false;
   if (ingA === ingB) return true;
 
   const matchesGroupItem = (str: string, item: string): boolean => {
     if (str === item) return true;
-    // Word boundary or whole word check for short items (<= 4 chars, like "ei")
-    // Prevents "ei" from matching inside "fleisch" or "speiseöl"!
     if (item.length <= 4) {
       const words = str.split(/\s+/);
-      return words.includes(item);
+      return words.includes(item) || str === item;
     }
     const regex = new RegExp(`(^|\\s|-)${item}($|\\s|-)`, "i");
     if (regex.test(str)) return true;
-    if (str.endsWith(item) || str.startsWith(item)) return true;
+    if (str.endsWith(item) || str.startsWith(item) || str.includes(item)) return true;
     return false;
   };
 
@@ -81,6 +83,126 @@ function areCulinaryEquivalents(ingA: string, ingB: string): boolean {
     }
   }
   return false;
+}
+
+export const normalizeIngredientName = (str: string): string =>
+  str
+    .toLowerCase()
+    .replace(/\(.*?\)/g, "")
+    .replace(/\s+zum\s+(?:anbraten|braten|frittieren|kochen|backen|garnieren|verfeinern|dünsten|schmoren|servieren)\b/gi, "")
+    .replace(/\s+für\s+(?:die|das|den)\s+(?:sauce|soße|marinade|panade|dressing|glasur|garnitur)\b/gi, "")
+    .replace(/\s+nach\s+bedarf\b/gi, "")
+    .replace(/\s+nach\s+geschmack\b/gi, "")
+    .replace(/bio\s+/g, "")
+    .replace(/tk\s*[-]?/g, "")
+    .replace(/frisch[e|er|es]?\s+/g, "")
+    .replace(/kalt[e|er|es]?\s+/g, "")
+    .replace(/warme[s]?\s+/g, "")
+    .replace(/fein[e|er|es]?\s+/g, "")
+    .replace(/reine[s]?\s+/g, "")
+    .replace(/geröstete[s]?\s+/g, "")
+    .replace(/stark[e|er|es]?\s+/g, "")
+    .replace(/gehackt[e|er|es]?\s+/g, "")
+    .replace(/gewürfelt[e|er|es]?\s+/g, "")
+    .replace(/passiert[e|er|es]?\s+/g, "")
+    .replace(/stückig[e|er|es]?\s+/g, "")
+    .replace(/geschält[e|er|es]?\s+/g, "")
+    .replace(/geschnitten[e|er|es]?\s+/g, "")
+    .replace(/gerieben[e|er|es]?\s+/g, "")
+    .replace(/deutsche[r|s]?\s+/g, "")
+    .replace(/marken\s*/g, "")
+    .replace(/soße/g, "sauce")
+    .replace(/frühlingszwiebeln/g, "frühlingszwiebel")
+    .trim();
+
+export interface MatchedPantryResult {
+  pantryItem: { name: string; amount?: number; unit?: string; isUnlimited?: boolean };
+  matchedByAlternative?: string;
+}
+
+/**
+ * Finds the matching pantry item for any recipe ingredient,
+ * intelligently supporting alternatives (e.g. "Butter oder Öl", "Milch oder Wasser")
+ * and culinary equivalents (e.g. Sonnenblumenöl <-> Öl, Kirschtomaten <-> Cherrytomaten).
+ */
+export function findMatchingPantryItem(
+  ingredientName: string,
+  pantry: Array<{ name: string; amount?: number; unit?: string; isUnlimited?: boolean }>
+): MatchedPantryResult | null {
+  if (!ingredientName || !pantry || pantry.length === 0) return null;
+
+  const ingLower = ingredientName.toLowerCase();
+
+  // Water is always unlimited
+  if (ingLower.includes("wasser") || ingLower.includes("water") || ingLower.includes("leitung")) {
+    return {
+      pantryItem: { name: "Leitungswasser", amount: 999999, unit: "ml", isUnlimited: true },
+      matchedByAlternative: undefined,
+    };
+  }
+
+  // 1. Split ingredient into alternatives if phrased with " oder ", " / ", " bzw. "
+  // e.g. "Butter oder Öl" -> ["Butter", "Öl"]
+  // e.g. "Milch oder Wasser (für Cremigkeit)" -> ["Milch", "Wasser"]
+  const rawParts = ingredientName
+    .replace(/\(.*?\)/g, "")
+    .split(/\s+(?:oder|\/|bzw\.)\s+|\s*\/\s*/i)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const candidateNames = rawParts.length > 0 ? rawParts : [ingredientName];
+
+  for (const candidate of candidateNames) {
+    const candNorm = normalizeIngredientName(candidate);
+    if (!candNorm) continue;
+
+    // Check if candidate is water
+    if (candNorm.includes("wasser") || candNorm.includes("water") || candNorm.includes("leitung")) {
+      return {
+        pantryItem: { name: "Leitungswasser", amount: 999999, unit: "ml", isUnlimited: true },
+        matchedByAlternative: undefined,
+      };
+    }
+
+    // Direct / whole-word / compound match
+    let matched = pantry.find((p) => {
+      const pNorm = normalizeIngredientName(p.name);
+      if (!pNorm) return false;
+      if (pNorm === candNorm) return true;
+
+      const pWords = pNorm.split(/\s+/);
+      const candWords = candNorm.split(/\s+/);
+      if (pWords.length === 1 && candWords.includes(pNorm)) return true;
+      if (candWords.length === 1 && pWords.includes(candNorm)) return true;
+
+      // Suffix matching (e.g. "sonnenblumenöl" ends with "öl", "markenbutter" ends with "butter")
+      if (pNorm.endsWith(candNorm) || candNorm.endsWith(pNorm)) return true;
+
+      // Compound matching
+      if (candNorm.length >= 4 && pNorm.includes(candNorm)) return true;
+      if (pNorm.length >= 4 && candNorm.includes(pNorm)) return true;
+
+      return false;
+    });
+
+    // Smart culinary equivalence matching (e.g. Sonnenblumenöl <-> Öl/Olivenöl, Kirschtomaten <-> Cherrytomaten)
+    if (!matched) {
+      matched = pantry.find((p) => {
+        const pNorm = normalizeIngredientName(p.name);
+        return areCulinaryEquivalents(candNorm, pNorm);
+      });
+    }
+
+    if (matched) {
+      const isExact = normalizeIngredientName(matched.name) === normalizeIngredientName(ingredientName);
+      return {
+        pantryItem: matched,
+        matchedByAlternative: !isExact ? matched.name : undefined,
+      };
+    }
+  }
+
+  return null;
 }
 
 export function getRecipePantryBreakdown(
@@ -95,65 +217,13 @@ export function getRecipePantryBreakdown(
   const inStock: IngredientMatch[] = [];
   const missing: IngredientMatch[] = [];
 
-  const normalize = (str: string) =>
-    str
-      .toLowerCase()
-      .replace(/\(.*?\)/g, "")
-      .replace(/bio\s+/g, "")
-      .replace(/tk\s*[-]?/g, "")
-      .replace(/frisch[e|er|es]?\s+/g, "")
-      .replace(/kalt[e|er|es]?\s+/g, "")
-      .replace(/warme[s]?\s+/g, "")
-      .replace(/fein[e|er|es]?\s+/g, "")
-      .replace(/reine[s]?\s+/g, "")
-      .replace(/geröstete[s]?\s+/g, "")
-      .replace(/stark[e|er|es]?\s+/g, "")
-      .replace(/gehackt[e|er|es]?\s+/g, "")
-      .replace(/gewürfelt[e|er|es]?\s+/g, "")
-      .replace(/passiert[e|er|es]?\s+/g, "")
-      .replace(/stückig[e|er|es]?\s+/g, "")
-      .replace(/geschält[e|er|es]?\s+/g, "")
-      .replace(/geschnitten[e|er|es]?\s+/g, "")
-      .replace(/gerieben[e|er|es]?\s+/g, "")
-      .replace(/soße/g, "sauce")
-      .replace(/frühlingszwiebeln/g, "frühlingszwiebel")
-      .trim();
-
   for (const ing of allIngredients) {
-    const ingNorm = normalize(ing.name);
+    const match = findMatchingPantryItem(ing.name, pantry);
 
-    // 1. Direct or safe word/compound matching
-    let matchedPantry = pantry.find((p) => {
-      const pNorm = normalize(p.name);
-      if (!pNorm || !ingNorm) return false;
-      if (pNorm === ingNorm) return true;
-
-      // Safe whole-word matching
-      const pWords = pNorm.split(/\s+/);
-      const ingWords = ingNorm.split(/\s+/);
-      if (pWords.length === 1 && ingWords.includes(pNorm)) return true;
-      if (ingWords.length === 1 && pWords.includes(ingNorm)) return true;
-
-      // Safe compound matching for long meaningful words (>= 5 chars, e.g. "hackfleisch", "olivenöl", "basmatireis")
-      if (ingNorm.length >= 5 && pNorm.includes(ingNorm)) return true;
-      if (pNorm.length >= 5 && ingNorm.includes(pNorm)) return true;
-
-      return false;
-    });
-
-    // 2. Smart culinary equivalence matching (e.g. Cherrytomaten <-> Kirschtomaten, Olivenöl <-> Sonnenblumenöl)
-    if (!matchedPantry) {
-      matchedPantry = pantry.find((p) => {
-        const pNorm = normalize(p.name);
-        return areCulinaryEquivalents(ingNorm, pNorm);
-      });
-    }
-
-    if (matchedPantry) {
+    if (match) {
       inStock.push({
         ...ing,
-        matchedByAlternative:
-          normalize(matchedPantry.name) !== ingNorm ? matchedPantry.name : undefined,
+        matchedByAlternative: match.matchedByAlternative,
       });
     } else {
       missing.push(ing);

@@ -53,6 +53,14 @@ export function CookingModal({
   >([]);
 
   // Kitchen Timer state
+  const chatBottomRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (isAskModalOpen) {
+      chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [askHistory, isAsking, isAskModalOpen]);
+
   const [timerSeconds, setTimerSeconds] = useState(180); // 3 mins default
   const [initialTimerDuration, setInitialTimerDuration] = useState(180);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
@@ -204,9 +212,13 @@ export function CookingModal({
             background: "linear-gradient(135deg, #064e3b, #047857)",
             color: "white",
             borderBottom: "0",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "10px",
           }}
         >
-          <div>
+          <div style={{ flex: 1, minWidth: 0, paddingRight: "6px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "3px" }}>
               <span
                 style={{
@@ -226,14 +238,14 @@ export function CookingModal({
                 {recipe.time} · {recipe.difficulty}
               </span>
             </div>
-            <h2 style={{ color: "#ffffff", fontSize: "17px", margin: 0, fontWeight: 750 }}>
+            <h2 style={{ color: "#ffffff", fontSize: "16.5px", margin: 0, fontWeight: 750, lineHeight: 1.25 }}>
               {recipe.title}
             </h2>
-            <p style={{ margin: "2px 0 0", fontSize: "10px", color: "#d1fae5" }}>
+            <p style={{ margin: "2px 0 0", fontSize: "10px", color: "#d1fae5", lineHeight: 1.3 }}>
               {recipe.subtitle}
             </p>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 }}>
             {/* Ask about recipe button with star symbol */}
             <button
               type="button"
@@ -244,7 +256,7 @@ export function CookingModal({
                 borderRadius: "99px",
                 padding: "0 10px",
                 height: "32px",
-                display: "flex",
+                display: "inline-flex",
                 alignItems: "center",
                 gap: "5px",
                 cursor: "pointer",
@@ -252,11 +264,13 @@ export function CookingModal({
                 transition: "all 150ms ease",
                 fontSize: "11px",
                 fontWeight: 750,
+                whiteSpace: "nowrap",
+                flexShrink: 0,
               }}
               title="Ask about recipe"
             >
-              <span style={{ fontSize: "14px", color: "#facc15" }}>★</span>
-              <span>Ask about recipe</span>
+              <span style={{ fontSize: "13px", color: "#facc15" }}>★</span>
+              <span>Ask recipe</span>
             </button>
 
             {onToggleFavorite && (
@@ -772,10 +786,12 @@ export function CookingModal({
                           fontSize: "10px",
                           fontWeight: 700,
                           cursor: "pointer",
+                          whiteSpace: "nowrap",
+                          flexShrink: 0,
                         }}
                       >
                         <span style={{ color: "#d97706" }}>★</span>
-                        <span>Ask about recipe</span>
+                        <span>Ask recipe</span>
                       </button>
                     </div>
                   </div>
@@ -1185,6 +1201,7 @@ export function CookingModal({
                   gap: "12px",
                   background: "#f8fafc",
                   flex: 1,
+                  minHeight: "180px",
                 }}
               >
                 {/* Active Step Context Card */}
@@ -1279,7 +1296,7 @@ export function CookingModal({
                     display: "flex",
                     flexDirection: "column",
                     gap: "10px",
-                    minHeight: "120px",
+                    flex: 1,
                   }}
                 >
                   {askHistory.length === 0 ? (
@@ -1348,7 +1365,7 @@ export function CookingModal({
                             <span style={{ color: "#f59e0b", fontSize: "12px" }}>★</span>
                             <strong style={{ fontSize: "10.5px", color: "#0f172a" }}>Küchenchef Antwort</strong>
                           </div>
-                          <div>{item.answer}</div>
+                          <div style={{ whiteSpace: "pre-line" }}>{item.answer}</div>
                         </div>
                       </div>
                     ))
@@ -1373,9 +1390,21 @@ export function CookingModal({
                       <span>Chefkoch überlegt...</span>
                     </div>
                   )}
-                </div>
 
-                {/* Input Form */}
+                  {/* Auto-scroll anchor */}
+                  <div ref={chatBottomRef} />
+                </div>
+              </div>
+
+              {/* Pinned Input Form Bar (stays neatly docked above footer) */}
+              <div
+                style={{
+                  padding: "10px 14px",
+                  background: "#ffffff",
+                  borderTop: "1px solid #e2e8f0",
+                  flexShrink: 0,
+                }}
+              >
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
@@ -1384,22 +1413,23 @@ export function CookingModal({
                   style={{
                     display: "flex",
                     gap: "8px",
-                    marginTop: "4px",
+                    alignItems: "center",
                   }}
                 >
                   <input
                     type="text"
                     value={askInput}
                     onChange={(e) => setAskInput(e.target.value)}
-                    placeholder="Frage zu Zutaten, Alternativen oder Zubereitung stellen..."
+                    placeholder="Frage zu Zutaten, Alternativen oder Zubereitung..."
                     disabled={isAsking}
                     style={{
                       flex: 1,
                       padding: "9px 12px",
                       borderRadius: "10px",
                       border: "1px solid #cbd5e1",
-                      fontSize: "11.5px",
+                      fontSize: "12px",
                       outline: "none",
+                      background: "#f8fafc",
                     }}
                   />
                   <button
@@ -1407,6 +1437,7 @@ export function CookingModal({
                     disabled={!askInput.trim() || isAsking}
                     style={{
                       padding: "0 14px",
+                      height: "36px",
                       borderRadius: "10px",
                       background:
                         !askInput.trim() || isAsking
@@ -1417,9 +1448,11 @@ export function CookingModal({
                       fontWeight: 750,
                       fontSize: "11px",
                       cursor: !askInput.trim() || isAsking ? "not-allowed" : "pointer",
-                      display: "flex",
+                      display: "inline-flex",
                       alignItems: "center",
                       gap: "4px",
+                      whiteSpace: "nowrap",
+                      flexShrink: 0,
                     }}
                   >
                     <span>★</span>
@@ -1428,16 +1461,17 @@ export function CookingModal({
                 </form>
               </div>
 
-              {/* Dialog Footer */}
+              {/* Dialog Footer (pinned) */}
               <div
                 style={{
-                  padding: "12px 18px",
-                  background: "#ffffff",
+                  padding: "10px 18px",
+                  background: "#f8fafc",
                   borderTop: "1px solid #e2e8f0",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "space-between",
                   gap: "10px",
+                  flexShrink: 0,
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
@@ -1458,6 +1492,7 @@ export function CookingModal({
                     fontSize: "11px",
                     fontWeight: 750,
                     cursor: "pointer",
+                    whiteSpace: "nowrap",
                   }}
                 >
                   ← Zurück zum Kochen (Schritt {currentStepIndex + 1})

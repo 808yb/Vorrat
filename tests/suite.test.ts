@@ -1,6 +1,6 @@
 import { deduplicatePantry, formatMhdDisplay, getMhdStatus, getItemNutrientSpecs, type PantryItem } from "../src/App";
 import { parseReceiptFallback, calculateEstimatedMhd } from "../src/utils/receiptOcr";
-import { getRecipePantryBreakdown } from "../src/utils/pantryMatching";
+import { getRecipePantryBreakdown, findMatchingPantryItem } from "../src/utils/pantryMatching";
 import { FULL_RECIPE_CATALOG } from "../src/data/recipeCatalog";
 import { getFoodTone } from "../src/components/FoodIcons";
 import { findFoodNutrition, calculatePortionNutrition } from "../src/data/foodNutritionDatabase";
@@ -273,6 +273,52 @@ if (bologneseRecipe) {
   assert(boloFullBreakdown.matchPercentage === 100, "Bolognese matches 100% when all ingredients are in stock");
 }
 
+// Crucial: Test culinary alternative matching for "Butter oder Öl" with Butter or Sonnenblumenöl
+const ruehreiRecipe = FULL_RECIPE_CATALOG.find((r) => r.id === "r6");
+assert(Boolean(ruehreiRecipe), "Cremiges Sesam-Rührei auf Reis exists in catalog");
+
+if (ruehreiRecipe) {
+  // Test 1: User has only Sonnenblumenöl
+  const pantryWithOil: PantryItem[] = [
+    { id: 20, name: "Bio Eier", amount: 6, total: 10, unit: "Stk.", category: "Kühl", tone: "egg" },
+    { id: 21, name: "Basmati Reis", amount: 800, total: 1000, unit: "g", category: "Trocken", tone: "rice" },
+    { id: 22, name: "Frühlingszwiebeln", amount: 2, total: 2, unit: "Bund", category: "Gemüse", tone: "veg" },
+    { id: 23, name: "Sojasauce", amount: 250, total: 500, unit: "ml", category: "Saucen", tone: "sauce" },
+    { id: 24, name: "Sonnenblumenöl", amount: 750, total: 1000, unit: "ml", category: "Saucen", tone: "oil" },
+  ];
+  const bdOil = getRecipePantryBreakdown(ruehreiRecipe, pantryWithOil, 2);
+  const butterOelInStock = bdOil.inStock.some((i) => i.name.toLowerCase().includes("butter oder öl"));
+  assert(butterOelInStock, "'Butter oder Öl' is recognized as IN STOCK when user has Sonnenblumenöl in pantry");
+
+  // Test 2: User has only Markenbutter
+  const pantryWithButter: PantryItem[] = [
+    { id: 20, name: "Bio Eier", amount: 6, total: 10, unit: "Stk.", category: "Kühl", tone: "egg" },
+    { id: 21, name: "Basmati Reis", amount: 800, total: 1000, unit: "g", category: "Trocken", tone: "rice" },
+    { id: 22, name: "Frühlingszwiebeln", amount: 2, total: 2, unit: "Bund", category: "Gemüse", tone: "veg" },
+    { id: 23, name: "Sojasauce", amount: 250, total: 500, unit: "ml", category: "Saucen", tone: "sauce" },
+    { id: 25, name: "Deutsche Markenbutter", amount: 250, total: 250, unit: "g", category: "Kühl", tone: "dairy" },
+  ];
+  const bdButter = getRecipePantryBreakdown(ruehreiRecipe, pantryWithButter, 2);
+  const butterInStock = bdButter.inStock.some((i) => i.name.toLowerCase().includes("butter oder öl"));
+  assert(butterInStock, "'Butter oder Öl' is recognized as IN STOCK when user has Deutsche Markenbutter in pantry");
+
+  // Test 3: Water alternative "Milch oder Wasser" is always covered
+  const waterCovered = bdOil.inStock.some((i) => i.name.toLowerCase().includes("milch oder wasser"));
+  assert(waterCovered, "'Milch oder Wasser' is recognized as IN STOCK via always-available water");
+
+  // Test 4: Mayo <-> Mayonnaise alternative matching
+  const mayoMatch = findMatchingPantryItem("Mayonnaise", [{ name: "Mayo" }]);
+  assert(Boolean(mayoMatch), "Mayonnaise is recognized as IN STOCK when user has 'Mayo' in pantry");
+
+  // Test 5: Pflanzenöl zum Frittieren <-> Sonnenblumenöl alternative matching
+  const oilMatchFrit = findMatchingPantryItem("Pflanzenöl zum Frittieren", [{ name: "Sonnenblumenöl" }]);
+  assert(Boolean(oilMatchFrit), "Pflanzenöl zum Frittieren is recognized as IN STOCK when user has 'Sonnenblumenöl' in pantry");
+
+  // Test 6: Pflanzenöl zum Anbraten <-> Sonnenblumenöl alternative matching
+  const oilMatchBrat = findMatchingPantryItem("Pflanzenöl zum Anbraten", [{ name: "Sonnenblumenöl" }]);
+  assert(Boolean(oilMatchBrat), "Pflanzenöl zum Anbraten is recognized as IN STOCK when user has 'Sonnenblumenöl' in pantry");
+}
+
 // -----------------------------------------------------------------------------
 // TEST SUITE 7: BLS/USDA FOOD NUTRITION DATABASE & REALISTIC MACROS
 // -----------------------------------------------------------------------------
@@ -500,6 +546,97 @@ const hitzeAnswer = await askAboutRecipeWithGemini("Welche Hitze soll ich am Her
   stepTitle: "Fleisch anbraten",
 });
 assert(hitzeAnswer.includes("Stufe") || hitzeAnswer.includes("Hitze"), "Recommends clear stove temperature and heat settings");
+
+const pastaAnswer = await askAboutRecipeWithGemini("Kann ich andere Nudeln Art machen?", {
+  recipeTitle: "Cremige Calamarata mit Hähnchen & Kirschtomaten",
+  stepNumber: 1,
+  stepTitle: "Pasta kochen & Vorbereitung",
+  stepInstruction: "Calamarata Pasta in reichlich kochendem Salzwasser al dente garen.",
+});
+assert(
+  pastaAnswer.toLowerCase().includes("penne") ||
+  pastaAnswer.toLowerCase().includes("paccheri") ||
+  pastaAnswer.toLowerCase().includes("rigatoni") ||
+  pastaAnswer.toLowerCase().includes("nudel") ||
+  pastaAnswer.toLowerCase().includes("pasta"),
+  "Provides specific culinary advice for pasta varieties (Penne, Paccheri, Rigatoni)"
+);
+
+// -----------------------------------------------------------------------------
+// TEST SUITE 13: RECIPE IMPORT PRESERVATION, ALTERNATIVES & RECIPE EDITING
+// -----------------------------------------------------------------------------
+console.log("\n🍲 13. Testing Recipe Import Ingredient Preservation & Recipe Editing...");
+
+const imported16Ingredients = [
+  { name: "Honig", baseAmountPerPortion: 1, unit: "EL", optional: false },
+  { name: "Chilisauce oder Chiliflocken", baseAmountPerPortion: 0.5, unit: "TL", optional: false },
+  { name: "Mayonnaise", baseAmountPerPortion: 1, unit: "EL", optional: false },
+  { name: "Sauerrahm", baseAmountPerPortion: 0.5, unit: "EL", optional: false },
+  { name: "Gehackte Petersilie", baseAmountPerPortion: 0.5, unit: "TL", optional: false },
+  { name: "Brioche-Burgerbrötchen", baseAmountPerPortion: 1, unit: "Stk.", optional: false },
+  { name: "Gewürzgurkenscheiben", baseAmountPerPortion: 2, unit: "Stk.", optional: false },
+  { name: "Pflanzenöl zum Frittieren", baseAmountPerPortion: 75, unit: "ml", optional: false },
+  { name: "Hähnchenbrustfilet", baseAmountPerPortion: 125, unit: "g", optional: false },
+  { name: "Buttermilch", baseAmountPerPortion: 50, unit: "ml", optional: false },
+  { name: "Mehl", baseAmountPerPortion: 40, unit: "g", optional: false },
+  { name: "Speisestärke", baseAmountPerPortion: 10, unit: "g", optional: false },
+  { name: "Paprikapulver", baseAmountPerPortion: 0.5, unit: "TL", optional: false },
+  { name: "Knoblauchpulver", baseAmountPerPortion: 0.5, unit: "TL", optional: false },
+  { name: "Salz", baseAmountPerPortion: 0.5, unit: "TL", optional: false },
+  { name: "Pfeffer", baseAmountPerPortion: 0.5, unit: "TL", optional: false },
+];
+
+const mockImportedRecipe = {
+  id: "video-test-123",
+  title: "Crispy Hot Honey Chicken Burger",
+  subtitle: "Extra knuspriges Buttermilch-Hähnchen mit würziger Honig-Chili-Glasur",
+  rawIngredients: imported16Ingredients,
+  ingredients: imported16Ingredients,
+  steps: [{ stepNumber: 1, title: "Marinieren", instruction: "Hähnchen marinieren" }],
+};
+
+// 1. Test rehydration retains all 16 ingredients
+const rehydratedImport = rehydrateRecipe(mockImportedRecipe);
+const rehydratedList = rehydratedImport.ingredientsList(2);
+assert(rehydratedList.length === 16, `Rehydrating imported recipe preserves all 16 ingredients (found ${rehydratedList.length})`);
+assert(rehydratedList.some((i) => i.name === "Mayonnaise"), "Mayonnaise is preserved in rehydrated recipe");
+assert(rehydratedList.some((i) => i.name === "Pflanzenöl zum Frittieren"), "Pflanzenöl zum Frittieren is preserved in rehydrated recipe");
+
+// 2. Test pantry breakdown with user's pantry (has Mayo and Sonnenblumenöl)
+const userPantry: PantryItem[] = [
+  { id: 100, name: "Mayo", category: "Saucen", amount: 250, total: 250, unit: "ml", tone: "sauce" },
+  { id: 101, name: "Sonnenblumenöl", category: "Saucen", amount: 1000, total: 1000, unit: "ml", tone: "oil" },
+  { id: 102, name: "Honig", category: "Süßes", amount: 500, total: 500, unit: "g", tone: "sweet" },
+  { id: 103, name: "Hähnchenbrustfilet", category: "Kühl", amount: 500, total: 500, unit: "g", tone: "meat" },
+];
+
+const breakdown = getRecipePantryBreakdown(rehydratedImport, userPantry, 2);
+const mayoInStock = breakdown.inStock.some((i) => i.name === "Mayonnaise");
+assert(mayoInStock, "Mayonnaise is recognized as IN STOCK via 'Mayo' in breakdown");
+
+const oilInStock = breakdown.inStock.some((i) => i.name === "Pflanzenöl zum Frittieren");
+assert(oilInStock, "Pflanzenöl zum Frittieren is recognized as IN STOCK via 'Sonnenblumenöl' in breakdown");
+
+const missingCount = breakdown.missing.length;
+assert(missingCount === 12, `Correctly identifies 12 missing ingredients out of 16 (found ${missingCount})`);
+assert(breakdown.missing.some((i) => i.name === "Brioche-Burgerbrötchen"), "Brioche-Burgerbrötchen is correctly identified as missing");
+
+// 3. Test recipe editing (e.g. adding Pilze to recipe)
+const editedIngredients = [
+  ...imported16Ingredients,
+  { name: "Frische Champignons (Pilze)", baseAmountPerPortion: 75, unit: "g", optional: false },
+];
+const editedRecipe = {
+  ...mockImportedRecipe,
+  title: "Crispy Hot Honey Chicken Burger mit Pilzen",
+  rawIngredients: editedIngredients,
+  ingredients: editedIngredients,
+};
+const rehydratedEdited = rehydrateRecipe(editedRecipe);
+const editedList = rehydratedEdited.ingredientsList(2);
+assert(editedList.length === 17, `Edited recipe has 17 ingredients (found ${editedList.length})`);
+const pilzeItem = editedList.find((i) => i.name.includes("Pilze"));
+assert(Boolean(pilzeItem && pilzeItem.amount === "150 g"), "Added Pilze scaled to 150 g for 2 portions");
 
 // -----------------------------------------------------------------------------
 // SUMMARY
