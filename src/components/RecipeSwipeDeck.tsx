@@ -81,21 +81,58 @@ function SwipeCardContent({
               Suchergebnis
             </span>
           )}
-          {recipe.matchScore !== undefined ? (
-            recipe.matchScore >= 60 ? (
-              <span className="swipe-match-badge">{recipe.matchScore}% Vorrats-Match</span>
-            ) : recipe.matchScore > 0 ? (
-              <span className="swipe-match-badge" style={{ background: "#fffbeb", color: "#b45309", borderColor: "#fde68a" }}>
-                {recipe.matchScore}% Vorrats-Match
+          {/* Vorrats-Match Badge directly reflecting real pantry state */}
+          {(() => {
+            const actualScore = breakdown.matchPercentage;
+            if (actualScore === 100) {
+              return (
+                <span
+                  className="swipe-match-badge"
+                  style={{
+                    background: "#ecfdf5",
+                    color: "#065f46",
+                    borderColor: "#a7f3d0",
+                    fontWeight: 750,
+                  }}
+                >
+                  ✓ 100% Vorrat da
+                </span>
+              );
+            }
+            if (actualScore >= 60) {
+              return (
+                <span className="swipe-match-badge">
+                  {actualScore}% Vorrats-Match
+                </span>
+              );
+            }
+            if (actualScore > 0) {
+              return (
+                <span
+                  className="swipe-match-badge"
+                  style={{
+                    background: "#fffbeb",
+                    color: "#b45309",
+                    borderColor: "#fde68a",
+                  }}
+                >
+                  {actualScore}% Match · {breakdown.missing.length} fehlt
+                </span>
+              );
+            }
+            return (
+              <span
+                className="swipe-match-badge"
+                style={{
+                  background: "#fef2f2",
+                  color: "#b91c1c",
+                  borderColor: "#fecaca",
+                }}
+              >
+                Zutaten fehlen ({breakdown.missing.length})
               </span>
-            ) : (
-              <span className="swipe-match-badge" style={{ background: "#fef2f2", color: "#b91c1c", borderColor: "#fecaca" }}>
-                Zutaten einkaufen
-              </span>
-            )
-          ) : (
-            <span className="swipe-match-badge">98% Vorrats-Match</span>
-          )}
+            );
+          })()}
           <span className="swipe-time-badge">{recipe.time}</span>
         </div>
 

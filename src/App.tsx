@@ -1199,9 +1199,18 @@ function CookScreen({
         }
       }
 
+      // Heavy weight to real pantry availability:
+      // 100% matched recipes get +10 boost to always appear at the top!
+      let pantryScore = matchPct * 5;
+      if (breakdown.missing.length === 0 && breakdown.inStock.length > 0) {
+        pantryScore += 10;
+      } else if (breakdown.missing.length >= 3) {
+        pantryScore -= 3;
+      }
+
       // Rotational hash with time slot variance to cycle top recipes 3× a day
       const variance = ((origIdx * 23 + timeSlotBonusOffset) % 100) / 350;
-      return { rec, score: matchPct + slotBonus + variance };
+      return { rec, score: pantryScore + slotBonus + variance };
     });
 
     scored.sort((a, b) => b.score - a.score);
@@ -1232,26 +1241,25 @@ function CookScreen({
       ? [activeSearchedRecipe, ...catalogShuffleList.filter((r) => r.id !== activeSearchedRecipe.id)]
       : catalogShuffleList;
 
-    return deckList.map((item) => ({
-      ...item,
-      calories: `${Math.round(item.baseCal)}`,
-      protein: `${Math.round(item.baseProt)}g`,
-      carbs: `${Math.round(item.baseCarb)}g`,
-      cost: `${item.baseCost.toFixed(2).replace(".", ",")} €`,
-      availableFormatted: typeof item.available === "function" ? item.available(servings) : getSafeAvailable(item, servings),
-    }));
-  }, [activeSearchedRecipe, catalogShuffleList, servings]);
+    return deckList.map((item) => {
+      const breakdown = getRecipePantryBreakdown(item, pantry, servings);
+      return {
+        ...item,
+        matchScore: breakdown.matchPercentage,
+        missingCount: breakdown.missing.length,
+        calories: `${Math.round(item.baseCal)}`,
+        protein: `${Math.round(item.baseProt)}g`,
+        carbs: `${Math.round(item.baseCarb)}g`,
+        cost: `${item.baseCost.toFixed(2).replace(".", ",")} €`,
+        availableFormatted: typeof item.available === "function" ? item.available(servings) : getSafeAvailable(item, servings),
+      };
+    });
+  }, [activeSearchedRecipe, catalogShuffleList, servings, pantry]);
 
   // Calculate missing ingredient counts for every recipe in the catalog
   const recipesWithStockStats = useMemo(() => {
-    return allCatalogRecipesFormatted.map((rec) => {
-      const breakdown = getRecipePantryBreakdown(rec, pantry, servings);
-      return {
-        ...rec,
-        missingCount: breakdown.missing.length,
-      };
-    });
-  }, [allCatalogRecipesFormatted, pantry, servings]);
+    return allCatalogRecipesFormatted;
+  }, [allCatalogRecipesFormatted]);
 
   const perfectStockCount = useMemo(() => {
     return recipesWithStockStats.filter((r) => r.missingCount === 0).length;
@@ -1270,8 +1278,8 @@ function CookScreen({
       const filtered = recipesWithStockStats.filter((r) => r.missingCount <= 2);
       return filtered.length > 0 ? filtered : recipesWithStockStats;
     }
-    return allCatalogRecipesFormatted;
-  }, [stockFilter, recipesWithStockStats, allCatalogRecipesFormatted]);
+    return recipesWithStockStats;
+  }, [stockFilter, recipesWithStockStats]);
 
 
 

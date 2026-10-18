@@ -244,6 +244,35 @@ if (friedRice) {
   assert(breakdown.inStock.length > 0, `Identified available ingredients in stock (${breakdown.inStock.length})`);
 }
 
+// Crucial: Test that 'Gehackte Tomaten' NEVER falsely matches 'Hackfleisch'
+const bologneseRecipe = FULL_RECIPE_CATALOG.find((r) => r.id === "r11");
+assert(Boolean(bologneseRecipe), "Klassische Pasta Bolognese exists in catalog");
+
+if (bologneseRecipe) {
+  const pantryWithTomatoesNoMeat: PantryItem[] = [
+    { id: 10, name: "Spaghetti", amount: 500, total: 500, unit: "g", category: "Trocken", tone: "pasta" },
+    { id: 11, name: "Gehackte Tomaten", amount: 400, total: 400, unit: "g", category: "Konserven", tone: "tomato" },
+    { id: 12, name: "Olivenöl", amount: 250, total: 500, unit: "ml", category: "Saucen", tone: "oil" },
+  ];
+
+  const boloBreakdown = getRecipePantryBreakdown(bologneseRecipe, pantryWithTomatoesNoMeat, 2);
+  const hackMissing = boloBreakdown.missing.some((m) => m.name.toLowerCase().includes("hackfleisch"));
+  assert(hackMissing, "Rinderhackfleisch is correctly marked as MISSING when only 'Gehackte Tomaten' is in pantry");
+  assert(boloBreakdown.matchPercentage < 60, `Bolognese match is accurate (${boloBreakdown.matchPercentage}%) and not falsely 98%`);
+
+  // Now add real Hackfleisch
+  const pantryWithRealMeat: PantryItem[] = [
+    ...pantryWithTomatoesNoMeat,
+    { id: 13, name: "Rinderhackfleisch", amount: 500, total: 500, unit: "g", category: "Kühl", tone: "meat" },
+    { id: 14, name: "Zwiebeln", amount: 3, total: 5, unit: "Stk.", category: "Gemüse", tone: "veg" },
+    { id: 15, name: "Knoblauch", amount: 1, total: 1, unit: "Knolle", category: "Gemüse", tone: "veg" },
+  ];
+  const boloFullBreakdown = getRecipePantryBreakdown(bologneseRecipe, pantryWithRealMeat, 2);
+  const hackInStock = boloFullBreakdown.inStock.some((m) => m.name.toLowerCase().includes("hackfleisch"));
+  assert(hackInStock, "Rinderhackfleisch is correctly marked as IN STOCK when user has Hackfleisch");
+  assert(boloFullBreakdown.matchPercentage === 100, "Bolognese matches 100% when all ingredients are in stock");
+}
+
 // -----------------------------------------------------------------------------
 // TEST SUITE 7: BLS/USDA FOOD NUTRITION DATABASE & REALISTIC MACROS
 // -----------------------------------------------------------------------------

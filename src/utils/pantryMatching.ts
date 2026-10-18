@@ -40,7 +40,7 @@ const EQUIVALENCE_GROUPS: string[][] = [
   // Pasta varieties
   ["pasta", "nudeln", "spaghetti", "penne", "fusilli", "tagliatelle", "macaroni", "rigatoni"],
   // Minced meat
-  ["hackfleisch", "rinderhack", "gemischtes hack", "tatar", "hack"],
+  ["hackfleisch", "rinderhack", "gemischtes hack", "tatar", "hackfleisch gemischt", "schweinehack"],
   // Poultry
   ["hähnchen", "hähnchenbrust", "hähnchenbrustfilet", "huhn", "geflügel", "putenbrust", "pute"],
   // Sweetener / Sugar
@@ -56,9 +56,26 @@ const EQUIVALENCE_GROUPS: string[][] = [
 ];
 
 function areCulinaryEquivalents(ingA: string, ingB: string): boolean {
+  if (!ingA || !ingB) return false;
+  if (ingA === ingB) return true;
+
+  const matchesGroupItem = (str: string, item: string): boolean => {
+    if (str === item) return true;
+    // Word boundary or whole word check for short items (<= 4 chars, like "ei")
+    // Prevents "ei" from matching inside "fleisch" or "speiseöl"!
+    if (item.length <= 4) {
+      const words = str.split(/\s+/);
+      return words.includes(item);
+    }
+    const regex = new RegExp(`(^|\\s|-)${item}($|\\s|-)`, "i");
+    if (regex.test(str)) return true;
+    if (str.endsWith(item) || str.startsWith(item)) return true;
+    return false;
+  };
+
   for (const group of EQUIVALENCE_GROUPS) {
-    const hasA = group.some((item) => ingA.includes(item) || item.includes(ingA));
-    const hasB = group.some((item) => ingB.includes(item) || item.includes(ingB));
+    const hasA = group.some((item) => matchesGroupItem(ingA, item));
+    const hasB = group.some((item) => matchesGroupItem(ingB, item));
     if (hasA && hasB) {
       return true;
     }
@@ -91,6 +108,13 @@ export function getRecipePantryBreakdown(
       .replace(/reine[s]?\s+/g, "")
       .replace(/geröstete[s]?\s+/g, "")
       .replace(/stark[e|er|es]?\s+/g, "")
+      .replace(/gehackt[e|er|es]?\s+/g, "")
+      .replace(/gewürfelt[e|er|es]?\s+/g, "")
+      .replace(/passiert[e|er|es]?\s+/g, "")
+      .replace(/stückig[e|er|es]?\s+/g, "")
+      .replace(/geschält[e|er|es]?\s+/g, "")
+      .replace(/geschnitten[e|er|es]?\s+/g, "")
+      .replace(/gerieben[e|er|es]?\s+/g, "")
       .replace(/soße/g, "sauce")
       .replace(/frühlingszwiebeln/g, "frühlingszwiebel")
       .trim();
@@ -98,12 +122,22 @@ export function getRecipePantryBreakdown(
   for (const ing of allIngredients) {
     const ingNorm = normalize(ing.name);
 
-    // 1. Direct or substring matching
+    // 1. Direct or safe word/compound matching
     let matchedPantry = pantry.find((p) => {
       const pNorm = normalize(p.name);
+      if (!pNorm || !ingNorm) return false;
       if (pNorm === ingNorm) return true;
-      if (ingNorm.length >= 3 && pNorm.includes(ingNorm)) return true;
-      if (pNorm.length >= 3 && ingNorm.includes(pNorm)) return true;
+
+      // Safe whole-word matching
+      const pWords = pNorm.split(/\s+/);
+      const ingWords = ingNorm.split(/\s+/);
+      if (pWords.length === 1 && ingWords.includes(pNorm)) return true;
+      if (ingWords.length === 1 && pWords.includes(ingNorm)) return true;
+
+      // Safe compound matching for long meaningful words (>= 5 chars, e.g. "hackfleisch", "olivenöl", "basmatireis")
+      if (ingNorm.length >= 5 && pNorm.includes(ingNorm)) return true;
+      if (pNorm.length >= 5 && ingNorm.includes(pNorm)) return true;
+
       return false;
     });
 

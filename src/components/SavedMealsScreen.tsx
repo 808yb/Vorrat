@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { FULL_RECIPE_CATALOG, type CatalogRecipe } from "../data/recipeCatalog";
 import { type PantryItem } from "../App";
 import { CookingModal } from "./CookingModal";
+import { getRecipePantryBreakdown } from "../utils/pantryMatching";
 import { getSafeIngredientsList, getSafeSteps } from "../utils/recipeHelpers";
 import { resolveRecipeFoodImage } from "../utils/geminiRecipes";
 import { type WeekdayId } from "./WeeklyMealPlannerScreen";
@@ -240,7 +241,16 @@ export function SavedMealsScreen({
             {/* Card Header & Visual */}
             <div className={`saved-card-hero ${activeRecipe.tone}`}>
               <div className="saved-hero-meta-top">
-                <span className="saved-match-pill">{activeRecipe.matchScore ? `${activeRecipe.matchScore}% Match` : "98% Vorrats-Match"}</span>
+                {(() => {
+                  const activeBreakdown = getRecipePantryBreakdown(activeRecipe, pantry || [], servings);
+                  return (
+                    <span className="saved-match-pill">
+                      {activeBreakdown.matchPercentage === 100
+                        ? "✓ 100% Vorrat da"
+                        : `${activeBreakdown.matchPercentage}% Vorrats-Match`}
+                    </span>
+                  );
+                })()}
                 <button
                   type="button"
                   className="saved-unbookmark-btn"
@@ -518,7 +528,12 @@ export function SavedMealsScreen({
                       }}
                     />
                     <span className="saved-grid-match-badge">
-                      {recipe.matchScore ? `${recipe.matchScore}% Match` : "98% Match"}
+                      {(() => {
+                        const cardBreakdown = getRecipePantryBreakdown(recipe, pantry || [], servings);
+                        return cardBreakdown.matchPercentage === 100
+                          ? "100% Vorrat"
+                          : `${cardBreakdown.matchPercentage}% Match`;
+                      })()}
                     </span>
                     {timesCooked > 0 && (
                       <span className="saved-grid-cooked-badge">Gekocht ✓</span>
