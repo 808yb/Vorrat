@@ -1092,3 +1092,78 @@ Antworte AUSSCHLIESSLICH mit gültigem JSON im folgenden Schema ohne Markdown-Fo
   };
 }
 
+export interface AskRecipeContext {
+  recipeTitle: string;
+  stepNumber?: number;
+  stepTitle?: string;
+  stepInstruction?: string;
+  ingredientsSummary?: string;
+  servings?: number;
+  pantrySummary?: string;
+}
+
+export async function askAboutRecipeWithGemini(
+  question: string,
+  context: AskRecipeContext
+): Promise<string> {
+  const q = question.trim().toLowerCase();
+
+  // 1. Try Gemini AI first if API key is present
+  const apiKey = getGeminiApiKey();
+  if (apiKey) {
+    try {
+      const ai = new GoogleGenAI({ apiKey });
+      const prompt = `Du bist ein erfahrener, sympathischer Küchenchef in einer smarten Koch-App.
+Der Nutzer kocht gerade folgendes Rezept:
+- Gericht: "${context.recipeTitle}"
+- Aktueller Schritt (${context.stepNumber ? `Schritt ${context.stepNumber}` : "Aktuell"}): "${context.stepTitle || "Zubereitung"}"
+- Anweisung: "${context.stepInstruction || "Zutaten zubereiten"}"
+- Zutaten (für ${context.servings || 2} Personen): ${context.ingredientsSummary || "Standardzutaten"}
+${context.pantrySummary ? `- Vorrat des Nutzers: ${context.pantrySummary}` : ""}
+
+Frage des Nutzers:
+"${question}"
+
+ANWEISUNG AN DICH ALS CHEFKOCH:
+1. Antworte sofort direkt und praxisnah auf Deutsch. Maximal 2 bis 4 kurze Sätze.
+2. Wenn der Nutzer nach Gewürz vs. Pesto fragt (z. B. Basilikum): Kläre auf, was das Original meint (z. B. frische Blätter oder getrocknetes Gewürz) und wie Pesto stattdessen dosiert werden kann (z. B. 1–2 TL Pesto, Salz dann reduzieren).
+3. Wenn nach Alternativen gefragt wird: Nenne konkrete Vorrats-Substituten.
+4. Wenn nach Hitze, Garzeit oder Konsistenz gefragt wird: Gib präzise Herd-Stufen oder Minuten an.
+5. Kein langes Vorgeplänkel, direkt die Lösung für die Küche.`;
+
+      const resp = await ai.models.generateContent({
+        model: "gemini-2.5-flash-lite",
+        contents: prompt,
+        config: {
+          temperature: 0.3,
+        },
+      });
+
+      const text = resp.text?.trim();
+      if (text) return text;
+    } catch (err) {
+      console.warn("[askAboutRecipeWithGemini] Gemini error, using smart fallback:", err);
+    }
+  }
+
+  // 2. Intelligent culinary rule-based fallback
+  if (q.includes("basilikum") || q.includes("pesto") || q.includes("gewürz") || q.includes("gewurz")) {
+    return "Im Rezept ist standardmäßig frisches Basilikum (oder alternativ getrocknetes Basilikum-Gewürz) gemeint. Wenn du Basilikum-Pesto da hast, kannst du wunderbar 1–2 TL Pesto unterrühren – das verleiht eine herrlich aromatische, nussige Note. Reduziere dann etwas das zusätzliche Salz, da Pesto bereits gewürzt ist!";
+  }
+
+  if (q.includes("ersatz") || q.includes("ersetzen") || q.includes("alternative") || q.includes("kein") || q.includes("fehlt")) {
+    return "Kein Problem: Sahne kannst du durch Milch mit 1 TL Butter oder etwas Frischkäse ersetzen; frische Zwiebeln durch Schalotten oder Lauch; Tomaten durch passierte Tomaten oder Paprika. Das Gericht gelingt trotzdem hervorragend!";
+  }
+
+  if (q.includes("hitze") || q.includes("temperatur") || q.includes("stufe") || q.includes("anbraten") || q.includes("kochen")) {
+    return "Für das Anbraten (z. B. Fleisch oder Zwiebeln) wähle mittlere bis hohe Hitze (Stufe 7 von 9), um Röstaromen zu bekommen. Sobald Sauce oder Flüssigkeit dazukommt, auf kleine Hitze (Stufe 3–4) herunterschalten und sanft ziehen lassen.";
+  }
+
+  if (q.includes("dauer") || q.includes("lange") || q.includes("zeit") || q.includes("wann fertig")) {
+    return `Orientier dich an ca. ${context.stepInstruction?.match(/\d+\s*Min/)?.[0] || "3-5 Minuten"}. Das Gericht ist fertig, wenn die Textur cremig ist und alles heiß durchgezogen ist.`;
+  }
+
+  return `Für «${context.recipeTitle}» bei Schritt «${context.stepTitle || "Zubereitung"}»: Halte die Hitze moderat und schmecke zwischendurch mit einer Prise Salz und Pfeffer ab. Die Zutaten verbinden sich am besten, wenn du sie bei sanfter Hitze 1–2 Minuten durchziehen lässt!`;
+}
+
+

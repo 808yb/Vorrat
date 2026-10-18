@@ -38,6 +38,7 @@ export function SavedMealsScreen({
   const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(initialRecipeId || null);
   const [completedSteps, setCompletedSteps] = useState<Record<string, Record<number, boolean>>>({});
   const [activeModalRecipe, setActiveModalRecipe] = useState<CatalogRecipe | null>(null);
+  const [openAskDirectly, setOpenAskDirectly] = useState<boolean>(false);
   const [cookedRecipeTitles, setCookedRecipeTitles] = useState<Record<string, number>>({});
   const [isDetailsCollapsed, setIsDetailsCollapsed] = useState<boolean>(false);
 
@@ -399,9 +400,36 @@ export function SavedMealsScreen({
                       <section className="saved-section-block interactive-cooking-section">
                         <div className="section-block-title">
                           <h3>Interaktiver Koch-Modus</h3>
-                          <span className="step-counter-pill">
-                            {Object.values(completedSteps[activeRecipe.id] || {}).filter(Boolean).length} / {safeSteps.length} erledigt
-                          </span>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveModalRecipe(activeRecipe);
+                                setOpenAskDirectly(true);
+                              }}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "4px",
+                                background: "#fffbeb",
+                                border: "1px solid #fde68a",
+                                color: "#b45309",
+                                padding: "3px 9px",
+                                borderRadius: "99px",
+                                fontSize: "11px",
+                                fontWeight: 750,
+                                cursor: "pointer",
+                                transition: "all 150ms ease",
+                              }}
+                              title="Ask about recipe"
+                            >
+                              <span style={{ color: "#d97706", fontSize: "12px" }}>★</span>
+                              <span>Ask about recipe</span>
+                            </button>
+                            <span className="step-counter-pill">
+                              {Object.values(completedSteps[activeRecipe.id] || {}).filter(Boolean).length} / {safeSteps.length} erledigt
+                            </span>
+                          </div>
                         </div>
 
                         <div className="saved-steps-list">
@@ -539,10 +567,14 @@ export function SavedMealsScreen({
       <CookingModal
         recipe={activeModalRecipe}
         isOpen={Boolean(activeModalRecipe)}
-        onClose={() => setActiveModalRecipe(null)}
+        onClose={() => {
+          setActiveModalRecipe(null);
+          setOpenAskDirectly(false);
+        }}
         onCook={onCook}
         initialServings={servings}
         pantry={pantry}
+        initialOpenAsk={openAskDirectly}
       />
     </main>
   );

@@ -5,7 +5,7 @@ import { FULL_RECIPE_CATALOG } from "../src/data/recipeCatalog";
 import { getFoodTone } from "../src/components/FoodIcons";
 import { findFoodNutrition, calculatePortionNutrition } from "../src/data/foodNutritionDatabase";
 import { getSafeIngredientsList, getSafeSteps, getSafeAvailable, rehydrateRecipe, getCurrentMealTimeSlot } from "../src/utils/recipeHelpers";
-import { extractIngredientsFromDishText, resolveRecipeFoodImage } from "../src/utils/geminiRecipes";
+import { extractIngredientsFromDishText, resolveRecipeFoodImage, askAboutRecipeWithGemini } from "../src/utils/geminiRecipes";
 
 let passedCount = 0;
 let failedCount = 0;
@@ -443,6 +443,34 @@ assert(calamarataImg.includes("unsplash.com"), "Resolved high-res Unsplash image
 
 const pastaImg = resolveRecipeFoodImage("Penne Primavera");
 assert(pastaImg.includes("unsplash.com"), "Resolved high-res Unsplash image for Primavera");
+
+// -----------------------------------------------------------------------------
+// TEST SUITE 12: INTERACTIVE COOKING "ASK ABOUT RECIPE" CHEF AI & FALLBACKS
+// -----------------------------------------------------------------------------
+console.log("\n★ 12. Testing 'Ask About Recipe' Kitchen Assistant (Basilikum, Substitutions, Heat)...");
+
+const basilikumAnswer = await askAboutRecipeWithGemini("Basilikum einrühren: Ist Gewürz oder Pesto gemeint?", {
+  recipeTitle: "Mediterrane Pasta Al Gusto",
+  stepNumber: 3,
+  stepTitle: "Aromen verbinden & Basilikum einrühren",
+  stepInstruction: "Basilikum unter die heiße Pasta rühren und warm servieren.",
+});
+assert(basilikumAnswer.toLowerCase().includes("pesto") && basilikumAnswer.toLowerCase().includes("gewürz"), "Basilikum query clarifies spice vs. pesto distinction");
+assert(basilikumAnswer.includes("1–2 TL"), "Provides concrete dosage advice for pesto substitute");
+
+const ersatzAnswer = await askAboutRecipeWithGemini("Habe keine Sahne, was kann ich als Ersatz nehmen?", {
+  recipeTitle: "Cremige Pasta",
+  stepNumber: 2,
+  stepTitle: "Sauce zubereiten",
+});
+assert(ersatzAnswer.toLowerCase().includes("milch") || ersatzAnswer.toLowerCase().includes("frischkäse"), "Provides realistic pantry substitutes for missing cream");
+
+const hitzeAnswer = await askAboutRecipeWithGemini("Welche Hitze soll ich am Herd einstellen?", {
+  recipeTitle: "Knuspriges Wok-Hähnchen",
+  stepNumber: 1,
+  stepTitle: "Fleisch anbraten",
+});
+assert(hitzeAnswer.includes("Stufe") || hitzeAnswer.includes("Hitze"), "Recommends clear stove temperature and heat settings");
 
 // -----------------------------------------------------------------------------
 // SUMMARY
