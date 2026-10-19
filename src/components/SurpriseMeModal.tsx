@@ -191,8 +191,6 @@ export function SurpriseMeModal({
   const [selectedEquipment, setSelectedEquipment] = useState<string[]>(["pan"]);
   const [pickedRecipe, setPickedRecipe] = useState<CatalogRecipe | null>(null);
 
-  if (!isOpen) return null;
-
   const toggleGoal = (id: string) => {
     setSelectedGoals((prev) =>
       prev.includes(id) ? prev.filter((g) => g !== id) : [...prev, id]
@@ -349,6 +347,8 @@ export function SurpriseMeModal({
       }
     }
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="modal-backdrop">

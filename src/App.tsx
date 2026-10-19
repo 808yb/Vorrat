@@ -1634,28 +1634,30 @@ function CookScreen({
       />
 
       {/* Surprise Me Preferences Dialog Modal */}
-      <SurpriseMeModal
-        isOpen={isSurpriseModalOpen}
-        onClose={() => setSurpriseModalOpen(false)}
-        recipes={catalogShuffleList}
-        pantry={pantry}
-        servings={servings}
-        onApplyFilters={(filters) => {
-          setSurpriseFilters(filters);
-          setDeckKey((k) => k + 1);
-          setIsSwipeExpanded(true);
-        }}
-        onSelectRecipe={(rec) => {
-          setActiveSearchedRecipe(rec);
-          setDeckKey((k) => k + 1);
-          setIsSwipeExpanded(true);
-          setGenerated(true);
-        }}
-        onCookRecipe={(rec) => {
-          setActiveModalRecipe(rec);
-        }}
-        onNotify={onNotify}
-      />
+      {isSurpriseModalOpen && (
+        <SurpriseMeModal
+          isOpen={isSurpriseModalOpen}
+          onClose={() => setSurpriseModalOpen(false)}
+          recipes={catalogShuffleList}
+          pantry={pantry}
+          servings={servings}
+          onApplyFilters={(filters) => {
+            setSurpriseFilters(filters);
+            setDeckKey((k) => k + 1);
+            setIsSwipeExpanded(true);
+          }}
+          onSelectRecipe={(rec) => {
+            setActiveSearchedRecipe(rec);
+            setDeckKey((k) => k + 1);
+            setIsSwipeExpanded(true);
+            setGenerated(true);
+          }}
+          onCookRecipe={(rec) => {
+            setActiveModalRecipe(rec);
+          }}
+          onNotify={onNotify}
+        />
+      )}
     </main>
   );
 }
