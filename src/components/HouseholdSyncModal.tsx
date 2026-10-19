@@ -1,5 +1,23 @@
-import React, { useState, useEffect } from "react";
-import { Users, Cloud, CloudUpload, CloudDownload, LogIn, UserPlus, LogOut, Database, AlertCircle, CheckCircle2, RefreshCw, Key, Settings } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import {
+  Users,
+  Cloud,
+  CloudUpload,
+  CloudDownload,
+  LogIn,
+  UserPlus,
+  LogOut,
+  Database,
+  AlertCircle,
+  CheckCircle2,
+  RefreshCw,
+  Key,
+  Settings,
+  Download,
+  Upload,
+  Copy,
+  FileText,
+} from "lucide-react";
 import {
   getSupabaseConfig,
   saveSupabaseConfig,
@@ -46,30 +64,23 @@ export function HouseholdSyncModal({
   onOpenReset,
   onAuthChange,
 }: HouseholdSyncModalProps) {
-  const [activeTab, setActiveTab] = useState<"link" | "cloud">("cloud");
+  const [activeTab, setActiveTab] = useState<"cloud" | "backup">("cloud");
 
-  // Household Link State
+  // Household State
   const [householdName, setHouseholdName] = useState(() => {
     try {
-      return localStorage.getItem(STORAGE_KEYS.HOUSEHOLD_NAME) || localStorage.getItem("forret_household_name") || "Unsere Küche (WG & Familie)";
+      return (
+        localStorage.getItem(STORAGE_KEYS.HOUSEHOLD_NAME) ||
+        localStorage.getItem("forret_household_name") ||
+        "Unsere Küche (WG & Familie)"
+      );
     } catch {
       return "Unsere Küche (WG & Familie)";
     }
   });
 
-  const [inviteCode] = useState(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.HOUSEHOLD_CODE) || localStorage.getItem("forret_household_code");
-      if (saved) return saved;
-      const gen = "VORRAT-" + Math.random().toString(36).substring(2, 7).toUpperCase();
-      localStorage.setItem(STORAGE_KEYS.HOUSEHOLD_CODE, gen);
-      return gen;
-    } catch {
-      return "VORRAT-808YB";
-    }
-  });
-
-  const [copied, setCopied] = useState(false);
+  const [jsonCopied, setJsonCopied] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState("Gerade eben");
 
@@ -102,28 +113,95 @@ export function HouseholdSyncModal({
     }
   };
 
-  if (!isOpen) return null;
-
-  const inviteUrl = `${window.location.origin}?household=${inviteCode.toLowerCase()}`;
-
-  const handleCopyLink = () => {
+  const handleExportJson = () => {
     try {
-      navigator.clipboard.writeText(inviteUrl);
-      setCopied(true);
-      if (onNotify) onNotify("Einladungs-Link in die Zwischenablage kopiert!");
-      setTimeout(() => setCopied(false), 2500);
-    } catch {
-      if (onNotify) onNotify("Link: " + inviteUrl);
+      const payload = {
+        version: 1,
+        appName: "Vorrat",
+        exportedAt: new Date().toISOString(),
+        householdName,
+        pantry: pantryData,
+        groceries: groceriesData,
+        customRecipes: customRecipesData,
+        mealPlan: mealPlanData,
+      };
+      const dataStr =
+        "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(payload, null, 2));
+      const downloadAnchor = document.createElement("a");
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute(
+        "download",
+        `vorrat-haushalt-${new Date().toISOString().split("T")[0]}.json`
+      );
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+      if (onNotify) onNotify("Haushalts-Backup als JSON heruntergeladen!");
+    } catch (err) {
+      console.error(err);
+      if (onNotify) onNotify("Fehler beim Erstellen des Backups.");
     }
   };
 
-  const handleManualSync = () => {
-    setIsSyncing(true);
-    setTimeout(() => {
-      setIsSyncing(false);
-      setLastSyncTime("Gerade eben");
-      if (onNotify) onNotify("Haushalt synchronisiert: Vorrat & Einkaufsliste sind aktuell!");
-    }, 800);
+  const handleCopyJson = () => {
+    try {
+      const payload = {
+        version: 1,
+        appName: "Vorrat",
+        exportedAt: new Date().toISOString(),
+        householdName,
+        pantry: pantryData,
+        groceries: groceriesData,
+        customRecipes: customRecipesData,
+        mealPlan: mealPlanData,
+      };
+      navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+      setJsonCopied(true);
+      if (onNotify) onNotify("Haushalts-Daten in Zwischenablage kopiert!");
+      setTimeout(() => setJsonCopied(false), 2200);
+    } catch {
+      if (onNotify) onNotify("Kopieren nicht unterstützt.");
+    }
+  };
+
+  const handleImportJsonFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result as string;
+        const parsed = JSON.parse(text);
+        if (!parsed || typeof parsed !== "object") {
+          throw new Error("Ungültiges JSON-Format.");
+        }
+        if (onRestoreData) {
+          onRestoreData({
+            pantry: Array.isArray(parsed.pantry) ? parsed.pantry : [],
+            groceries: Array.isArray(parsed.groceries) ? parsed.groceries : [],
+            customRecipes: Array.isArray(parsed.customRecipes) ? parsed.customRecipes : [],
+            mealPlan: Array.isArray(parsed.mealPlan) ? parsed.mealPlan : [],
+            householdName: parsed.householdName,
+          });
+        }
+        if (parsed.householdName) {
+          handleSaveName(parsed.householdName);
+        }
+        if (onNotify) {
+          onNotify("Haushalts-Backup erfolgreich eingespielt!");
+        }
+      } catch (err: any) {
+        console.error(err);
+        if (onNotify) {
+          onNotify(`Fehler beim JSON-Import: ${err?.message || "Ungültige Datei"}`);
+        }
+      } finally {
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+      }
+    };
+    reader.readAsText(file);
   };
 
   const handleSaveName = (newName: string) => {
@@ -359,7 +437,7 @@ export function HouseholdSyncModal({
             </button>
             <button
               type="button"
-              onClick={() => setActiveTab("link")}
+              onClick={() => setActiveTab("backup")}
               style={{
                 padding: "8px",
                 borderRadius: "9px",
@@ -367,9 +445,9 @@ export function HouseholdSyncModal({
                 fontSize: "12px",
                 fontWeight: 750,
                 cursor: "pointer",
-                background: activeTab === "link" ? "#ffffff" : "transparent",
-                color: activeTab === "link" ? "#0f172a" : "#64748b",
-                boxShadow: activeTab === "link" ? "0 1px 3px rgba(0,0,0,0.06)" : "none",
+                background: activeTab === "backup" ? "#ffffff" : "transparent",
+                color: activeTab === "backup" ? "#0f172a" : "#64748b",
+                boxShadow: activeTab === "backup" ? "0 1px 3px rgba(0,0,0,0.06)" : "none",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -377,7 +455,7 @@ export function HouseholdSyncModal({
               }}
             >
               <Users size={14} />
-              <span>Haushalts-Link</span>
+              <span>Haushalt & Backup</span>
             </button>
           </div>
         </div>
@@ -767,8 +845,8 @@ export function HouseholdSyncModal({
             </div>
           )}
 
-          {/* TAB 2: HOUSEHOLD WG LINK */}
-          {activeTab === "link" && (
+          {/* TAB 2: HOUSEHOLD BACKUP & TRANSFER */}
+          {activeTab === "backup" && (
             <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
               {/* Household Name */}
               <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "14px", border: "1px solid #e2e8f0" }}>
@@ -779,6 +857,7 @@ export function HouseholdSyncModal({
                   type="text"
                   value={householdName}
                   onChange={(e) => handleSaveName(e.target.value)}
+                  placeholder="z.B. Familie Muster oder WG Sonnenallee"
                   style={{
                     width: "100%",
                     background: "transparent",
@@ -791,81 +870,127 @@ export function HouseholdSyncModal({
                 />
               </div>
 
-              {/* Share / Invite Link Box */}
+              {/* Offline / JSON Backup & Sharing */}
               <div
                 style={{
-                  background: "linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%)",
-                  border: "1.5px solid #a7f3d0",
+                  background: "linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)",
+                  border: "1.5px solid #cbd5e1",
                   borderRadius: "16px",
-                  padding: "14px",
+                  padding: "16px",
                 }}
               >
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
-                  <span style={{ fontSize: "12px", fontWeight: 750, color: "#065f46" }}>
-                    Partner oder Mitbewohner einladen
-                  </span>
+                  <div style={{ display: "flex", alignItems: "center", gap: "7px" }}>
+                    <FileText size={16} color="#0f172a" />
+                    <span style={{ fontSize: "13px", fontWeight: 750, color: "#0f172a" }}>
+                      Lokales Haushalts-Backup (JSON)
+                    </span>
+                  </div>
                   <span
                     style={{
                       fontSize: "10px",
                       fontWeight: 800,
-                      background: "#10b981",
+                      background: "#2d5a3e",
                       color: "white",
                       padding: "2px 7px",
                       borderRadius: "6px",
                       letterSpacing: "0.05em",
                     }}
                   >
-                    CODE: {inviteCode}
+                    OFFLINE-SICHER
                   </span>
                 </div>
-                <p style={{ margin: "0 0 10px", fontSize: "11.5px", color: "#047857", lineHeight: 1.4 }}>
-                  Teile diesen Einladungs-Link. Sobald dein Partner oder Mitbewohner den Link öffnet, teilt ihr automatisch denselben Vorrat und dieselbe Einkaufsliste in Echtzeit.
+                <p style={{ margin: "0 0 14px", fontSize: "11.5px", color: "#475569", lineHeight: 1.45 }}>
+                  Sichere deinen aktuellen Vorrat, eigene Rezepte, Wochenpläne und Einkaufslisten als JSON-Datei oder teile sie direkt mit Mitbewohnern und Partnern per Datei oder Zwischenablage.
                 </p>
 
-                <div style={{ display: "flex", gap: "8px" }}>
-                  <input
-                    type="text"
-                    readOnly
-                    value={inviteUrl}
-                    style={{
-                      flex: 1,
-                      background: "white",
-                      border: "1px solid #a7f3d0",
-                      borderRadius: "10px",
-                      padding: "6px 10px",
-                      fontSize: "11px",
-                      color: "#334155",
-                      fontFamily: "monospace",
-                      outline: "none",
-                    }}
-                  />
+                {/* Hidden File Input */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".json,application/json"
+                  onChange={handleImportJsonFile}
+                  style={{ display: "none" }}
+                />
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <button
+                      type="button"
+                      onClick={handleExportJson}
+                      style={{
+                        flex: 1,
+                        padding: "8px 12px",
+                        background: "#2d5a3e",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "10px",
+                        fontSize: "12px",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "6px",
+                        boxShadow: "0 1px 2px rgba(45, 90, 62, 0.2)",
+                      }}
+                    >
+                      <Download size={13} />
+                      <span>JSON herunterladen</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCopyJson}
+                      style={{
+                        flex: 1,
+                        padding: "8px 12px",
+                        background: jsonCopied ? "#047857" : "#ffffff",
+                        color: jsonCopied ? "white" : "#1e293b",
+                        border: jsonCopied ? "1px solid #047857" : "1px solid #cbd5e1",
+                        borderRadius: "10px",
+                        fontSize: "12px",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "6px",
+                        transition: "all 150ms ease",
+                      }}
+                    >
+                      <Copy size={13} />
+                      <span>{jsonCopied ? "Kopiert!" : "JSON kopieren"}</span>
+                    </button>
+                  </div>
+
                   <button
                     type="button"
-                    onClick={handleCopyLink}
+                    onClick={() => fileInputRef.current?.click()}
                     style={{
-                      padding: "6px 14px",
-                      background: copied ? "#047857" : "#059669",
-                      color: "white",
-                      border: "none",
+                      width: "100%",
+                      padding: "8px 12px",
+                      background: "#ffffff",
+                      color: "#1e293b",
+                      border: "1px dashed #94a3b8",
                       borderRadius: "10px",
-                      fontSize: "11.5px",
-                      fontWeight: 750,
+                      fontSize: "12px",
+                      fontWeight: 700,
                       cursor: "pointer",
                       display: "flex",
                       alignItems: "center",
-                      gap: "5px",
-                      transition: "background 150ms ease",
-                      whiteSpace: "nowrap",
+                      justifyContent: "center",
+                      gap: "6px",
                     }}
                   >
-                    {copied ? "Kopiert!" : "Link kopieren"}
+                    <Upload size={13} />
+                    <span>JSON-Backup wiederherstellen / importieren</span>
                   </button>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Sync Stats & Manual Trigger */}
+          {/* Sync Stats & Honest Action Trigger */}
           <div
             style={{
               display: "flex",
@@ -880,34 +1005,59 @@ export function HouseholdSyncModal({
             }}
           >
             <div>
-              <span>Synchronisiert: <strong>{pantryCount} Produkte</strong> · <strong>{shoppingCount} Einkaufsartikel</strong></span>
+              <span>Status: <strong>{pantryCount} Produkte</strong> · <strong>{shoppingCount} Einkaufsartikel</strong></span>
               <div style={{ fontSize: "10px", color: "#94a3b8", marginTop: "1px" }}>
-                Letzter Abgleich: {lastSyncTime}
+                {currentUserEmail
+                  ? `Cloud-Sync aktiv (${displayUsernameFromEmail(currentUserEmail)}) · ${lastSyncTime}`
+                  : "Lokal im Browser gespeichert (kein Cloud-Konto)"}
               </div>
             </div>
-            <button
-              type="button"
-              onClick={handleManualSync}
-              disabled={isSyncing}
-              style={{
-                background: "#ffffff",
-                border: "1px solid #cbd5e1",
-                borderRadius: "8px",
-                padding: "5px 10px",
-                fontSize: "11px",
-                fontWeight: 700,
-                color: "#1e293b",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: "4px",
-              }}
-            >
-              <span style={{ display: "inline-block", transform: isSyncing ? "rotate(180deg)" : "none", transition: "transform 400ms ease" }}>
-                <RefreshCw size={12} />
-              </span>
-              {isSyncing ? "Gleicht ab..." : "Jetzt abgleichen"}
-            </button>
+            {currentUserEmail ? (
+              <button
+                type="button"
+                onClick={handleCloudBackup}
+                disabled={isSyncing}
+                style={{
+                  background: "#ffffff",
+                  border: "1px solid #cbd5e1",
+                  borderRadius: "8px",
+                  padding: "5px 10px",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  color: "#1e293b",
+                  cursor: isSyncing ? "not-allowed" : "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "4px",
+                }}
+              >
+                <span style={{ display: "inline-block", transform: isSyncing ? "rotate(180deg)" : "none", transition: "transform 400ms ease" }}>
+                  <RefreshCw size={12} />
+                </span>
+                {isSyncing ? "Sichert..." : "In Cloud sichern"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleExportJson}
+                style={{
+                  background: "#ffffff",
+                  border: "1px solid #cbd5e1",
+                  borderRadius: "8px",
+                  padding: "5px 10px",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  color: "#1e293b",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "4px",
+                }}
+              >
+                <Download size={12} />
+                JSON-Backup
+              </button>
+            )}
           </div>
 
           {/* Danger Zone: Link to Full Reset Modal */}

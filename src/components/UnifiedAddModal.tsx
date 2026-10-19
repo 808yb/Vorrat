@@ -69,7 +69,21 @@ interface UnifiedAddModalProps {
     isUnlimited?: boolean;
     mhd?: string;
   }) => void;
-  onImportReceipt: () => void;
+  onImportReceipt?: (importedItems: Array<{
+    name: string;
+    category: string;
+    amount: number;
+    total: number;
+    unit: string;
+    tone: string;
+    minAmount?: number;
+    caloriesPer100g?: number;
+    proteinPer100g?: number;
+    carbsPer100g?: number;
+    fatPer100g?: number;
+    isUnlimited?: boolean;
+    mhd?: string;
+  }>) => void;
   onNotify?: (msg: string) => void;
 }
 
@@ -2257,24 +2271,28 @@ export function UnifiedAddModal({
                       style={{ height: "46px", borderRadius: "12px", fontSize: "13px", marginTop: "4px" }}
                       onClick={() => {
                         const selected = receiptItems.filter((i) => i.selected && i.amount > 0);
-                        selected.forEach((item) => {
-                          onAddProduct({
-                            name: item.name,
-                            category: item.category,
-                            amount: item.amount,
-                            total: item.total,
-                            unit: item.unit,
-                            tone: item.tone,
-                            minAmount: Math.round(item.amount * 0.3),
-                            caloriesPer100g: item.caloriesPer100g,
-                            proteinPer100g: item.proteinPer100g,
-                            carbsPer100g: item.carbsPer100g,
-                            fatPer100g: item.fatPer100g,
-                            mhd: item.mhd,
-                          });
-                        });
-                        if (onNotify) {
-                          onNotify(`${selected.length} Lebensmittel vom Kassenbon mit Auto-MHD hinzugefügt!`);
+                        const convertedItems = selected.map((item) => ({
+                          name: item.name,
+                          category: item.category,
+                          amount: item.amount,
+                          total: item.total || item.amount,
+                          unit: item.unit || "Stk.",
+                          tone: item.tone || getFoodTone(item.name, item.category),
+                          minAmount: Math.round(item.amount * 0.3),
+                          caloriesPer100g: item.caloriesPer100g,
+                          proteinPer100g: item.proteinPer100g,
+                          carbsPer100g: item.carbsPer100g,
+                          fatPer100g: item.fatPer100g,
+                          mhd: item.mhd,
+                        }));
+
+                        if (onImportReceipt) {
+                          onImportReceipt(convertedItems);
+                        } else {
+                          convertedItems.forEach((item) => onAddProduct(item));
+                          if (onNotify) {
+                            onNotify(`${selected.length} Lebensmittel vom Kassenbon mit Auto-MHD hinzugefügt!`);
+                          }
                         }
                         handleClose();
                       }}

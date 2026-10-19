@@ -698,6 +698,7 @@ function PantryScreen({
   onOpenReset,
   onCookFromExpiring,
   onResetDemo,
+  savedWasteStats,
 }: {
   pantry: PantryItem[];
   updateAmount: (id: number | string, delta: number) => void;
@@ -708,6 +709,7 @@ function PantryScreen({
   onOpenReset?: () => void;
   onCookFromExpiring?: (urgentItemNames: string[]) => void;
   onResetDemo?: () => void;
+  savedWasteStats?: { count: number; money: number };
 }) {
   const [filter, setFilter] = useState("Alle");
   const [search, setSearch] = useState("");
@@ -729,13 +731,7 @@ function PantryScreen({
     );
   }, [pantry]);
 
-  const [savedWasteStats] = useState<{ count: number; money: number }>(() => {
-    try {
-      const saved = localStorage.getItem("vorrat_food_waste_saved");
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    return { count: 8, money: 24.5 };
-  });
+  const wasteStats = savedWasteStats ?? { count: 0, money: 0 };
 
   const chips = [
     "Alle",
@@ -929,7 +925,7 @@ function PantryScreen({
               <Icon name="chevron" size={14} />
             </button>
             <div className="waste-saved-pill" title="Bereits gerettete Lebensmittel">
-              <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}><Icon name="leaf" size={12} /> Bisher gerettet: {savedWasteStats.count} Zutaten (~{savedWasteStats.money.toFixed(0)} €)</span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}><Icon name="leaf" size={12} /> Bisher gerettet: {wasteStats.count} Zutaten (~{wasteStats.money.toFixed(0)} €)</span>
             </div>
           </div>
         </div>
@@ -1090,6 +1086,8 @@ function CookScreen({
   onOpenImportRecipe,
   isSurpriseModalOpen: externalSurpriseOpen,
   onSetIsSurpriseModalOpen: setExternalSurpriseOpen,
+  expiringSearchIngredients = [],
+  onClearExpiringFilter,
 }: {
   pantry: PantryItem[];
   customRecipes?: CatalogRecipe[];
@@ -1105,6 +1103,8 @@ function CookScreen({
   onOpenImportRecipe?: () => void;
   isSurpriseModalOpen?: boolean;
   onSetIsSurpriseModalOpen?: (open: boolean) => void;
+  expiringSearchIngredients?: string[];
+  onClearExpiringFilter?: () => void;
 }) {
   const [servings, setServings] = useState(3);
   const [intent, setIntent] = useState("");
@@ -1115,6 +1115,66 @@ function CookScreen({
   const [isAiGenerating, setIsAiGenerating] = useState(false);
   const [activeSearchedRecipe, setActiveSearchedRecipe] = useState<CatalogRecipe | null>(null);
   const [deckKey, setDeckKey] = useState(0);
+
+  // Web Speech Recognition
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
+
+  const hasSpeechRecognition =
+    typeof window !== "undefined" &&
+    Boolean((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+
+  const toggleSpeechInput = () => {
+    if (!hasSpeechRecognition) return;
+
+    if (isListening) {
+      try {
+        recognitionRef.current?.stop();
+      } catch {}
+      setIsListening(false);
+      return;
+    }
+
+    try {
+      const SpeechRecognitionClass =
+        (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      const recognition = new SpeechRecognitionClass();
+      recognition.lang = "de-DE";
+      recognition.continuous = false;
+      recognition.interimResults = false;
+
+      recognition.onstart = () => {
+        setIsListening(true);
+        if (onNotify) onNotify("Spracherkennung aktiv: Sprich jetzt...");
+      };
+
+      recognition.onresult = (event: any) => {
+        const transcript = event.results?.[0]?.[0]?.transcript;
+        if (transcript) {
+          setIntent((prev) => (prev ? `${prev.trim()} ${transcript}` : transcript));
+          if (onNotify) onNotify(`Erkannt: "${transcript}"`);
+        }
+      };
+
+      recognition.onerror = (event: any) => {
+        console.warn("Speech recognition error:", event.error);
+        setIsListening(false);
+        if (event.error !== "no-speech" && onNotify) {
+          onNotify("Spracherkennung abgebrochen oder kein Mikrofon-Zugriff.");
+        }
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (err) {
+      console.warn("Speech recognition init error:", err);
+      setIsListening(false);
+    }
+  };
 
   const [activeModalRecipe, setActiveModalRecipe] = useState<CatalogRecipe | null>(null);
   const [localSurpriseModalOpen, setLocalSurpriseModalOpen] = useState(false);
@@ -1237,14 +1297,38 @@ function CookScreen({
         }
       }
 
+      // Bonus for expiring ingredients: Prioritize recipes containing expiring items to the very top!
+      let expiringBonus = 0;
+      if (expiringSearchIngredients && expiringSearchIngredients.length > 0) {
+        const titleLower = rec.title.toLowerCase();
+        const subtitleLower = (rec.subtitle || "").toLowerCase();
+        const ingList = typeof rec.ingredientsList === "function"
+          ? rec.ingredientsList(servings)
+          : getSafeIngredientsList(rec, servings);
+
+        const hasExpiringMatch = expiringSearchIngredients.some((expItem) => {
+          const normExp = expItem.toLowerCase().trim();
+          if (normExp.length < 2) return false;
+          if (titleLower.includes(normExp) || subtitleLower.includes(normExp)) return true;
+          return ingList.some((ing) => {
+            const ingLower = ing.name.toLowerCase();
+            return ingLower.includes(normExp) || normExp.includes(ingLower);
+          });
+        });
+
+        if (hasExpiringMatch) {
+          expiringBonus = 150;
+        }
+      }
+
       // Rotational hash with time slot variance to cycle top recipes 3× a day
       const variance = ((origIdx * 23 + timeSlotBonusOffset) % 100) / 350;
-      return { rec, score: pantryScore + preferenceBonus + slotBonus + variance };
+      return { rec, score: expiringBonus + pantryScore + preferenceBonus + slotBonus + variance };
     });
 
     scored.sort((a, b) => b.score - a.score);
     return scored.map((s) => s.rec);
-  }, [shuffleIndex, pantry, servings, currentMealSlot, surpriseFilters]);
+  }, [shuffleIndex, pantry, servings, currentMealSlot, surpriseFilters, expiringSearchIngredients]);
 
   // Pre-calculated list of bookmarked favorite recipes (calories & macros remain constant per portion)
   const favoriteRecipes = useMemo(() => {
@@ -1389,20 +1473,25 @@ function CookScreen({
             }}
             placeholder="Z. B. Ramen mit Ei, Pasta Pesto, schnelles Curry..."
           />
-          <Button
-            className="mic-button"
-            title="Sprachnotiz aufnehmen"
-            onClick={() => {
-              if (intent.trim().length === 0) {
-                setIntent("Schnelle Ramen mit Ei und Gemüse");
-                if (onNotify) onNotify("Sprachnotiz erfasst: 'Schnelle Ramen'");
-              } else {
-                onMicTrigger();
+          {hasSpeechRecognition && (
+            <Button
+              className={`mic-button ${isListening ? "listening" : ""}`}
+              title={isListening ? "Aufnahme stoppen" : "Sprachnotiz aufnehmen"}
+              onClick={toggleSpeechInput}
+              style={
+                isListening
+                  ? {
+                      color: "#dc2626",
+                      background: "#fee2e2",
+                      borderColor: "#fca5a5",
+                      animation: "pulse 1.2s infinite",
+                    }
+                  : undefined
               }
-            }}
-          >
-            <Icon name="mic" size={19} />
-          </Button>
+            >
+              <Icon name="mic" size={19} />
+            </Button>
+          )}
         </label>
 
         {/* Dual button bar: Generate + Überrasch mich */}
@@ -1604,6 +1693,55 @@ function CookScreen({
         {/* Collapsible Swipe Content (Cards + Control Action Buttons) */}
         {isSwipeExpanded && (
           <div style={{ padding: "14px 10px 10px", background: "#f8fafc" }}>
+            {/* Reste-Modus Active Banner */}
+            {expiringSearchIngredients && expiringSearchIngredients.length > 0 && (
+              <div
+                style={{
+                  background: "#f0fdf4",
+                  border: "1.5px solid #86efac",
+                  borderRadius: "14px",
+                  padding: "10px 14px",
+                  marginBottom: "12px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: "10px",
+                  fontSize: "12px",
+                  color: "#166534",
+                  boxShadow: "0 2px 6px rgba(22, 101, 52, 0.06)",
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: 0, flex: 1 }}>
+                  <span style={{ display: "inline-flex", color: "#15803d", flexShrink: 0 }}>
+                    <Icon name="leaf" size={16} />
+                  </span>
+                  <span style={{ fontWeight: 650, lineHeight: 1.35 }}>
+                    Reste-Modus aktiv: Rezepte mit <strong>{expiringSearchIngredients.slice(0, 3).join(", ")}</strong> werden zuerst gezeigt
+                  </span>
+                </div>
+                {onClearExpiringFilter && (
+                  <button
+                    type="button"
+                    onClick={onClearExpiringFilter}
+                    style={{
+                      background: "#ffffff",
+                      border: "1px solid #86efac",
+                      borderRadius: "8px",
+                      padding: "5px 10px",
+                      fontSize: "11px",
+                      fontWeight: 750,
+                      color: "#15803d",
+                      cursor: "pointer",
+                      whiteSpace: "nowrap",
+                      flexShrink: 0,
+                    }}
+                  >
+                    Filter zurücksetzen
+                  </button>
+                )}
+              </div>
+            )}
+
             <RecipeSwipeDeck
               key={`${deckKey}-${surpriseFilters ? JSON.stringify(surpriseFilters) : "default"}`}
               recipes={filteredDeckRecipes}
@@ -2369,10 +2507,36 @@ export default function App() {
   }, [pantry, groceries, customRecipes, plannedMeals, favorites, hasCloudUser]);
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [expiringSearchIngredients, setExpiringSearchIngredients] = useState<string[]>([]);
+
+  const [foodWasteSaved, setFoodWasteSaved] = useState<{ count: number; money: number }>(() => {
+    try {
+      const saved =
+        localStorage.getItem(STORAGE_KEYS.FOOD_WASTE) ||
+        localStorage.getItem("vorrat_food_waste_saved");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (typeof parsed.count === "number" && typeof parsed.money === "number") {
+          return parsed;
+        }
+      }
+    } catch {}
+    return { count: 0, money: 0 };
+  });
 
   const handleCookFromExpiring = (urgentItemNames: string[]) => {
+    setExpiringSearchIngredients(urgentItemNames);
     setActiveTab("discover");
-    notify(`Reste-Kochen vorbereitet: ${urgentItemNames.slice(0, 3).join(", ")}`);
+    notify(
+      `Reste-Modus aktiv: ${urgentItemNames.length} ablaufende ${
+        urgentItemNames.length === 1 ? "Zutat" : "Zutaten"
+      } priorisiert!`
+    );
+  };
+
+  const handleClearExpiringFilter = () => {
+    setExpiringSearchIngredients([]);
+    notify("Reste-Filter zurückgesetzt");
   };
 
   const handleSaveImportedRecipe = (
@@ -2446,6 +2610,7 @@ export default function App() {
     // Track what got deducted for feedback
     const deductedItems: string[] = [];
     const lowStockAlerts: string[] = [];
+    let savedUrgentCount = 0;
 
     setPantry((items) =>
       items.map((item) => {
@@ -2501,6 +2666,10 @@ export default function App() {
 
         if (deductAmount > 0) {
           deductedItems.push(`${item.name} (-${deductAmount}${item.unit})`);
+          const mhdStatus = getMhdStatus(item.mhd);
+          if (mhdStatus === "soon" || mhdStatus === "expired") {
+            savedUrgentCount++;
+          }
           const newAmount = Math.max(0, item.amount - deductAmount);
           if (newAmount <= (item.minAmount || 0.25 * item.total)) {
             lowStockAlerts.push(item.name);
@@ -2514,6 +2683,20 @@ export default function App() {
         return item;
       })
     );
+
+    // Save food waste counter
+    if (savedUrgentCount > 0) {
+      setFoodWasteSaved((prev) => {
+        const next = {
+          count: prev.count + savedUrgentCount,
+          money: Number((prev.money + savedUrgentCount * 2.5).toFixed(2)),
+        };
+        try {
+          localStorage.setItem(STORAGE_KEYS.FOOD_WASTE, JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+    }
 
     // Auto-check for low ingredients & add to groceries
     if (lowStockAlerts.length > 0) {
@@ -2653,17 +2836,19 @@ export default function App() {
     notify(`Barcode erfasst: +${scanned.name}`);
   };
 
-  const handleReceiptImported = () => {
-    setPantry((prev) =>
-      prev.map((p) => {
-        if (p.id === 1) return { ...p, amount: 1000 };
-        if (p.id === 2) return { ...p, amount: 10 };
-        if (p.id === 3) return { ...p, amount: 250 };
-        if (p.id === 4) return { ...p, amount: 450 };
-        return p;
-      })
+  const handleReceiptImported = (importedItems?: Array<Omit<PantryItem, "id">>) => {
+    if (!importedItems || !Array.isArray(importedItems) || importedItems.length === 0) {
+      notify("Keine Kassenbon-Positionen ausgewählt");
+      return;
+    }
+    importedItems.forEach((item) => {
+      handleAddProduct(item);
+    });
+    notify(
+      `${importedItems.length} ${
+        importedItems.length === 1 ? "Position" : "Positionen"
+      } vom Kassenbon erfolgreich eingebucht!`
     );
-    notify("4 Kassenbon-Positionen erfolgreich eingebucht");
   };
 
   const handleAddProduct = (item: Omit<PantryItem, "id">) => {
@@ -2724,6 +2909,8 @@ export default function App() {
     setCustomRecipes([]);
     setFavorites([]);
     setPlannedMeals([]);
+    setFoodWasteSaved({ count: 0, money: 0 });
+    setExpiringSearchIngredients([]);
     wipeAllAppData();
     notify("Account komplett geleert: Vorrat, Rezepte, Einkauf & Wochenplan auf 0!");
   };
@@ -2731,6 +2918,8 @@ export default function App() {
   const handleFullReset = () => {
     setPantry(defaultPantry);
     setGroceries(defaultGroceries);
+    setFoodWasteSaved({ count: 0, money: 0 });
+    setExpiringSearchIngredients([]);
     try {
       wipeAllAppData();
       localStorage.setItem(STORAGE_KEYS.PANTRY, JSON.stringify(defaultPantry));
@@ -2814,6 +3003,7 @@ export default function App() {
           onOpenReset={() => setIsResetModalOpen(true)}
           onCookFromExpiring={handleCookFromExpiring}
           onResetDemo={handleResetDemo}
+          savedWasteStats={foodWasteSaved}
         />
       )}
 
@@ -2831,6 +3021,8 @@ export default function App() {
           onOpenImportRecipe={() => setIsImportModalOpen(true)}
           isSurpriseModalOpen={isSurpriseModalOpen}
           onSetIsSurpriseModalOpen={setIsSurpriseModalOpen}
+          expiringSearchIngredients={expiringSearchIngredients}
+          onClearExpiringFilter={handleClearExpiringFilter}
           onMicTrigger={() => {
             notify("Sprachnotiz: 'Reis & Eier schnell'");
           }}
