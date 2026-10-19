@@ -685,15 +685,10 @@ export async function lookupBarcodeFromOFF(rawBarcode: string): Promise<BarcodeL
 }
 
 /**
- * Intelligent Gemini AI product detection for unknown barcodes or exotic items
+ * Intelligent Gemini AI product detection for unknown barcodes or exotic items.
+ * Routes through the secure /api/gemini serverless proxy (key stays on server).
  */
 export async function lookupProductWithGemini(queryOrBarcode: string): Promise<OFFProduct | null> {
-  const apiKey =
-    (import.meta as any).env?.VITE_GEMINI_API_KEY ||
-    (typeof process !== "undefined" && process.env?.GEMINI_API_KEY) ||
-    "";
-  if (!apiKey) return null;
-
   try {
     const prompt = `Analysiere das folgende Lebensmittel oder den Barcode: "${queryOrBarcode}".
 Ermittle realistische deutsche Produktdaten für eine Lebensmittel-Vorrats-App.
@@ -712,19 +707,14 @@ Antworte NUR mit reinem JSON im folgenden Schema:
   "fat": 2.0
 }`;
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-    const res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: "application/json" },
-      }),
+    const { callGeminiProxy, extractTextFromGeminiResponse } = await import('./geminiProxy');
+    const data = await callGeminiProxy({
+      model: "gemini-2.5-flash",
+      contents: prompt,
+      config: { responseMimeType: "application/json" },
     });
 
-    if (!res.ok) return null;
-    const data = await res.json();
-    const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    const rawText = extractTextFromGeminiResponse(data);
     if (!rawText) return null;
 
     const parsed = JSON.parse(rawText.replace(/^```json/i, "").replace(/^```/, "").replace(/```$/, "").trim());

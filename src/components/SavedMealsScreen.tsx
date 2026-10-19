@@ -1,8 +1,11 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, lazy, Suspense } from "react";
 import { FULL_RECIPE_CATALOG, type CatalogRecipe } from "../data/recipeCatalog";
 import { type PantryItem } from "../App";
-import { CookingModal } from "./CookingModal";
 import { EditRecipeModal } from "./EditRecipeModal";
+
+const CookingModal = lazy(() =>
+  import("./CookingModal").then((m) => ({ default: m.CookingModal }))
+);
 import { getRecipePantryBreakdown, findMatchingPantryItem } from "../utils/pantryMatching";
 import { getSafeIngredientsList, getSafeSteps } from "../utils/recipeHelpers";
 import { resolveRecipeFoodImage } from "../utils/geminiRecipes";
@@ -744,18 +747,22 @@ export function SavedMealsScreen({
       )}
 
       {/* Cooking Modal for Interactive Cook with Timers */}
-      <CookingModal
-        recipe={activeModalRecipe}
-        isOpen={Boolean(activeModalRecipe)}
-        onClose={() => {
-          setActiveModalRecipe(null);
-          setOpenAskDirectly(false);
-        }}
-        onCook={onCook}
-        initialServings={servings}
-        pantry={pantry}
-        initialOpenAsk={openAskDirectly}
-      />
+      {Boolean(activeModalRecipe) && (
+        <Suspense fallback={null}>
+          <CookingModal
+            recipe={activeModalRecipe}
+            isOpen={Boolean(activeModalRecipe)}
+            onClose={() => {
+              setActiveModalRecipe(null);
+              setOpenAskDirectly(false);
+            }}
+            onCook={onCook}
+            initialServings={servings}
+            pantry={pantry}
+            initialOpenAsk={openAskDirectly}
+          />
+        </Suspense>
+      )}
 
       {/* Edit Recipe Modal */}
       <EditRecipeModal

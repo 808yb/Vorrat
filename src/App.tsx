@@ -1,16 +1,13 @@
-import { useMemo, useState, useEffect, useRef, type ReactNode } from "react";
+import { useMemo, useState, useEffect, useRef, lazy, Suspense, type ReactNode } from "react";
 import { motion } from "motion/react";
 import { ProductMark, getFoodTone } from "./components/FoodIcons";
 import { FULL_RECIPE_CATALOG, type CatalogRecipe } from "./data/recipeCatalog";
 import { getStoredCustomRecipes, generateRecipeWithGemini, rehydrateCustomRecipe } from "./utils/geminiRecipes";
 import { getSafeIngredientsList, getSafeAvailable, getCurrentMealTimeSlot, decomposeCompositeIngredients } from "./utils/recipeHelpers";
-import { CookingModal } from "./components/CookingModal";
 import { RecipeSwipeDeck } from "./components/RecipeSwipeDeck";
 import { getRecipePantryBreakdown, findMatchingPantryItem } from "./utils/pantryMatching";
-import { UnifiedAddModal } from "./components/UnifiedAddModal";
 import { EditPantryItemModal } from "./components/EditPantryItemModal";
 import { SavedMealsScreen } from "./components/SavedMealsScreen";
-import { HouseholdSyncModal } from "./components/HouseholdSyncModal";
 import { findFoodNutrition } from "./data/foodNutritionDatabase";
 import {
   backupUserDataToSupabase,
@@ -18,8 +15,6 @@ import {
   getCurrentUser,
 } from "./utils/supabaseClient";
 import { PwaInstallBanner } from "./components/PwaInstallBanner";
-import { RecipeImportModal } from "./components/RecipeImportModal";
-import { AccountResetModal } from "./components/AccountResetModal";
 import { SurpriseMeModal, type SurpriseFilters } from "./components/SurpriseMeModal";
 import {
   WeeklyMealPlannerScreen,
@@ -28,6 +23,23 @@ import {
   WEEKDAYS,
 } from "./components/WeeklyMealPlannerScreen";
 import { STORAGE_KEYS, wipeAllAppData } from "./constants/storage";
+
+// Code-splitting heavy modals for faster initial page load
+const CookingModal = lazy(() =>
+  import("./components/CookingModal").then((m) => ({ default: m.CookingModal }))
+);
+const UnifiedAddModal = lazy(() =>
+  import("./components/UnifiedAddModal").then((m) => ({ default: m.UnifiedAddModal }))
+);
+const HouseholdSyncModal = lazy(() =>
+  import("./components/HouseholdSyncModal").then((m) => ({ default: m.HouseholdSyncModal }))
+);
+const RecipeImportModal = lazy(() =>
+  import("./components/RecipeImportModal").then((m) => ({ default: m.RecipeImportModal }))
+);
+const AccountResetModal = lazy(() =>
+  import("./components/AccountResetModal").then((m) => ({ default: m.AccountResetModal }))
+);
 
 // Re-export consolidated pantry matching function for backward compatibility
 export { findMatchingPantryItem } from "./utils/pantryMatching";
@@ -767,7 +779,8 @@ function PantryScreen({
     const percent = isUnlimited ? 100 : Math.min(100, Math.round((item.amount / item.total) * 100));
     const status = isUnlimited ? "Vorhanden" : percent === 0 ? "Leer" : percent <= 25 ? "Niedrig" : "Vorhanden";
     const step = item.unit === "g" ? 50 : item.unit === "ml" ? 25 : 1;
-    const catGroup = getCategoryGroupKey(item.category);
+    const mhdStatus = getMhdStatus(item.mhd);
+    const hasRealMhd = mhdStatus !== "missing";
 
     return (
       <article
@@ -780,30 +793,6 @@ function PantryScreen({
           <div className="product-heading">
             <div className="product-title-row">
               <h3>{item.name}</h3>
-              <div className="product-action-icons">
-                <button
-                  type="button"
-                  className="product-edit-icon-btn"
-                  title="Vorrat bearbeiten"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onEditItem(item);
-                  }}
-                >
-                  <Icon name="pencil" size={12} />
-                </button>
-                <button
-                  type="button"
-                  className="product-delete-icon-btn"
-                  title="Aus Vorrat löschen"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDeleteItem(item.id);
-                  }}
-                >
-                  <Icon name="trash" size={12} />
-                </button>
-              </div>
             </div>
             <span className={`status ${status.toLowerCase()}`}>
               {isUnlimited ? "Unbegrenzt" : status}
@@ -811,28 +800,11 @@ function PantryScreen({
           </div>
 
           <div className="product-sub-row">
-            <select
-              className="product-cat-select"
-              value={catGroup}
-              onClick={(e) => e.stopPropagation()}
-              onChange={(e) => {
-                e.stopPropagation();
-                if (onUpdateCategory) {
-                  onUpdateCategory(item.id, e.target.value);
-                }
-              }}
-              title="Lagerort / Kategorie direkt ändern"
-            >
-              <option value="Kühl">Kühlschrank</option>
-              <option value="Tiefkühl">Tiefkühl</option>
-              <option value="Trocken">Trocken</option>
-              <option value="Saucen">Gewürze/Saucen</option>
-              <option value="Getränke">Getränke</option>
-              <option value="Sonstiges">Sonstiges</option>
-            </select>
-            <span className={`mhd-badge ${getMhdStatus(item.mhd)}`}>
-              {formatMhdDisplay(item.mhd)}
-            </span>
+            {hasRealMhd && (
+              <span className={`mhd-badge ${mhdStatus}`}>
+                {formatMhdDisplay(item.mhd)}
+              </span>
+            )}
             {(() => {
               const specs = getItemNutrientSpecs(item);
               return (
@@ -1573,9 +1545,16 @@ function CookScreen({
         }}
       >
         {/* Accordion / Dropdown Toggle Bar */}
-        <button
-          type="button"
+        <div
+          role="button"
+          tabIndex={0}
           onClick={() => setIsSwipeExpanded((prev) => !prev)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              setIsSwipeExpanded((prev) => !prev);
+            }
+          }}
           aria-expanded={isSwipeExpanded}
           style={{
             width: "100%",
@@ -1688,7 +1667,7 @@ function CookScreen({
               <Icon name="chevron" size={10} />
             </span>
           </div>
-        </button>
+        </div>
 
         {/* Collapsible Swipe Content (Cards + Control Action Buttons) */}
         {isSwipeExpanded && (
@@ -1762,16 +1741,20 @@ function CookScreen({
       </div>
 
       {/* Full-screen / Rich Step-by-Step Cooking Modal */}
-      <CookingModal
-        recipe={activeModalRecipe}
-        isOpen={Boolean(activeModalRecipe)}
-        onClose={() => setActiveModalRecipe(null)}
-        onCook={onCook}
-        pantry={pantry}
-        isFavorite={activeModalRecipe ? favorites.includes(activeModalRecipe.id) : false}
-        onToggleFavorite={onToggleFavorite}
-        onAddMissingToGroceries={onAddMissingToGroceries}
-      />
+      {Boolean(activeModalRecipe) && (
+        <Suspense fallback={null}>
+          <CookingModal
+            recipe={activeModalRecipe}
+            isOpen={Boolean(activeModalRecipe)}
+            onClose={() => setActiveModalRecipe(null)}
+            onCook={onCook}
+            pantry={pantry}
+            isFavorite={activeModalRecipe ? favorites.includes(activeModalRecipe.id) : false}
+            onToggleFavorite={onToggleFavorite}
+            onAddMissingToGroceries={onAddMissingToGroceries}
+          />
+        </Suspense>
+      )}
 
       {/* Surprise Me Preferences Dialog Modal */}
       {isSurpriseModalOpen && (
@@ -3100,51 +3083,63 @@ export default function App() {
       )}
 
       {/* Household Sync & Sharing Modal (WG / Familie Einladungslink & Supabase Cloud) */}
-      <HouseholdSyncModal
-        isOpen={isHouseholdModalOpen}
-        onClose={() => setIsHouseholdModalOpen(false)}
-        onNotify={notify}
-        pantryCount={pantry.length}
-        shoppingCount={groceries.length}
-        pantryData={pantry}
-        groceriesData={groceries}
-        customRecipesData={customRecipes}
-        mealPlanData={plannedMeals}
-        onAuthChange={(isLoggedIn) => setHasCloudUser(isLoggedIn)}
-        onRestoreData={(cloud) => {
-          if (Array.isArray(cloud.pantry)) setPantry(cloud.pantry as PantryItem[]);
-          if (Array.isArray(cloud.groceries)) setGroceries(cloud.groceries as GroceryItem[]);
-          if (Array.isArray(cloud.customRecipes)) setCustomRecipes((cloud.customRecipes as any[]).map(rehydrateCustomRecipe));
-          if (Array.isArray(cloud.mealPlan)) setPlannedMeals(cloud.mealPlan as PlannedMeal[]);
-          if (Array.isArray(cloud.favorites)) setFavorites(cloud.favorites as string[]);
-        }}
-        onOpenReset={() => setIsResetModalOpen(true)}
-      />
+      {isHouseholdModalOpen && (
+        <Suspense fallback={null}>
+          <HouseholdSyncModal
+            isOpen={isHouseholdModalOpen}
+            onClose={() => setIsHouseholdModalOpen(false)}
+            onNotify={notify}
+            pantryCount={pantry.length}
+            shoppingCount={groceries.length}
+            pantryData={pantry}
+            groceriesData={groceries}
+            customRecipesData={customRecipes}
+            mealPlanData={plannedMeals}
+            onAuthChange={(isLoggedIn) => setHasCloudUser(isLoggedIn)}
+            onRestoreData={(cloud) => {
+              if (Array.isArray(cloud.pantry)) setPantry(cloud.pantry as PantryItem[]);
+              if (Array.isArray(cloud.groceries)) setGroceries(cloud.groceries as GroceryItem[]);
+              if (Array.isArray(cloud.customRecipes)) setCustomRecipes((cloud.customRecipes as any[]).map(rehydrateCustomRecipe));
+              if (Array.isArray(cloud.mealPlan)) setPlannedMeals(cloud.mealPlan as PlannedMeal[]);
+              if (Array.isArray(cloud.favorites)) setFavorites(cloud.favorites as string[]);
+            }}
+            onOpenReset={() => setIsResetModalOpen(true)}
+          />
+        </Suspense>
+      )}
 
       {/* Account / Pantry Reset & Deduplication Modal */}
-      <AccountResetModal
-        isOpen={isResetModalOpen}
-        onClose={() => setIsResetModalOpen(false)}
-        pantryCount={pantry.length}
-        shoppingCount={groceries.length}
-        recipesCount={customRecipes.length}
-        plannedCount={plannedMeals.length}
-        onResetDemo={handleResetDemo}
-        onClearPantry={handleClearPantry}
-        onDeduplicate={handleDeduplicatePantry}
-        onFullReset={handleFullReset}
-        onWipeEverything={handleWipeEverything}
-        onNotify={notify}
-      />
+      {isResetModalOpen && (
+        <Suspense fallback={null}>
+          <AccountResetModal
+            isOpen={isResetModalOpen}
+            onClose={() => setIsResetModalOpen(false)}
+            pantryCount={pantry.length}
+            shoppingCount={groceries.length}
+            recipesCount={customRecipes.length}
+            plannedCount={plannedMeals.length}
+            onResetDemo={handleResetDemo}
+            onClearPantry={handleClearPantry}
+            onDeduplicate={handleDeduplicatePantry}
+            onFullReset={handleFullReset}
+            onWipeEverything={handleWipeEverything}
+            onNotify={notify}
+          />
+        </Suspense>
+      )}
 
       {/* Unified Add Modal (Plus Button: Kamera, Bon, DB-Suche oder Manuell) */}
-      <UnifiedAddModal
-        isOpen={isAddModalOpen}
-        onClose={() => setIsAddModalOpen(false)}
-        onAddProduct={handleAddProduct}
-        onImportReceipt={handleReceiptImported}
-        onNotify={notify}
-      />
+      {isAddModalOpen && (
+        <Suspense fallback={null}>
+          <UnifiedAddModal
+            isOpen={isAddModalOpen}
+            onClose={() => setIsAddModalOpen(false)}
+            onAddProduct={handleAddProduct}
+            onImportReceipt={handleReceiptImported}
+            onNotify={notify}
+          />
+        </Suspense>
+      )}
 
       {/* Edit Pantry Item Modal (MHD, Name, Bestand, Einheit) */}
       <EditPantryItemModal
@@ -3159,13 +3154,17 @@ export default function App() {
       <PwaInstallBanner />
 
       {/* Recipe Import Modal (Web, Social Media, TikTok, Instagram) */}
-      <RecipeImportModal
-        isOpen={isImportModalOpen}
-        onClose={() => setIsImportModalOpen(false)}
-        pantryItems={pantry}
-        onSaveRecipe={handleSaveImportedRecipe}
-        onNotify={notify}
-      />
+      {isImportModalOpen && (
+        <Suspense fallback={null}>
+          <RecipeImportModal
+            isOpen={isImportModalOpen}
+            onClose={() => setIsImportModalOpen(false)}
+            pantryItems={pantry}
+            onSaveRecipe={handleSaveImportedRecipe}
+            onNotify={notify}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

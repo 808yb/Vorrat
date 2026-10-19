@@ -137,6 +137,8 @@ export function EditPantryItemModal({
     onClose();
   };
 
+  if (!isOpen || !item) return null;
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="edit-pantry-modal-sheet" onClick={(e) => e.stopPropagation()}>

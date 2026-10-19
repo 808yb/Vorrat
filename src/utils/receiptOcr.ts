@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+import { callGeminiProxy, extractTextFromGeminiResponse } from './geminiProxy';
 import { getFoodTone } from "../components/FoodIcons";
 import { findFoodNutrition } from "../data/foodNutritionDatabase";
 
@@ -223,16 +223,8 @@ export async function analyzeReceiptWithGemini(params: {
   mimeType?: string;
   text?: string;
 }): Promise<ParsedReceiptFoodItem[]> {
-  const apiKey =
-    (import.meta as any).env?.VITE_GEMINI_API_KEY ||
-    (typeof process !== "undefined" && process.env?.GEMINI_API_KEY) ||
-    "";
-
-  if (!apiKey) {
-    if (params.text && params.text.trim().length > 0) {
-      return parseReceiptFallback(params.text);
-    }
-    throw new Error("Kein Gemini API-Schlüssel gefunden. Bitte erstelle einen Key in Google AI Studio.");
+  if (!params.imageBase64 && (!params.text || params.text.trim().length === 0)) {
+    throw new Error("Kein Bild und kein Text übergeben – bitte Kassenbon-Foto oder Text eingeben.");
   }
 
   const promptText = `Du bist ein professioneller OCR- & Kassenbon-Analyst für deutsche Supermärkte (Rewe, Edeka, Aldi, Lidl, Kaufland, Netto, Penny, dm, Alnatura).
@@ -267,87 +259,128 @@ Antworte AUSSCHLIESSLICH als valides JSON in folgendem Schema ohne Markdown-Back
   ]
 }`;
 
-  // 1. Try with GoogleGenAI SDK (Primary)
+  // Primary: route through the secure server-side proxy
   try {
-    const ai = new GoogleGenAI({ apiKey });
-    const contents: any[] = [];
+    // Build a contents array for the proxy
+    const contents: unknown[] = [];
 
     if (params.imageBase64) {
       const cleanBase64 = params.imageBase64.replace(/^data:[^;]+;base64,/, "");
-      contents.push({
-        inlineData: {
-          mimeType: params.mimeType || "image/jpeg",
-          data: cleanBase64,
-        },
-      });
-    }
+      const modelsToTry = ["gemini-3.8-flash", "gemini-flash-lite-latest", "gemini-3.5-flash-lite"];
+      let rawText = "";
 
-    if (params.text) {
-      contents.push({
-        text: `Kassenbon-Textinhalt:\n${params.text}`,
-      });
-    }
-
-    contents.push(promptText);
-
-    const modelsToTry = ["gemini-3.8-flash", "gemini-flash-lite-latest", "gemini-3.5-flash-lite"];
-    let rawText = "";
-
-    for (const model of modelsToTry) {
-      try {
-        const resp = await ai.models.generateContent({
-          model,
-          contents,
-          config: {
-            responseMimeType: "application/json",
-            temperature: 0.2,
-          },
-        });
-        rawText = resp.text?.trim() || "";
-        if (rawText) break;
-      } catch (mErr) {
-        console.warn(`[Receipt OCR] Fehler mit Modell ${model}:`, mErr);
+      for (const model of modelsToTry) {
+        try {
+          const resp = await callGeminiProxy({
+            model,
+            contents: params.text
+              ? `Kassenbon-Textinhalt:\n${params.text}\n\n${promptText}`
+              : promptText,
+            config: { responseMimeType: "application/json", temperature: 0.2 },
+            inlineData: { data: cleanBase64, mimeType: params.mimeType || "image/jpeg" },
+          });
+          rawText = extractTextFromGeminiResponse(resp) ?? "";
+          if (rawText) break;
+        } catch (mErr) {
+          console.warn(`[Receipt OCR] Fehler mit Modell ${model}:`, mErr);
+        }
       }
-    }
 
-    if (rawText) {
-      const cleanJson = rawText.replace(/^```json/i, "").replace(/^```/, "").replace(/```$/, "").trim();
-      const parsed = JSON.parse(cleanJson);
+      if (rawText) {
+        const cleanJson = rawText.replace(/^```json/i, "").replace(/^```/, "").replace(/```$/, "").trim();
+        const parsed = JSON.parse(cleanJson);
 
-      if (parsed && Array.isArray(parsed.items) && parsed.items.length > 0) {
-        return parsed.items.map((item: any, idx: number) => {
-          const tone = getFoodTone(item.name || "", item.category);
-          const amount = Number(item.amount) || (item.unit === "Stk." ? 1 : 500);
-          const unit = item.unit || "g";
-          const mhdEstimate = calculateEstimatedMhd(item.name || "", item.category || "Trocken");
+        if (parsed && Array.isArray(parsed.items) && parsed.items.length > 0) {
+          return parsed.items.map((item: any, idx: number) => {
+            const tone = getFoodTone(item.name || "", item.category);
+            const amount = Number(item.amount) || (item.unit === "Stk." ? 1 : 500);
+            const unit = item.unit || "g";
+            const mhdEstimate = calculateEstimatedMhd(item.name || "", item.category || "Trocken");
+            const nutrition = findFoodNutrition(item.name || "", item.category);
 
-          const nutrition = findFoodNutrition(item.name || "", item.category);
+            return {
+              id: `receipt-item-${Date.now()}-${idx}`,
+              name: String(item.name || "Lebensmittel"),
+              quantity: `${amount} ${unit}`,
+              amount,
+              total: amount,
+              unit,
+              price: Number(item.price) || 1.99,
+              category: (item.category as any) || "Trocken",
+              selected: true,
+              tone,
+              caloriesPer100g: nutrition.calories,
+              proteinPer100g: nutrition.protein,
+              carbsPer100g: nutrition.carbs,
+              fatPer100g: nutrition.fat,
+              mhd: mhdEstimate.mhd,
+              shelfLifeDays: item.shelfLifeDays || mhdEstimate.shelfLifeDays,
+              freshnessHint: mhdEstimate.freshnessHint,
+              isUrgent: mhdEstimate.isUrgent,
+            };
+          });
+        }
+      }
+    } else {
+      // Text-only mode: use a simple model cascade through the proxy
+      const modelsToTry = ["gemini-3.8-flash", "gemini-flash-lite-latest", "gemini-3.5-flash-lite"];
+      let rawText = "";
 
-          return {
-            id: `receipt-item-${Date.now()}-${idx}`,
-            name: String(item.name || "Lebensmittel"),
-            quantity: `${amount} ${unit}`,
-            amount,
-            total: amount,
-            unit,
-            price: Number(item.price) || 1.99,
-            category: (item.category as any) || "Trocken",
-            selected: true,
-            tone,
-            caloriesPer100g: nutrition.calories,
-            proteinPer100g: nutrition.protein,
-            carbsPer100g: nutrition.carbs,
-            fatPer100g: nutrition.fat,
-            mhd: mhdEstimate.mhd,
-            shelfLifeDays: item.shelfLifeDays || mhdEstimate.shelfLifeDays,
-            freshnessHint: mhdEstimate.freshnessHint,
-            isUrgent: mhdEstimate.isUrgent,
-          };
-        });
+      for (const model of modelsToTry) {
+        try {
+          const textPrompt = params.text
+            ? `Kassenbon-Textinhalt:\n${params.text}\n\n${promptText}`
+            : promptText;
+          const resp = await callGeminiProxy({
+            model,
+            contents: textPrompt,
+            config: { responseMimeType: "application/json", temperature: 0.2 },
+          });
+          rawText = extractTextFromGeminiResponse(resp) ?? "";
+          if (rawText) break;
+        } catch (mErr) {
+          console.warn(`[Receipt OCR] Fehler mit Modell ${model}:`, mErr);
+        }
+      }
+
+      if (rawText) {
+        const cleanJson = rawText.replace(/^```json/i, "").replace(/^```/, "").replace(/```$/, "").trim();
+        const parsed = JSON.parse(cleanJson);
+
+        if (parsed && Array.isArray(parsed.items) && parsed.items.length > 0) {
+          return parsed.items.map((item: any, idx: number) => {
+            const tone = getFoodTone(item.name || "", item.category);
+            const amount = Number(item.amount) || (item.unit === "Stk." ? 1 : 500);
+            const unit = item.unit || "g";
+            const mhdEstimate = calculateEstimatedMhd(item.name || "", item.category || "Trocken");
+            const nutrition = findFoodNutrition(item.name || "", item.category);
+
+            return {
+              id: `receipt-item-${Date.now()}-${idx}`,
+              name: String(item.name || "Lebensmittel"),
+              quantity: `${amount} ${unit}`,
+              amount,
+              total: amount,
+              unit,
+              price: Number(item.price) || 1.99,
+              category: (item.category as any) || "Trocken",
+              selected: true,
+              tone,
+              caloriesPer100g: nutrition.calories,
+              proteinPer100g: nutrition.protein,
+              carbsPer100g: nutrition.carbs,
+              fatPer100g: nutrition.fat,
+              mhd: mhdEstimate.mhd,
+              shelfLifeDays: item.shelfLifeDays || mhdEstimate.shelfLifeDays,
+              freshnessHint: mhdEstimate.freshnessHint,
+              isUrgent: mhdEstimate.isUrgent,
+            };
+          });
+        }
       }
     }
   } catch (err) {
-    console.error("[Receipt OCR] SDK Analyse fehlgeschlagen:", err);
+    console.error("[Receipt OCR] Proxy-Analyse fehlgeschlagen:", err);
   }
 
   // Fallback to text parsing only if text was provided

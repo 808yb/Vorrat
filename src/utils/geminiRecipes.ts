@@ -1,4 +1,4 @@
-import { GoogleGenAI } from '@google/genai';
+import { callGeminiProxy, extractTextFromGeminiResponse } from './geminiProxy';
 import { type CatalogRecipe, type RecipeStep } from '../data/recipeCatalog';
 import { findMatchingPantryItem } from './pantryMatching';
 import { decomposeCompositeIngredients } from './recipeHelpers';
@@ -321,16 +321,18 @@ export function saveCustomRecipe(recipe: CatalogRecipe, rawIngredients: RawGemin
   }
 }
 
+/**
+ * Returns the local dev API key (VITE_GEMINI_API_KEY) for guard checks.
+ * In production the key lives on the server – this returns "" there.
+ * Real API calls must go through callGeminiProxy().
+ */
 export function getGeminiApiKey(): string {
-  const raw = (
-    (import.meta as any).env?.VITE_GEMINI_API_KEY ||
-    (typeof process !== "undefined" && process.env?.GEMINI_API_KEY) ||
-    ""
-  ).trim();
+  if (!import.meta.env?.DEV) return "proxy";
+  const raw = (import.meta.env?.VITE_GEMINI_API_KEY || "").trim();
   if ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'"))) {
     return raw.slice(1, -1).trim();
   }
-  return raw;
+  return raw || "proxy";
 }
 
 export async function generateRecipeWithGemini(
@@ -668,37 +670,27 @@ function buildSmartFallbackRecipe(
   };
 }
 
-async function callGeminiCascade(apiKey: string, prompt: string): Promise<RawGeminiRecipe | null> {
+/**
+ * Calls the Gemini API via the secure server-side proxy with a model cascade.
+ * The API key is NEVER read in the browser here – it lives in api/gemini.ts.
+ */
+async function callGeminiCascade(_apiKey: string, prompt: string): Promise<RawGeminiRecipe | null> {
   const models = [
     "gemini-3.8-flash",
     "gemini-flash-lite-latest",
     "gemini-3.5-flash-lite",
+    "gemini-2.5-flash-lite",
   ];
 
   for (const model of models) {
     try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              responseMimeType: "application/json",
-              temperature: 0.7,
-            },
-          }),
-        }
-      );
+      const data = await callGeminiProxy({
+        model,
+        contents: prompt,
+        config: { responseMimeType: "application/json", temperature: 0.7 },
+      });
 
-      if (!res.ok) {
-        console.warn(`[Gemini Cascade] ${model} antwortete mit ${res.status}: ${res.statusText}`);
-        continue;
-      }
-
-      const data = await res.json();
-      const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      const rawText = extractTextFromGeminiResponse(data);
       if (!rawText) continue;
 
       const cleanJson = rawText.replace(/^```json/i, "").replace(/^```/, "").replace(/```$/, "").trim();
@@ -710,24 +702,6 @@ async function callGeminiCascade(apiKey: string, prompt: string): Promise<RawGem
     } catch (err) {
       console.warn(`[Gemini Cascade] Fehler bei Modell ${model}:`, err);
     }
-  }
-
-  // Fallback to official SDK
-  try {
-    const ai = new GoogleGenAI({ apiKey });
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash-lite",
-      contents: prompt,
-      config: { responseMimeType: "application/json" },
-    });
-    const text = response.text ? response.text.trim() : "";
-    const cleanJson = text.replace(/^```json/i, "").replace(/^```/, "").replace(/```$/, "").trim();
-    const parsed = JSON.parse(cleanJson);
-    if (parsed && parsed.title && Array.isArray(parsed.ingredients)) {
-      return parsed;
-    }
-  } catch (sdkErr) {
-    console.warn("[Gemini Cascade] SDK Fallback fehlgeschlagen:", sdkErr);
   }
 
   return null;
@@ -814,14 +788,6 @@ export async function importRecipeFromTextOrUrlWithGemini(
   content: string,
   pantryItems: Array<{ name: string; amount?: number }>
 ): Promise<{ recipe: CatalogRecipe; missingIngredients: RawGeminiIngredient[]; rawIngredients: RawGeminiIngredient[] }> {
-  const apiKey = getGeminiApiKey();
-
-  if (!apiKey) {
-    throw new Error("Kein Gemini API-Schlüssel hinterlegt. Bitte erstelle einen Key in Google AI Studio.");
-  }
-
-  const ai = new GoogleGenAI({ apiKey });
-
   const isUrl = /^https?:\/\//i.test(content.trim());
 
   const prompt = `Du bist ein Rezept-Extraktor. Analysiere diesen Rezept-Inhalt (${isUrl ? "Weblink" : "Text/Social-Media Caption/Notiz"}) und extrahiere daraus ein strukturiertes Rezept für EINE PORTION (Basisportionierung).
@@ -867,16 +833,13 @@ Antworte AUSSCHLIESSLICH mit gültigem JSON im folgenden Schema ohne Markdown-Fo
   ]
 }`;
 
-  const response = await ai.models.generateContent({
+  const data = await callGeminiProxy({
     model: "gemini-3.8-flash",
     contents: prompt,
-    config: {
-      temperature: 0.2,
-      responseMimeType: "application/json",
-    },
+    config: { temperature: 0.2, responseMimeType: "application/json" },
   });
 
-  const responseText = response.text?.trim() || "";
+  const responseText = extractTextFromGeminiResponse(data) ?? "";
   const cleaned = responseText.replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
   const parsed: RawGeminiRecipe = JSON.parse(cleaned);
   parsed.ingredients = decomposeCompositeIngredients(parsed.ingredients);
@@ -966,11 +929,6 @@ export async function importRecipeFromVideoWithGemini(
     throw new Error("Das Video ist über 25 MB groß. Bitte wähle einen kürzeren Clip oder komprimiere das Video leicht für die Analyse.");
   }
 
-  const apiKey = getGeminiApiKey();
-  if (!apiKey) {
-    throw new Error("Kein Gemini API-Schlüssel hinterlegt. Bitte erstelle einen Key in Google AI Studio.");
-  }
-
   // Convert File to base64
   const base64Data = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -982,8 +940,6 @@ export async function importRecipeFromVideoWithGemini(
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
-
-  const ai = new GoogleGenAI({ apiKey });
 
   const prompt = `Du bist ein erstklassiger KI-Chefkoch und multimodaler Video-Rezept-Analyst.
 Analysiere dieses Kochvideo (Reel, TikTok oder Video-Clip) ganzheitlich:
@@ -1030,26 +986,14 @@ Antworte AUSSCHLIESSLICH mit gültigem JSON im folgenden Schema ohne Markdown-Fo
 
   const mimeType = file.type || "video/mp4";
 
-  const response = await ai.models.generateContent({
+  const data = await callGeminiProxy({
     model: "gemini-3.8-flash",
-    contents: [
-      {
-        inlineData: {
-          data: base64Data,
-          mimeType,
-        },
-      },
-      {
-        text: prompt,
-      },
-    ],
-    config: {
-      temperature: 0.2,
-      responseMimeType: "application/json",
-    },
+    contents: prompt,
+    config: { temperature: 0.2, responseMimeType: "application/json" },
+    inlineData: { data: base64Data, mimeType },
   });
 
-  const responseText = response.text?.trim() || "";
+  const responseText = extractTextFromGeminiResponse(data) ?? "";
   const cleaned = responseText.replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
   const parsed: RawGeminiRecipe = JSON.parse(cleaned);
   parsed.ingredients = decomposeCompositeIngredients(parsed.ingredients);
@@ -1167,16 +1111,13 @@ ANWEISUNG AN DICH ALS CHEFKOCH:
     const candidateModels = ["gemini-flash-latest", "gemini-3.8-flash", "gemini-flash-lite-latest", "gemini-2.5-flash"];
     for (const model of candidateModels) {
       try {
-        const ai = new GoogleGenAI({ apiKey });
-        const resp = await ai.models.generateContent({
+        const resp = await callGeminiProxy({
           model,
           contents: prompt,
-          config: {
-            temperature: 0.3,
-          },
+          config: { temperature: 0.3 },
         });
 
-        const text = resp.text?.trim();
+        const text = extractTextFromGeminiResponse(resp);
         if (text) return text;
       } catch (err) {
         console.warn(`[askAboutRecipeWithGemini] Model ${model} failed, trying next:`, err);

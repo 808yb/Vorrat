@@ -356,6 +356,8 @@ export function HouseholdSyncModal({
   };
 
 
+  if (!isOpen) return null;
+
   return (
     <div className="modal-overlay" onClick={onClose} style={{ zIndex: 60 }}>
       <div
@@ -403,8 +405,25 @@ export function HouseholdSyncModal({
           <button
             type="button"
             className="clear-button"
-            onClick={onClose}
-            style={{ border: "none", background: "transparent", cursor: "pointer", color: "#94a3b8", fontSize: "16px" }}
+            aria-label="Schließen"
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
+            style={{
+              border: "none",
+              background: "#f1f5f9",
+              cursor: "pointer",
+              color: "#64748b",
+              fontSize: "14px",
+              width: "32px",
+              height: "32px",
+              borderRadius: "50%",
+              display: "grid",
+              placeItems: "center",
+              fontWeight: 700,
+              transition: "all 140ms ease",
+            }}
           >
             ✕
           </button>

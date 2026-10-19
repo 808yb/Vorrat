@@ -180,6 +180,8 @@ export function CookingModal({
     }
   };
 
+  if (!isOpen || !recipe) return null;
+
   const steps = getSafeSteps(recipe);
   const safeIngredients = getSafeIngredientsList(recipe, servings);
   const currentStep = steps[currentStepIndex] || steps[0];

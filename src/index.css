@@ -81,17 +81,12 @@ textarea:focus-visible {
   outline-offset: 2px;
 }
 
-.app-shell {
-  position: relative;
-  width: 100%;
-  max-width: 393px;
-  min-height: 100dvh;
-  margin: 0 auto;
-  overflow-x: hidden;
-  background: #fafafa;
-  border-left: 1px solid #eaece9;
-  border-right: 1px solid #eaece9;
-  box-shadow: 0 16px 50px rgba(18, 21, 26, 0.07);
+
+
+@media (min-width: 640px) {
+  .app-shell {
+    max-width: 430px;
+  }
 }
 
 .app-header {
@@ -454,13 +449,13 @@ h2 {
 
 .nutrition-card-header p {
   margin: 0;
-  font-size: 9.5px;
+  font-size: 11px;
   color: #64748b;
 }
 
 .nutrition-pill {
   padding: 3px 8px;
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 650;
   color: #065f46;
   background: #ebf3ee;
@@ -486,7 +481,7 @@ h2 {
 }
 
 .nutrition-hero-label span {
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   color: #c6dcce;
   text-transform: uppercase;
@@ -494,7 +489,7 @@ h2 {
 }
 
 .nutrition-hero-label small {
-  font-size: 9.5px;
+  font-size: 11px;
   color: #f4f7f5;
   opacity: 0.85;
 }
@@ -544,7 +539,7 @@ h2 {
 
 .nutrition-macro-item span {
   display: block;
-  font-size: 8.5px;
+  font-size: 10.5px;
   font-weight: 750;
   color: #64748b;
   text-transform: uppercase;
@@ -562,7 +557,7 @@ h2 {
 }
 
 .nutrition-macro-item small {
-  font-size: 8.5px;
+  font-size: 10.5px;
   color: #94a3b8;
   font-weight: 600;
 }
@@ -589,7 +584,7 @@ h2 {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 8.5px;
+  font-size: 10.5px;
   font-weight: 650;
   color: #64748b;
   padding: 0 2px;
@@ -801,12 +796,12 @@ h2 {
 
 .product-cat-pill {
   color: #64748b;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 600;
 }
 
 .product-cat-select {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 650;
   color: #475569;
   background: #f1f5f9;
@@ -825,7 +820,7 @@ h2 {
 }
 
 .product-macro-badge {
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 600;
   color: #475569;
   background: #f1f5f9;
@@ -881,7 +876,7 @@ h2 {
 }
 
 .pantry-cat-count {
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   background: #f1f5f9;
   color: #475569;
@@ -907,7 +902,7 @@ h2 {
   gap: 3px;
   padding: 1.5px 6px;
   border-radius: 6px;
-  font-size: 8.5px;
+  font-size: 10.5px;
   font-weight: 700;
   letter-spacing: 0.01em;
   white-space: nowrap;
@@ -946,7 +941,7 @@ h2 {
 .product-heading p {
   margin: 0;
   color: #94a3b8;
-  font-size: 9px;
+  font-size: 11px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -955,7 +950,7 @@ h2 {
 .status {
   padding: 2.5px 7px;
   border-radius: 99px;
-  font-size: 8.5px;
+  font-size: 10.5px;
   font-weight: 750;
   flex-shrink: 0;
   white-space: nowrap;
@@ -987,7 +982,7 @@ h2 {
 
 .stock-row small {
   color: #94a3b8;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 500;
 }
 
@@ -1226,7 +1221,7 @@ h2 {
   gap: 4px;
   margin: 9px 0 0;
   color: #94a3b8;
-  font-size: 8px;
+  font-size: 10.5px;
 }
 
 .recipe-heading {
@@ -1238,7 +1233,7 @@ h2 {
   color: #244932;
   background: #ebf3ee;
   border-radius: 99px;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 750;
 }
 
@@ -1338,7 +1333,7 @@ h2 {
 .recipe-topline {
   gap: 10px;
   color: #64748b;
-  font-size: 8px;
+  font-size: 10.5px;
   font-weight: 650;
 }
 
@@ -1366,7 +1361,7 @@ h2 {
 .recipe-subtitle {
   margin-bottom: 12px;
   color: #64748b;
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .metric-grid {
@@ -1389,7 +1384,7 @@ h2 {
   display: block;
   margin-bottom: 3px;
   color: #94a3b8;
-  font-size: 6.5px;
+  font-size: 10.5px;
   font-weight: 650;
   text-transform: uppercase;
 }
@@ -1401,7 +1396,7 @@ h2 {
   font-variant-numeric: tabular-nums;
 }
 
-.metric-grid small { font-size: 7px; }
+.metric-grid small { font-size: 10.5px; }
 .metric-grid .cost { background: #f4f7f5; }
 .metric-grid .cost strong { color: #244932; }
 
@@ -1416,7 +1411,7 @@ h2 {
   gap: 7px;
   padding: 8px 9px;
   border-radius: 10px;
-  font-size: 8px;
+  font-size: 10.5px;
 }
 
 .ingredient-tag > span {
@@ -1425,7 +1420,7 @@ h2 {
 }
 
 .ingredient-tag strong {
-  font-size: 7px;
+  font-size: 10.5px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -1479,7 +1474,7 @@ h2 {
 .budget-top p {
   margin-bottom: 3px;
   color: #c6dcce;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 650;
 }
 
@@ -1505,7 +1500,7 @@ h2 {
   margin-top: 14px;
   padding-top: 12px;
   border-top: 1px solid rgba(255, 255, 255, 0.16);
-  font-size: 8px;
+  font-size: 10.5px;
 }
 
 .savings-row span {
@@ -1524,7 +1519,7 @@ h2 {
   justify-content: space-between;
   margin: 20px 2px 10px;
   color: #94a3b8;
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .list-meta strong {
@@ -1557,7 +1552,7 @@ h2 {
   color: #64748b;
   background: #e2e8f0;
   border-radius: 50%;
-  font-size: 8px;
+  font-size: 10.5px;
   font-weight: 750;
 }
 
@@ -1630,7 +1625,7 @@ h2 {
   color: #334155;
   background: #f1f5f9;
   border-radius: 6px;
-  font-size: 9px;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
 }
@@ -1639,7 +1634,7 @@ h2 {
   display: block;
   margin: 1px 0 5px;
   color: #64748b;
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .reason-tag {
@@ -1649,7 +1644,7 @@ h2 {
   color: #b45309;
   background: #fffbeb;
   border-radius: 5px;
-  font-size: 7.5px;
+  font-size: 10.5px;
   font-weight: 650;
   white-space: nowrap;
   overflow: hidden;
@@ -1663,14 +1658,7 @@ h2 {
   text-decoration: line-through;
 }
 
-.shopping-footer {
-  position: fixed;
-  z-index: 35;
-  bottom: 76px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 100%;
-  max-width: 393px;
+.shopping-footer {-width: 100%;
   padding: 10px 16px;
   background: linear-gradient(transparent, #f8fafc 28%);
 }
@@ -1691,26 +1679,16 @@ h2 {
   align-items: center;
   gap: 3px;
   color: #c6dcce;
-  font-size: 8px;
+  font-size: 10.5px;
 }
 
-.bottom-nav {
-  position: fixed;
-  z-index: 40;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  display: grid;
-  width: 100%;
-  max-width: 393px;
-  height: 72px;
-  grid-template-columns: repeat(5, 1fr);
-  align-items: center;
-  padding: 6px 4px calc(8px + env(safe-area-inset-bottom, 0px));
-  background: rgba(255, 255, 255, 0.96);
-  border-top: 1px solid #eaece9;
-  backdrop-filter: blur(20px);
-  box-shadow: 0 -4px 18px rgba(18, 21, 26, 0.04);
+
+
+@media (min-width: 640px) {
+  .bottom-nav,
+  .shopping-footer {
+    max-width: 430px;
+  }
 }
 
 .nav-item {
@@ -1775,7 +1753,7 @@ h2 {
   background: #c2593f;
   border: 2px solid white;
   border-radius: 99px;
-  font-size: 8.5px;
+  font-size: 10.5px;
   font-weight: 800;
   line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -1807,7 +1785,7 @@ h2 {
   border: 1px solid #ebf3ee;
   border-radius: 12px;
   box-shadow: 0 12px 32px rgba(15, 23, 42, 0.15);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 650;
   transform: translateX(-50%);
   animation: toast-in 240ms ease both;
@@ -1845,7 +1823,7 @@ h2 {
 
 .modal-content {
   width: 100%;
-  max-width: 393px;
+  max-width: 100%;
   max-height: 88vh;
   display: flex;
   flex-direction: column;
@@ -1948,7 +1926,7 @@ h2 {
   background: #fef3c7;
   color: #b45309;
   border-radius: 99px;
-  font-size: 8.5px;
+  font-size: 10.5px;
   font-weight: 750;
   letter-spacing: 0.02em;
 }
@@ -1984,7 +1962,7 @@ h2 {
 }
 
 .favorites-count-pill {
-  font-size: 9px;
+  font-size: 11px;
   padding: 2px 8px;
   background: #f4f7f5;
   color: #244932;
@@ -2055,7 +2033,7 @@ h2 {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 9.5px;
+  font-size: 11px;
   color: #64748b;
   font-weight: 600;
 }
@@ -2263,7 +2241,7 @@ h2 {
   color: #ffffff;
   padding: 3px 8px;
   border-radius: 20px;
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 800;
   box-shadow: 0 2px 6px rgba(5, 150, 105, 0.3);
 }
@@ -2273,7 +2251,7 @@ h2 {
   color: #334155;
   padding: 3px 8px;
   border-radius: 20px;
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 750;
   box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
 }
@@ -2315,7 +2293,7 @@ h2 {
   padding: 2px 7px;
   background: #f1f5f9;
   border-radius: 6px;
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 750;
   color: #475569;
   white-space: nowrap;
@@ -2339,7 +2317,7 @@ h2 {
 
 .swipe-metric span {
   display: block;
-  font-size: 8.5px;
+  font-size: 10.5px;
   color: #64748b;
   font-weight: 600;
   white-space: nowrap;
@@ -2481,7 +2459,7 @@ h2 {
   background: #fff1f2;
   padding: 1px 4px;
   border-radius: 4px;
-  font-size: 9.5px;
+  font-size: 11px;
 }
 
 .pantry-chip.instock {
@@ -2505,7 +2483,7 @@ h2 {
 .pantry-chip.instock .chip-amount {
   color: #2d5a3e;
   font-weight: 650;
-  font-size: 9.5px;
+  font-size: 11px;
 }
 
 .swipe-availability-box {
@@ -2535,7 +2513,7 @@ h2 {
 }
 
 .optional-tag {
-  font-size: 9.5px;
+  font-size: 11px;
   color: #244932;
   font-weight: 600;
   opacity: 0.85;
@@ -2760,7 +2738,7 @@ h2 {
 }
 
 .add-badge {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 750;
   padding: 2px 6px;
   border-radius: 6px;
@@ -2806,7 +2784,7 @@ h2 {
 
 .nutri-pill.mini {
   padding: 2px 6px;
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .preview-macros-grid {
@@ -2821,7 +2799,7 @@ h2 {
 }
 
 .preview-macros-grid span {
-  font-size: 9px;
+  font-size: 11px;
   color: #64748b;
   display: block;
 }
@@ -2860,7 +2838,7 @@ h2 {
 }
 
 .test-barcode-chip .chip-code {
-  font-size: 9.5px;
+  font-size: 11px;
   color: #64748b;
   font-family: monospace;
 }
@@ -2900,7 +2878,7 @@ h2 {
   .screen { padding-inline: 12px; }
   .sync-state { display: none; }
   .recipe-body { padding: 12px; }
-  .metric-grid strong { font-size: 9px; }
+  .metric-grid strong { font-size: 11px; }
 }
 
 /* ==========================================================================
@@ -2965,7 +2943,7 @@ h2 {
 }
 
 .meal-peak-pill {
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 750;
   padding: 2px 8px;
   border-radius: 20px;
@@ -3029,7 +3007,7 @@ h2 {
 }
 
 .meal-kpi-chip .kpi-label {
-  font-size: 8.5px;
+  font-size: 10.5px;
   color: #64748b;
   font-weight: 600;
   white-space: nowrap;
@@ -3095,7 +3073,7 @@ h2 {
   display: flex;
   align-items: center;
   gap: 5px;
-  font-size: 9.5px;
+  font-size: 11px;
   color: #475569;
   font-weight: 600;
 }
@@ -3161,7 +3139,7 @@ h2 {
   position: absolute;
   left: 0;
   top: -8px;
-  font-size: 8px;
+  font-size: 10.5px;
   color: #94a3b8;
   font-variant-numeric: tabular-nums;
   font-family: monospace;
@@ -3214,7 +3192,7 @@ h2 {
   top: 0;
   background: #ea580c;
   color: #ffffff;
-  font-size: 7.5px;
+  font-size: 10.5px;
   font-weight: 850;
   padding: 1px 4px;
   border-radius: 6px;
@@ -3229,7 +3207,7 @@ h2 {
 }
 
 .bar-value-label {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 750;
   color: #475569;
   margin-bottom: 4px;
@@ -3363,7 +3341,7 @@ h2 {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   padding: 2.5px 8px;
   border-radius: 20px;
@@ -3395,7 +3373,7 @@ h2 {
 }
 
 .metric-pill {
-  font-size: 9px;
+  font-size: 11px;
   color: #475569;
   background: #ffffff;
   padding: 2px 6px;
@@ -3454,7 +3432,7 @@ h2 {
 
 .desc-text strong {
   display: block;
-  font-size: 9.5px;
+  font-size: 11px;
   color: #64748b;
   margin-bottom: 1px;
 }
@@ -3555,7 +3533,7 @@ h2 {
 }
 
 .favorites-count-badge small {
-  font-size: 8.5px;
+  font-size: 10.5px;
   font-weight: 700;
   color: #2d5a3e;
   text-transform: uppercase;
@@ -3638,7 +3616,7 @@ h2 {
 }
 
 .saved-servings-badge {
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   color: #244932;
   background: #f4f7f5;
@@ -3764,7 +3742,7 @@ h2 {
 }
 
 .cooked-pill {
-  font-size: 8.5px;
+  font-size: 10.5px;
   padding: 1px 6px;
   border-radius: 99px;
   background: rgba(255, 255, 255, 0.3);
@@ -3831,7 +3809,7 @@ h2 {
   left: 6px;
   background: rgba(15, 23, 42, 0.75);
   color: #a7f3d0;
-  font-size: 8.5px;
+  font-size: 10.5px;
   font-weight: 750;
   padding: 2px 6px;
   border-radius: 6px;
@@ -3844,7 +3822,7 @@ h2 {
   left: 6px;
   background: #059669;
   color: #ffffff;
-  font-size: 8px;
+  font-size: 10.5px;
   font-weight: 750;
   padding: 1px 5px;
   border-radius: 4px;
@@ -3909,7 +3887,7 @@ h2 {
   align-items: center;
   justify-content: space-between;
   gap: 4px;
-  font-size: 9.5px;
+  font-size: 11px;
   color: #475569;
   font-weight: 650;
   padding-top: 6px;
@@ -4064,7 +4042,7 @@ h2 {
 
 .stat-box small {
   display: block;
-  font-size: 8px;
+  font-size: 10.5px;
   color: #64748b;
   font-weight: 650;
   text-transform: uppercase;
@@ -4135,7 +4113,7 @@ h2 {
 
 .step-counter-pill {
   margin-left: auto;
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 750;
   background: #f1f5f9;
   color: #475569;
@@ -4192,7 +4170,7 @@ h2 {
 }
 
 .optional-badge {
-  font-size: 8.5px;
+  font-size: 10.5px;
   color: #64748b;
   background: #e2e8f0;
   padding: 1px 4px;
@@ -4220,7 +4198,7 @@ h2 {
 }
 
 .stock-info {
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 650;
   white-space: nowrap;
   overflow: hidden;
@@ -4308,7 +4286,7 @@ h2 {
 }
 
 .step-time-pill {
-  font-size: 9px;
+  font-size: 11px;
   color: #64748b;
   background: #f1f5f9;
   padding: 1px 5px;
@@ -4346,7 +4324,7 @@ h2 {
 
 .chef-tip-box strong {
   display: block;
-  font-size: 9px;
+  font-size: 11px;
   text-transform: uppercase;
   color: #b45309;
   font-weight: 800;
@@ -4464,7 +4442,7 @@ h2 {
 
 .saved-meals-banner-left p {
   margin: 1px 0 0;
-  font-size: 9.5px;
+  font-size: 11px;
   color: #2d5a3e;
 }
 
@@ -4554,7 +4532,7 @@ h2 {
 }
 
 .planned-count-badge small {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.02em;
@@ -4753,7 +4731,7 @@ h2 {
 }
 
 .meal-plan-count-tag {
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   color: #244932;
   background: #f4f7f5;
@@ -4894,7 +4872,7 @@ h2 {
   position: absolute;
   top: 1px;
   right: 1px;
-  font-size: 8px;
+  font-size: 10.5px;
   font-weight: 800;
   background: #2d5a3e;
   color: #ffffff;
@@ -4917,7 +4895,7 @@ h2 {
   -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 8.5px;
+  font-size: 10.5px;
   font-weight: 700;
   line-height: 1.15;
   color: #334155;
@@ -4933,7 +4911,7 @@ h2 {
 }
 
 .day-col-empty-label {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 600;
   color: #94a3b8;
   height: 23px;
@@ -5022,7 +5000,7 @@ h2 {
   background: #10b981;
   color: #ffffff;
   border-radius: 99px;
-  font-size: 8px;
+  font-size: 10.5px;
   font-weight: 800;
 }
 
@@ -5225,7 +5203,7 @@ h2 {
   display: inline-block;
   padding: 1px 6px;
   border-radius: 99px;
-  font-size: 8.5px;
+  font-size: 10.5px;
   font-weight: 750;
   white-space: nowrap;
   flex-shrink: 0;
@@ -5269,7 +5247,7 @@ h2 {
 }
 
 .servings-label {
-  font-size: 9.5px;
+  font-size: 11px;
   color: #64748b;
   font-weight: 600;
   white-space: nowrap;
@@ -5323,7 +5301,7 @@ h2 {
   background: #ffffff;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
-  font-size: 9.5px;
+  font-size: 11px;
   color: #475569;
   cursor: pointer;
   max-width: 110px;
@@ -5523,7 +5501,7 @@ h2 {
 }
 
 .agg-category-tag {
-  font-size: 8.5px;
+  font-size: 10.5px;
   color: #64748b;
   background: #e2e8f0;
   padding: 1px 5px;
@@ -5532,14 +5510,14 @@ h2 {
 }
 
 .agg-opt-tag {
-  font-size: 8.5px;
+  font-size: 10.5px;
   color: #94a3b8;
   font-style: italic;
 }
 
 .agg-recipes-line {
   display: block;
-  font-size: 9px;
+  font-size: 11px;
   color: #94a3b8;
   white-space: nowrap;
   overflow: hidden;
@@ -5570,12 +5548,12 @@ h2 {
 }
 
 .agg-stock-info {
-  font-size: 9.5px;
+  font-size: 11px;
   color: #64748b;
 }
 
 .covered-pill {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 750;
   color: #15803d;
   background: #dcfce7;
@@ -5584,7 +5562,7 @@ h2 {
 }
 
 .missing-pill {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 750;
   color: #b45309;
   background: #fef3c7;
@@ -5646,7 +5624,7 @@ h2 {
 .planner-modal-sheet {
   background: #ffffff;
   border-radius: 24px 24px 0 0;
-  width: min(100%, 393px);
+  width: min(100%, 430px);
   max-height: 85vh;
   display: flex;
   flex-direction: column;
@@ -5792,7 +5770,7 @@ h2 {
 }
 
 .recipe-group-title {
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 750;
   color: #64748b;
   text-transform: uppercase;
@@ -5837,7 +5815,7 @@ h2 {
 
 .pick-card-info p {
   margin: 1px 0 0;
-  font-size: 9.5px;
+  font-size: 11px;
   color: #64748b;
 }
 
@@ -5896,7 +5874,7 @@ h2 {
 .edit-pantry-modal-sheet {
   background: #ffffff;
   border-radius: 24px 24px 0 0;
-  width: min(100%, 393px);
+  width: min(100%, 430px);
   max-height: 88vh;
   display: flex;
   flex-direction: column;
@@ -6104,7 +6082,7 @@ h2 {
 }
 
 .mhd-preview-tag {
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 800;
   padding: 2px 7px;
   border-radius: 6px;
@@ -6160,7 +6138,7 @@ h2 {
 }
 
 .preset-label {
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 700;
   color: #64748b;
 }
@@ -6185,7 +6163,7 @@ h2 {
 
 .mhd-hint {
   display: block;
-  font-size: 9.5px;
+  font-size: 11px;
   color: #64748b;
   margin-top: 6px;
   line-height: 1.35;
@@ -6296,7 +6274,7 @@ h2 {
 .planner-distributor-sheet {
   background: #ffffff;
   border-radius: 24px 24px 0 0;
-  width: min(100%, 393px);
+  width: min(100%, 430px);
   max-height: 88vh;
   display: flex;
   flex-direction: column;
@@ -6442,7 +6420,7 @@ h2 {
 }
 
 .distributor-day-btn .btn-check {
-  font-size: 9.5px;
+  font-size: 11px;
   font-weight: 800;
 }
 
