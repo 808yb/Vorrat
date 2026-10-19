@@ -99,7 +99,15 @@ export function HouseholdSyncModal({
   useEffect(() => {
     if (!isOpen) return;
     checkUser();
-  }, [isOpen]);
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
 
   const checkUser = async () => {
     try {
@@ -366,17 +374,33 @@ export function HouseholdSyncModal({
           onClose();
         }
       }}
-      style={{ zIndex: 60 }}
+      style={{ zIndex: 60, cursor: "pointer" }}
     >
       <div
         className="modal-content hide-scrollbar"
         onClick={(e) => e.stopPropagation()}
-        onTouchStart={(e) => e.stopPropagation()}
-        style={{ maxWidth: "440px", borderRadius: "24px", maxHeight: "90vh", overflowY: "auto" }}
+        style={{
+          maxWidth: "440px",
+          borderRadius: "24px",
+          maxHeight: "90vh",
+          overflowY: "auto",
+          cursor: "default",
+          position: "relative",
+        }}
       >
-        {/* Header */}
-        <div className="modal-header" style={{ padding: "18px 20px 14px", borderBottom: "1px solid #f1f5f9" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        {/* Sticky Header with Always Accessible Close Button */}
+        <div
+          className="modal-header"
+          style={{
+            position: "sticky",
+            top: 0,
+            background: "#ffffff",
+            zIndex: 20,
+            padding: "16px 20px 14px",
+            borderBottom: "1px solid #f1f5f9",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
             <div
               style={{
                 width: "38px",
@@ -386,12 +410,13 @@ export function HouseholdSyncModal({
                 color: "#059669",
                 display: "grid",
                 placeItems: "center",
+                flexShrink: 0,
               }}
             >
               <Cloud size={20} strokeWidth={2.4} />
             </div>
-            <div>
-              <h2 style={{ margin: 0, fontSize: "17px", color: "#0f172a", fontWeight: 800 }}>
+            <div style={{ minWidth: 0 }}>
+              <h2 style={{ margin: 0, fontSize: "16px", color: "#0f172a", fontWeight: 800 }}>
                 Accounts & Cloud-Sync
               </h2>
               <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "2px" }}>
@@ -403,6 +428,7 @@ export function HouseholdSyncModal({
                     background: currentUserEmail ? "#10b981" : "#94a3b8",
                     display: "inline-block",
                     boxShadow: currentUserEmail ? "0 0 6px #10b981" : "none",
+                    flexShrink: 0,
                   }}
                 />
                 <span style={{ fontSize: "11px", color: currentUserEmail ? "#059669" : "#64748b", fontWeight: 650 }}>
@@ -419,22 +445,27 @@ export function HouseholdSyncModal({
               e.stopPropagation();
               onClose();
             }}
+            onTouchEnd={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
             style={{
               border: "none",
               background: "#f1f5f9",
               cursor: "pointer",
-              color: "#64748b",
-              fontSize: "14px",
-              width: "36px",
-              height: "36px",
-              minWidth: "36px",
-              minHeight: "36px",
+              color: "#475569",
+              fontSize: "16px",
+              width: "40px",
+              height: "40px",
+              minWidth: "40px",
+              minHeight: "40px",
               borderRadius: "50%",
               display: "grid",
               placeItems: "center",
               fontWeight: 700,
               transition: "all 140ms ease",
               touchAction: "manipulation",
+              flexShrink: 0,
             }}
           >
             ✕
@@ -1127,6 +1158,32 @@ export function HouseholdSyncModal({
               </button>
             </div>
           )}
+
+          {/* Primary Bottom Close Button */}
+          <div style={{ marginTop: "12px", paddingTop: "8px" }}>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                width: "100%",
+                padding: "11px 16px",
+                background: "#f1f5f9",
+                border: "1px solid #e2e8f0",
+                borderRadius: "14px",
+                fontSize: "13px",
+                fontWeight: 700,
+                color: "#334155",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "6px",
+                transition: "background 140ms ease",
+              }}
+            >
+              Schließen
+            </button>
+          </div>
         </div>
       </div>
     </div>
