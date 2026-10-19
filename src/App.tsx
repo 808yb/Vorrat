@@ -1,13 +1,12 @@
 import { useMemo, useState, useEffect, useRef, type ReactNode } from "react";
-import { BrowserMultiFormatReader } from "@zxing/library";
 import { motion } from "motion/react";
 import { ProductMark, getFoodTone } from "./components/FoodIcons";
 import { FULL_RECIPE_CATALOG, type CatalogRecipe } from "./data/recipeCatalog";
 import { getStoredCustomRecipes, generateRecipeWithGemini, rehydrateCustomRecipe } from "./utils/geminiRecipes";
 import { getSafeIngredientsList, getSafeAvailable, getCurrentMealTimeSlot, decomposeCompositeIngredients } from "./utils/recipeHelpers";
-import { CookingModal, RecipeStepsAccordion } from "./components/CookingModal";
+import { CookingModal } from "./components/CookingModal";
 import { RecipeSwipeDeck } from "./components/RecipeSwipeDeck";
-import { getRecipePantryBreakdown } from "./utils/pantryMatching";
+import { getRecipePantryBreakdown, findMatchingPantryItem } from "./utils/pantryMatching";
 import { UnifiedAddModal } from "./components/UnifiedAddModal";
 import { EditPantryItemModal } from "./components/EditPantryItemModal";
 import { SavedMealsScreen } from "./components/SavedMealsScreen";
@@ -20,7 +19,6 @@ import {
 } from "./utils/supabaseClient";
 import { PwaInstallBanner } from "./components/PwaInstallBanner";
 import { RecipeImportModal } from "./components/RecipeImportModal";
-import { NutritionCoachModal } from "./components/NutritionCoachModal";
 import { AccountResetModal } from "./components/AccountResetModal";
 import { SurpriseMeModal, type SurpriseFilters } from "./components/SurpriseMeModal";
 import {
@@ -29,6 +27,10 @@ import {
   type WeekdayId,
   WEEKDAYS,
 } from "./components/WeeklyMealPlannerScreen";
+import { STORAGE_KEYS, wipeAllAppData } from "./constants/storage";
+
+// Re-export consolidated pantry matching function for backward compatibility
+export { findMatchingPantryItem } from "./utils/pantryMatching";
 
 type Tab = "pantry" | "discover" | "planner" | "cook" | "shop";
 type IconName =
@@ -1662,36 +1664,6 @@ function CookScreen({
   );
 }
 
-export function findMatchingPantryItem(groceryName: string, pantry: PantryItem[]): PantryItem | undefined {
-  const normalize = (str: string) =>
-    str
-      .toLowerCase()
-      .replace(/\(.*?\)/g, "")
-      .replace(/bio\s+/g, "")
-      .replace(/tk\s*[-]?/g, "")
-      .replace(/soße/g, "sauce")
-      .replace(/frühlingszwiebeln/g, "frühlingszwiebel")
-      .trim();
-
-  const gNorm = normalize(groceryName);
-
-  // 1. Direct or normalized exact match
-  const exact = pantry.find((p) => {
-    const pNorm = normalize(p.name);
-    return pNorm === gNorm || p.name.toLowerCase().trim() === groceryName.toLowerCase().trim();
-  });
-  if (exact) return exact;
-
-  // 2. Substring matching
-  return pantry.find((p) => {
-    const pNorm = normalize(p.name);
-    return (
-      (pNorm.length >= 3 && gNorm.includes(pNorm)) ||
-      (gNorm.length >= 3 && pNorm.includes(gNorm))
-    );
-  });
-}
-
 export function parseGroceryQuantity(
   quantityStr: string,
   itemName: string
@@ -2105,7 +2077,10 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>("discover");
   const [favorites, setFavorites] = useState<string[]>(() => {
     try {
-      const saved = localStorage.getItem("forret_favorite_recipes");
+      const saved =
+        localStorage.getItem(STORAGE_KEYS.FAVORITES) ||
+        localStorage.getItem("forret_favorite_recipes") ||
+        localStorage.getItem("forret_favorites");
       if (saved) return JSON.parse(saved);
     } catch {}
     return ["r1", "r2"];
@@ -2113,7 +2088,7 @@ export default function App() {
 
   useEffect(() => {
     try {
-      localStorage.setItem("forret_favorite_recipes", JSON.stringify(favorites));
+      localStorage.setItem(STORAGE_KEYS.FAVORITES, JSON.stringify(favorites));
     } catch {}
   }, [favorites]);
 
@@ -2122,7 +2097,9 @@ export default function App() {
 
   const [pantry, setPantry] = useState<PantryItem[]>(() => {
     try {
-      const saved = localStorage.getItem("forret_design_pantry");
+      const saved =
+        localStorage.getItem(STORAGE_KEYS.PANTRY) ||
+        localStorage.getItem("forret_design_pantry");
       if (saved) {
         const parsed = JSON.parse(saved);
         const hasWater = parsed.some((p: any) => p.name.toLowerCase().includes("wasser"));
@@ -2146,7 +2123,7 @@ export default function App() {
 
   useEffect(() => {
     try {
-      localStorage.setItem("forret_design_pantry", JSON.stringify(pantry));
+      localStorage.setItem(STORAGE_KEYS.PANTRY, JSON.stringify(pantry));
     } catch {}
   }, [pantry]);
 
@@ -2175,7 +2152,7 @@ export default function App() {
 
   useEffect(() => {
     try {
-      localStorage.setItem("forret_custom_recipes", JSON.stringify(customRecipes));
+      localStorage.setItem(STORAGE_KEYS.CUSTOM_RECIPES, JSON.stringify(customRecipes));
     } catch {}
   }, [customRecipes]);
 
@@ -2207,7 +2184,9 @@ export default function App() {
 
   const [groceries, setGroceries] = useState<GroceryItem[]>(() => {
     try {
-      const saved = localStorage.getItem("forret_design_groceries");
+      const saved =
+        localStorage.getItem(STORAGE_KEYS.GROCERIES) ||
+        localStorage.getItem("forret_design_groceries");
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
@@ -2220,7 +2199,9 @@ export default function App() {
 
   const [plannedMeals, setPlannedMeals] = useState<PlannedMeal[]>(() => {
     try {
-      const saved = localStorage.getItem("forret_weekly_plan");
+      const saved =
+        localStorage.getItem(STORAGE_KEYS.WEEKLY_PLAN) ||
+        localStorage.getItem("forret_weekly_plan");
       if (saved) return JSON.parse(saved);
     } catch {}
     return [
@@ -2233,7 +2214,7 @@ export default function App() {
 
   useEffect(() => {
     try {
-      localStorage.setItem("forret_weekly_plan", JSON.stringify(plannedMeals));
+      localStorage.setItem(STORAGE_KEYS.WEEKLY_PLAN, JSON.stringify(plannedMeals));
     } catch {}
   }, [plannedMeals]);
 
@@ -2314,7 +2295,6 @@ export default function App() {
 
   const [isHouseholdModalOpen, setIsHouseholdModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [isCoachModalOpen, setIsCoachModalOpen] = useState(false);
   const [toast, setToast] = useState("");
 
   // Supabase Auto-Sync State
@@ -2407,16 +2387,10 @@ export default function App() {
     }
   };
 
-  // Sync to local storage
+  // Sync groceries to local storage
   useEffect(() => {
     try {
-      localStorage.setItem("forret_design_pantry", JSON.stringify(pantry));
-    } catch {}
-  }, [pantry]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem("forret_design_groceries", JSON.stringify(groceries));
+      localStorage.setItem(STORAGE_KEYS.GROCERIES, JSON.stringify(groceries));
     } catch {}
   }, [groceries]);
 
@@ -2448,7 +2422,7 @@ export default function App() {
   const handleClearGroceries = () => {
     setGroceries([]);
     try {
-      localStorage.setItem("forret_design_groceries", JSON.stringify([]));
+      localStorage.setItem(STORAGE_KEYS.GROCERIES, JSON.stringify([]));
     } catch {}
     notify("Einkaufsliste geleert");
   };
@@ -2580,7 +2554,8 @@ export default function App() {
 
       itemsToRestock.forEach((grocery) => {
         const parsed = parseGroceryQuantity(grocery.quantity, grocery.name);
-        const match = findMatchingPantryItem(grocery.name, updatedPantry);
+        const matchRes = findMatchingPantryItem(grocery.name, updatedPantry);
+        const match = matchRes ? (matchRes.pantryItem as PantryItem) : undefined;
 
         if (match) {
           const matchIdx = updatedPantry.findIndex((p) => String(p.id) === String(match.id));
@@ -2718,8 +2693,8 @@ export default function App() {
     setPantry(defaultPantry);
     setGroceries(defaultGroceries);
     try {
-      localStorage.setItem("forret_design_pantry", JSON.stringify(defaultPantry));
-      localStorage.setItem("forret_design_groceries", JSON.stringify(defaultGroceries));
+      localStorage.setItem(STORAGE_KEYS.PANTRY, JSON.stringify(defaultPantry));
+      localStorage.setItem(STORAGE_KEYS.GROCERIES, JSON.stringify(defaultGroceries));
     } catch {}
     notify("Standard-Demo Vorrat & Einkaufsliste wiederhergestellt!");
   };
@@ -2727,7 +2702,7 @@ export default function App() {
   const handleClearPantry = () => {
     setPantry([]);
     try {
-      localStorage.setItem("forret_design_pantry", JSON.stringify([]));
+      localStorage.setItem(STORAGE_KEYS.PANTRY, JSON.stringify([]));
     } catch {}
     notify("Vorrat komplett geleert (0 Produkte)");
   };
@@ -2736,7 +2711,7 @@ export default function App() {
     setPantry((prev) => {
       const cleaned = deduplicatePantry(prev);
       try {
-        localStorage.setItem("forret_design_pantry", JSON.stringify(cleaned));
+        localStorage.setItem(STORAGE_KEYS.PANTRY, JSON.stringify(cleaned));
       } catch {}
       return cleaned;
     });
@@ -2749,15 +2724,7 @@ export default function App() {
     setCustomRecipes([]);
     setFavorites([]);
     setPlannedMeals([]);
-    try {
-      localStorage.removeItem("forret_design_pantry");
-      localStorage.removeItem("forret_design_groceries");
-      localStorage.removeItem("vorrat_custom_recipes");
-      localStorage.removeItem("forret_weekly_plan");
-      localStorage.removeItem("forret_favorites");
-      localStorage.removeItem("vorrat_coach_chat_history");
-      localStorage.removeItem("forret_household_code");
-    } catch {}
+    wipeAllAppData();
     notify("Account komplett geleert: Vorrat, Rezepte, Einkauf & Wochenplan auf 0!");
   };
 
@@ -2765,9 +2732,9 @@ export default function App() {
     setPantry(defaultPantry);
     setGroceries(defaultGroceries);
     try {
-      localStorage.clear();
-      localStorage.setItem("forret_design_pantry", JSON.stringify(defaultPantry));
-      localStorage.setItem("forret_design_groceries", JSON.stringify(defaultGroceries));
+      wipeAllAppData();
+      localStorage.setItem(STORAGE_KEYS.PANTRY, JSON.stringify(defaultPantry));
+      localStorage.setItem(STORAGE_KEYS.GROCERIES, JSON.stringify(defaultGroceries));
     } catch {}
     notify("Gesamter App-Speicher zurückgesetzt!");
   };
@@ -3005,14 +2972,6 @@ export default function App() {
         onClose={() => setIsImportModalOpen(false)}
         pantryItems={pantry}
         onSaveRecipe={handleSaveImportedRecipe}
-        onNotify={notify}
-      />
-
-      {/* Smart Nutrition Coach Modal (Zero-cost macros & lean AI consult) */}
-      <NutritionCoachModal
-        isOpen={isCoachModalOpen}
-        onClose={() => setIsCoachModalOpen(false)}
-        pantry={pantry}
         onNotify={notify}
       />
     </div>

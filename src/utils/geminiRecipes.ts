@@ -2,6 +2,7 @@ import { GoogleGenAI } from '@google/genai';
 import { type CatalogRecipe, type RecipeStep } from '../data/recipeCatalog';
 import { findMatchingPantryItem } from './pantryMatching';
 import { decomposeCompositeIngredients } from './recipeHelpers';
+import { STORAGE_KEYS } from '../constants/storage';
 
 // High-resolution food images from Unsplash (matching common dishes)
 export const FOOD_IMAGE_PRESETS: Record<string, string> = {
@@ -104,8 +105,6 @@ interface RawGeminiRecipe {
     tag?: string;
   }>;
 }
-
-const STORAGE_CUSTOM_RECIPES_KEY = "forret_custom_recipes";
 
 /**
  * Intelligently extracts authentic ingredients from dish title & subtitle
@@ -296,7 +295,7 @@ export function rehydrateCustomRecipe(item: any): CatalogRecipe {
 
 export function getStoredCustomRecipes(): CatalogRecipe[] {
   try {
-    const raw = localStorage.getItem(STORAGE_CUSTOM_RECIPES_KEY);
+    const raw = localStorage.getItem(STORAGE_KEYS.CUSTOM_RECIPES) || localStorage.getItem("forret_custom_recipes");
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
@@ -316,7 +315,7 @@ export function saveCustomRecipe(recipe: CatalogRecipe, rawIngredients: RawGemin
       // Ensure functions are omitted in JSON without errors
     };
     const next = [serializable, ...existing.filter((r) => r.id !== recipe.id)];
-    localStorage.setItem(STORAGE_CUSTOM_RECIPES_KEY, JSON.stringify(next));
+    localStorage.setItem(STORAGE_KEYS.CUSTOM_RECIPES, JSON.stringify(next));
   } catch (err) {
     console.error("Fehler beim Speichern des Rezepts im localStorage:", err);
   }

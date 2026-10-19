@@ -15,6 +15,7 @@ import {
   displayUsernameFromEmail,
   type VorratSyncPayload,
 } from "../utils/supabaseClient";
+import { STORAGE_KEYS } from "../constants/storage";
 
 interface HouseholdSyncModalProps {
   isOpen: boolean;
@@ -50,7 +51,7 @@ export function HouseholdSyncModal({
   // Household Link State
   const [householdName, setHouseholdName] = useState(() => {
     try {
-      return localStorage.getItem("forret_household_name") || "Unsere Küche (WG & Familie)";
+      return localStorage.getItem(STORAGE_KEYS.HOUSEHOLD_NAME) || localStorage.getItem("forret_household_name") || "Unsere Küche (WG & Familie)";
     } catch {
       return "Unsere Küche (WG & Familie)";
     }
@@ -58,10 +59,10 @@ export function HouseholdSyncModal({
 
   const [inviteCode] = useState(() => {
     try {
-      const saved = localStorage.getItem("forret_household_code");
+      const saved = localStorage.getItem(STORAGE_KEYS.HOUSEHOLD_CODE) || localStorage.getItem("forret_household_code");
       if (saved) return saved;
       const gen = "VORRAT-" + Math.random().toString(36).substring(2, 7).toUpperCase();
-      localStorage.setItem("forret_household_code", gen);
+      localStorage.setItem(STORAGE_KEYS.HOUSEHOLD_CODE, gen);
       return gen;
     } catch {
       return "VORRAT-808YB";
@@ -128,7 +129,7 @@ export function HouseholdSyncModal({
   const handleSaveName = (newName: string) => {
     setHouseholdName(newName);
     try {
-      localStorage.setItem("forret_household_name", newName);
+      localStorage.setItem(STORAGE_KEYS.HOUSEHOLD_NAME, newName);
     } catch {}
   };
 

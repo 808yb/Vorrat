@@ -1,4 +1,4 @@
-# Forret — Vorrat, Budget & Smarte KI-Rezepte 🍳
+# Vorrat — Vorrat, Budget & Smarte KI-Rezepte 🍳
 
 Eine moderne Web-App zur intelligenten Vorratsverwaltung, Budgetplanung und Anti-Food-Waste-Rezeptempfehlung mit Google Gemini AI.
 
