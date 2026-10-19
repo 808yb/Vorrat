@@ -234,6 +234,20 @@ export function CookingModal({
               >
                 Koch-Modus
               </span>
+              {recipe.source && (
+                <span
+                  style={{
+                    fontSize: "9px",
+                    background: "rgba(255,255,255,0.25)",
+                    color: "#ffffff",
+                    padding: "2px 7px",
+                    borderRadius: "99px",
+                    fontWeight: 700,
+                  }}
+                >
+                  {recipe.source}
+                </span>
+              )}
               <span style={{ fontSize: "10px", color: "#a7f3d0" }}>
                 {recipe.time} · {recipe.difficulty}
               </span>

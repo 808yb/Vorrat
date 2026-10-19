@@ -164,6 +164,36 @@ function SwipeCardContent({
           </svg>
         </button>
 
+        {recipe.source && (
+          <span
+            className="swipe-card-source-badge"
+            style={{
+              position: "absolute",
+              top: "12px",
+              left: "12px",
+              background: "rgba(15, 23, 42, 0.78)",
+              backdropFilter: "blur(6px)",
+              color: "#ffffff",
+              fontSize: "10.5px",
+              fontWeight: 750,
+              padding: "4px 9px",
+              borderRadius: "8px",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "4px",
+              zIndex: 3,
+              boxShadow: "0 2px 6px rgba(0,0,0,0.25)",
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="2" y1="12" x2="22" y2="12" />
+              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z" />
+            </svg>
+            <span>{recipe.source}</span>
+          </span>
+        )}
+
         {recipe.imageUrl ? (
           <img
             src={recipe.imageUrl}

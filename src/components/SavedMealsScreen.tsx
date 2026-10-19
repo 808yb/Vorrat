@@ -109,7 +109,7 @@ export function SavedMealsScreen({
         onUpdateRecipe(updated);
       }
       if (onNotify) {
-        onNotify("📸 Eigenes Foto erfolgreich als Rezept-Cover gespeichert!");
+        onNotify("Eigenes Foto erfolgreich als Rezept-Cover gespeichert!");
       }
     } catch (err) {
       console.error(err);
@@ -269,11 +269,28 @@ export function SavedMealsScreen({
                 {(() => {
                   const activeBreakdown = getRecipePantryBreakdown(activeRecipe, pantry || [], servings);
                   return (
-                    <span className="saved-match-pill">
-                      {activeBreakdown.matchPercentage === 100
-                        ? "✓ 100% Vorrat da"
-                        : `${activeBreakdown.matchPercentage}% Vorrats-Match`}
-                    </span>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <span className="saved-match-pill">
+                        {activeBreakdown.matchPercentage === 100
+                          ? "100% Vorrat da"
+                          : `${activeBreakdown.matchPercentage}% Vorrats-Match`}
+                      </span>
+                      {activeRecipe.source && (
+                        <span
+                          style={{
+                            fontSize: "11px",
+                            fontWeight: 750,
+                            background: "rgba(15, 23, 42, 0.75)",
+                            backdropFilter: "blur(4px)",
+                            color: "#ffffff",
+                            padding: "3px 8px",
+                            borderRadius: "6px",
+                          }}
+                        >
+                          {activeRecipe.source}
+                        </span>
+                      )}
+                    </div>
                   );
                 })()}
                 <button
@@ -426,7 +443,7 @@ export function SavedMealsScreen({
                       <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
                       <circle cx="12" cy="13" r="4" />
                     </svg>
-                    <span>📸 Foto vom Essen als Cover</span>
+                    <span>Foto vom Essen als Cover</span>
                     <input
                       type="file"
                       accept="image/*"

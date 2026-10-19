@@ -1129,9 +1129,9 @@ function CookScreen({
   // Dynamic curated recipes for Daily Discover:
   // Automatically rotates 3× daily (Morgens, Mittags, Abends) + shifts every day + prioritizes pantry matches
   const catalogShuffleList = useMemo(() => {
-    // Include all catalog recipes plus any custom/AI recipes saved by user
+    // Strictly include only recipes from authentic cooking websites
     const custom = getStoredCustomRecipes();
-    const combined = [...FULL_RECIPE_CATALOG, ...custom];
+    const combined = [...FULL_RECIPE_CATALOG, ...custom].filter((rec) => Boolean(rec.source));
 
     const now = new Date();
     const startOfYear = new Date(now.getFullYear(), 0, 0);

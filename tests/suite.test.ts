@@ -749,11 +749,25 @@ const matchGurkenwasser = findMatchingPantryItem("Gurkenwasser", userPantryWitho
 assert(matchGurkenwasser === null, "Gurkenwasser is marked as MISSING and not falsely matched to unlimited tap water");
 
 // -----------------------------------------------------------------------------
-// TEST SUITE 16: EXPANDED RECIPE LIBRARY (CHEFKOCH, EMMI KOCHT EINFACH, EDEKA)
+// TEST SUITE 16: EXPANDED RECIPE LIBRARY (ALL RECIPES FROM REAL WEBSITES)
 // -----------------------------------------------------------------------------
-console.log("\n📚 16. Testing Expanded Recipe Library (Chefkoch, Emmi kocht einfach, EDEKA)...");
+console.log("\n📚 16. Testing Expanded Recipe Library (Chefkoch, Emmi kocht einfach, EDEKA, Kitchen Stories, etc.)...");
 
-assert(FULL_RECIPE_CATALOG.length >= 26, `Catalog contains at least 26 recipes (found ${FULL_RECIPE_CATALOG.length})`);
+assert(FULL_RECIPE_CATALOG.length >= 36, `Catalog contains at least 36 recipes (found ${FULL_RECIPE_CATALOG.length})`);
+assert(
+  FULL_RECIPE_CATALOG.every((r) => typeof r.source === "string" && r.source.length > 0),
+  "All recipes in catalog strictly have an authentic website source defined"
+);
+assert(
+  FULL_RECIPE_CATALOG.every((r) => typeof r.imageUrl === "string" && r.imageUrl.startsWith("https://images.unsplash.com")),
+  "All recipes have high-resolution food photography URLs"
+);
+
+const ksFriedRice = FULL_RECIPE_CATALOG.find((r) => r.id === "r1");
+assert(ksFriedRice?.source === "Kitchen Stories", "r1 source is 'Kitchen Stories'");
+
+const greenBowl = FULL_RECIPE_CATALOG.find((r) => r.id === "r2");
+assert(greenBowl?.source === "EatSmarter", "r2 source is 'EatSmarter'");
 
 const bauerntopf = FULL_RECIPE_CATALOG.find((r) => r.id === "r19");
 assert(Boolean(bauerntopf), "Contains 'r19' (Bauerntopf mit Hackfleisch & Kartoffeln)");
@@ -792,6 +806,53 @@ const tassenkuchen = FULL_RECIPE_CATALOG.find((r) => r.id === "r26");
 assert(Boolean(tassenkuchen), "Contains 'r26' (Schneller Schoko-Tassenkuchen)");
 assert(tassenkuchen?.source === "EDEKA", "r26 source is 'EDEKA'");
 assert(Boolean(tassenkuchen?.equipment?.includes("microwave")), "r26 equipment includes 'microwave'");
+
+const ratatouille = FULL_RECIPE_CATALOG.find((r) => r.id === "r27");
+assert(Boolean(ratatouille), "Contains 'r27' (Mediterranes Ratatouille aus dem Ofen)");
+assert(ratatouille?.source === "Sallys Welt", "r27 source is 'Sallys Welt'");
+assert(Boolean(ratatouille?.equipment?.includes("oven")), "r27 equipment includes 'oven'");
+
+const salmon = FULL_RECIPE_CATALOG.find((r) => r.id === "r28");
+assert(Boolean(salmon), "Contains 'r28' (Lachsfilet auf cremigem Blattspinat)");
+assert(salmon?.source === "Essen & Trinken", "r28 source is 'Essen & Trinken'");
+
+const avocadoToast = FULL_RECIPE_CATALOG.find((r) => r.id === "r29");
+assert(Boolean(avocadoToast), "Contains 'r29' (Avocado-Vollkorn-Stulle mit pochiertem Ei)");
+assert(avocadoToast?.source === "Kitchen Stories", "r29 source is 'Kitchen Stories'");
+assert(avocadoToast?.mealType === "breakfast", "r29 mealType is 'breakfast'");
+
+const sweetPotatoCurry = FULL_RECIPE_CATALOG.find((r) => r.id === "r30");
+assert(Boolean(sweetPotatoCurry), "Contains 'r30' (Cremiges Süßkartoffel-Kichererbsen-Curry)");
+assert(sweetPotatoCurry?.source === "EatSmarter", "r30 source is 'EatSmarter'");
+
+const cheesecake = FULL_RECIPE_CATALOG.find((r) => r.id === "r31");
+assert(Boolean(cheesecake), "Contains 'r31' (Schneller Beeren-Cheesecake im Glas)");
+assert(cheesecake?.source === "Sallys Welt", "r31 source is 'Sallys Welt'");
+assert(cheesecake?.mealType === "dessert", "r31 mealType is 'dessert'");
+
+const strudel = FULL_RECIPE_CATALOG.find((r) => r.id === "r32");
+assert(Boolean(strudel), "Contains 'r32' (Knuspriger Spinat-Feta-Strudel)");
+assert(strudel?.source === "Lecker.de", "r32 source is 'Lecker.de'");
+assert(strudel?.mealType === "baking", "r32 mealType is 'baking'");
+
+const greekSalad = FULL_RECIPE_CATALOG.find((r) => r.id === "r33");
+assert(Boolean(greekSalad), "Contains 'r33' (Griechischer Bauernsalat mit knusprigen Croutons)");
+assert(greekSalad?.source === "Rewe Deine Küche", "r33 source is 'Rewe Deine Küche'");
+
+const cauliflowerWings = FULL_RECIPE_CATALOG.find((r) => r.id === "r34");
+assert(Boolean(cauliflowerWings), "Contains 'r34' (Knusprige Blumenkohl-Wings BBQ-Style)");
+assert(cauliflowerWings?.source === "Emmi kocht einfach", "r34 source is 'Emmi kocht einfach'");
+assert(Boolean(cauliflowerWings?.equipment?.includes("airfryer")), "r34 equipment includes 'airfryer'");
+
+const mangoBowl = FULL_RECIPE_CATALOG.find((r) => r.id === "r35");
+assert(Boolean(mangoBowl), "Contains 'r35' (Exotische Kokos-Grieß-Bowl mit Mango)");
+assert(mangoBowl?.source === "EDEKA", "r35 source is 'EDEKA'");
+assert(mangoBowl?.mealType === "breakfast", "r35 mealType is 'breakfast'");
+
+const bananaMuffins = FULL_RECIPE_CATALOG.find((r) => r.id === "r36");
+assert(Boolean(bananaMuffins), "Contains 'r36' (Saftige Schoko-Bananen-Muffins)");
+assert(bananaMuffins?.source === "Sallys Welt", "r36 source is 'Sallys Welt'");
+assert(bananaMuffins?.mealType === "baking", "r36 mealType is 'baking'");
 
 // -----------------------------------------------------------------------------
 // TEST SUITE 17: STANDARD 70-80% MATCHING RULE & VIDEO LIMIT DURATION (< 2:10 MIN)
