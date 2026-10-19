@@ -4,7 +4,7 @@ import { motion } from "motion/react";
 import { ProductMark, getFoodTone } from "./components/FoodIcons";
 import { FULL_RECIPE_CATALOG, type CatalogRecipe } from "./data/recipeCatalog";
 import { getStoredCustomRecipes, generateRecipeWithGemini, rehydrateCustomRecipe } from "./utils/geminiRecipes";
-import { getSafeIngredientsList, getSafeAvailable, getCurrentMealTimeSlot } from "./utils/recipeHelpers";
+import { getSafeIngredientsList, getSafeAvailable, getCurrentMealTimeSlot, decomposeCompositeIngredients } from "./utils/recipeHelpers";
 import { CookingModal, RecipeStepsAccordion } from "./components/CookingModal";
 import { RecipeSwipeDeck } from "./components/RecipeSwipeDeck";
 import { getRecipePantryBreakdown } from "./utils/pantryMatching";
@@ -793,85 +793,74 @@ function PantryScreen({
         <ProductMark tone={item.tone} name={item.name} category={item.category} />
         <div className="product-content">
           <div className="product-heading">
-            <div>
-              <div className="product-title-row">
-                <h3>{item.name}</h3>
-                <div style={{ display: "flex", alignItems: "center", gap: "2px" }}>
-                  <button
-                    type="button"
-                    className="product-edit-icon-btn"
-                    title="Vorrat bearbeiten"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onEditItem(item);
-                    }}
-                  >
-                    <Icon name="pencil" size={12} />
-                  </button>
-                  <button
-                    type="button"
-                    className="product-delete-icon-btn"
-                    title="Aus Vorrat löschen"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDeleteItem(item.id);
-                    }}
-                  >
-                    <Icon name="trash" size={12} />
-                  </button>
-                </div>
-              </div>
-              <div className="product-sub-row">
-                <select
-                  className="product-cat-select"
-                  value={catGroup}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) => {
+            <div className="product-title-row">
+              <h3>{item.name}</h3>
+              <div className="product-action-icons">
+                <button
+                  type="button"
+                  className="product-edit-icon-btn"
+                  title="Vorrat bearbeiten"
+                  onClick={(e) => {
                     e.stopPropagation();
-                    if (onUpdateCategory) {
-                      onUpdateCategory(item.id, e.target.value);
-                    }
+                    onEditItem(item);
                   }}
-                  title="Lagerort / Kategorie direkt ändern"
                 >
-                  <option value="Kühl">Kühlschrank</option>
-                  <option value="Tiefkühl">Tiefkühl</option>
-                  <option value="Trocken">Trocken</option>
-                  <option value="Saucen">Gewürze/Saucen</option>
-                  <option value="Getränke">Getränke</option>
-                  <option value="Sonstiges">Sonstiges</option>
-                </select>
-                <span className={`mhd-badge ${getMhdStatus(item.mhd)}`}>
-                  {formatMhdDisplay(item.mhd)}
-                </span>
-                {(() => {
-                  const specs = getItemNutrientSpecs(item);
-                  return (
-                    <span
-                      style={{
-                        fontSize: "10.5px",
-                        fontWeight: 600,
-                        color: "#475569",
-                        background: "#f1f5f9",
-                        padding: "1.5px 6px",
-                        borderRadius: "6px",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "3px",
-                      }}
-                      title={`Makros pro 100g: ${specs.caloriesPer100g} kcal · ${specs.proteinPer100g}g Protein · ${specs.carbsPer100g}g Carbs · ${specs.fatPer100g}g Fett`}
-                    >
-                      <strong style={{ color: "#0f172a" }}>{specs.caloriesPer100g}</strong> kcal
-                      <span style={{ color: "#cbd5e1" }}>·</span>
-                      <strong style={{ color: "#059669" }}>{specs.proteinPer100g}g</strong> P
-                    </span>
-                  );
-                })()}
+                  <Icon name="pencil" size={12} />
+                </button>
+                <button
+                  type="button"
+                  className="product-delete-icon-btn"
+                  title="Aus Vorrat löschen"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDeleteItem(item.id);
+                  }}
+                >
+                  <Icon name="trash" size={12} />
+                </button>
               </div>
             </div>
             <span className={`status ${status.toLowerCase()}`}>
               {isUnlimited ? "Unbegrenzt" : status}
             </span>
+          </div>
+
+          <div className="product-sub-row">
+            <select
+              className="product-cat-select"
+              value={catGroup}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => {
+                e.stopPropagation();
+                if (onUpdateCategory) {
+                  onUpdateCategory(item.id, e.target.value);
+                }
+              }}
+              title="Lagerort / Kategorie direkt ändern"
+            >
+              <option value="Kühl">Kühlschrank</option>
+              <option value="Tiefkühl">Tiefkühl</option>
+              <option value="Trocken">Trocken</option>
+              <option value="Saucen">Gewürze/Saucen</option>
+              <option value="Getränke">Getränke</option>
+              <option value="Sonstiges">Sonstiges</option>
+            </select>
+            <span className={`mhd-badge ${getMhdStatus(item.mhd)}`}>
+              {formatMhdDisplay(item.mhd)}
+            </span>
+            {(() => {
+              const specs = getItemNutrientSpecs(item);
+              return (
+                <span
+                  className="product-macro-badge"
+                  title={`Makros pro 100g: ${specs.caloriesPer100g} kcal · ${specs.proteinPer100g}g Protein · ${specs.carbsPer100g}g Carbs · ${specs.fatPer100g}g Fett`}
+                >
+                  <strong style={{ color: "#0f172a" }}>{specs.caloriesPer100g}</strong> kcal
+                  <span style={{ color: "#cbd5e1" }}>·</span>
+                  <strong style={{ color: "#059669" }}>{specs.proteinPer100g}g</strong> P
+                </span>
+              );
+            })()}
           </div>
           <div className="stock-row">
             {isUnlimited ? (
@@ -2288,7 +2277,12 @@ export default function App() {
   const [groceries, setGroceries] = useState<GroceryItem[]>(() => {
     try {
       const saved = localStorage.getItem("forret_design_groceries");
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return decomposeCompositeIngredients(parsed);
+        }
+      }
     } catch {}
     return defaultGroceries;
   });
@@ -2875,10 +2869,11 @@ export default function App() {
   };
 
   const handleAddMissingToGroceries = (items: Array<{ name: string; amount?: string }>) => {
+    const decomposed = decomposeCompositeIngredients(items);
     setGroceries((prev) => {
       const next = [...prev];
       let addedCount = 0;
-      for (const it of items) {
+      for (const it of decomposed) {
         const itNameLower = it.name.toLowerCase().trim();
         const exists = next.some(
           (g) =>
@@ -2899,7 +2894,7 @@ export default function App() {
       }
       return next;
     });
-    notify(`${items.length} ${items.length === 1 ? "fehlende Zutat" : "fehlende Zutaten"} zur Einkaufsliste hinzugefügt!`);
+    notify(`${decomposed.length} ${decomposed.length === 1 ? "fehlende Zutat" : "fehlende Zutaten"} zur Einkaufsliste hinzugefügt!`);
   };
 
   return (

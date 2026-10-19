@@ -608,7 +608,16 @@ h2 {
 .nutrition-legend-dot.carbs { background: #f59e0b; }
 .nutrition-legend-dot.fat { background: #38bdf8; }
 
-.inventory-list,
+.inventory-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
 .recipe-list,
 .grocery-groups {
   display: grid;
@@ -617,13 +626,18 @@ h2 {
 
 .product-card {
   display: flex;
-  gap: 12px;
-  padding: 13px;
+  gap: 10px;
+  padding: 11px 12px;
   background: white;
   border: 1px solid #eaece9;
   border-radius: 16px;
   box-shadow: 0 1px 3px rgba(18, 21, 26, 0.03);
   transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .product-card:hover {
@@ -637,10 +651,10 @@ h2 {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 48px;
-  flex: 0 0 auto;
-  border-radius: 13px;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  border-radius: 12px;
   border: 1px solid rgba(226, 232, 240, 0.9);
   background: #f8fafc;
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), inset 0 1px 0 rgba(255, 255, 255, 0.7);
@@ -651,6 +665,7 @@ h2 {
   width: 34px;
   height: 34px;
   border-radius: 9px;
+  flex: 0 0 34px;
 }
 
 .product-mark svg {
@@ -696,19 +711,18 @@ h2 {
 .product-content {
   min-width: 0;
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .product-heading {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
-}
-
-.product-heading > div {
-  min-width: 0;
-  flex: 1;
+  width: 100%;
 }
 
 .product-title-row {
@@ -716,16 +730,25 @@ h2 {
   align-items: center;
   gap: 5px;
   min-width: 0;
+  flex: 1;
 }
 
 .product-title-row h3 {
   margin: 0;
-  font-size: 13px;
+  font-size: 13.5px;
+  font-weight: 700;
   letter-spacing: -0.01em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
+}
+
+.product-action-icons {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
 }
 
 .product-edit-icon-btn {
@@ -769,10 +792,11 @@ h2 {
 .product-sub-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 2px;
+  gap: 4px;
+  margin-top: 3px;
   flex-wrap: wrap;
   min-width: 0;
+  width: 100%;
 }
 
 .product-cat-pill {
@@ -782,7 +806,7 @@ h2 {
 }
 
 .product-cat-select {
-  font-size: 9.5px;
+  font-size: 9px;
   font-weight: 650;
   color: #475569;
   background: #f1f5f9;
@@ -792,11 +816,26 @@ h2 {
   cursor: pointer;
   outline: none;
   transition: all 140ms ease;
+  flex-shrink: 0;
 }
 
 .product-cat-select:hover {
   background: #e2e8f0;
   color: #0f172a;
+}
+
+.product-macro-badge {
+  font-size: 9.5px;
+  font-weight: 600;
+  color: #475569;
+  background: #f1f5f9;
+  padding: 1.5px 5px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2.5px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .pantry-category-group {
@@ -914,12 +953,13 @@ h2 {
 }
 
 .status {
-  padding: 3px 7px;
+  padding: 2.5px 7px;
   border-radius: 99px;
-  font-size: 8px;
+  font-size: 8.5px;
   font-weight: 750;
   flex-shrink: 0;
   white-space: nowrap;
+  letter-spacing: -0.01em;
 }
 
 .status.vorhanden { color: #2d5a3e; background: #ebf3ee; }
@@ -927,9 +967,13 @@ h2 {
 .status.leer { color: #c2593f; background: #fdf3f0; }
 
 .stock-row {
-  height: 29px;
+  display: flex;
+  align-items: center;
   justify-content: space-between;
+  height: 26px;
   margin-top: 3px;
+  width: 100%;
+  min-width: 0;
 }
 
 .stock-row > span {
@@ -937,6 +981,8 @@ h2 {
   font-size: 10px;
   font-weight: 750;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .stock-row small {
@@ -949,8 +995,9 @@ h2 {
   display: flex;
   overflow: hidden;
   border: 1px solid #e2e5e2;
-  border-radius: 9px;
+  border-radius: 8px;
   background: #f8f9f8;
+  flex-shrink: 0;
 }
 
 .stepper-button {

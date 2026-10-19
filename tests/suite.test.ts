@@ -4,7 +4,7 @@ import { getRecipePantryBreakdown, findMatchingPantryItem } from "../src/utils/p
 import { FULL_RECIPE_CATALOG } from "../src/data/recipeCatalog";
 import { getFoodTone } from "../src/components/FoodIcons";
 import { findFoodNutrition, calculatePortionNutrition } from "../src/data/foodNutritionDatabase";
-import { getSafeIngredientsList, getSafeSteps, getSafeAvailable, rehydrateRecipe, getCurrentMealTimeSlot } from "../src/utils/recipeHelpers";
+import { getSafeIngredientsList, getSafeSteps, getSafeAvailable, rehydrateRecipe, getCurrentMealTimeSlot, decomposeCompositeIngredients, cleanSpiceName } from "../src/utils/recipeHelpers";
 import { extractIngredientsFromDishText, resolveRecipeFoodImage, askAboutRecipeWithGemini } from "../src/utils/geminiRecipes";
 
 let passedCount = 0;
@@ -645,6 +645,87 @@ const customPhotoRecipe = {
 };
 const rehydratedPhotoRecipe = rehydrateRecipe(customPhotoRecipe);
 assert(rehydratedPhotoRecipe.imageUrl === "data:image/jpeg;base64,mockCustomFoodPhoto123", "Custom photo cover is preserved in rehydrated recipe");
+
+// -----------------------------------------------------------------------------
+// TEST SUITE 14: SPICE DECOMPOSITION & SMART INGREDIENT RECOGNITION
+// -----------------------------------------------------------------------------
+console.log("\n🧂 14. Testing Spice Decomposition & Multi-Ingredient Anti-Lumping...");
+
+// 1. Decompose lumped spices string from user's video screenshot
+const lumpedSpiceItem = [
+  {
+    name: "Gewürze (Paprika edelsüß, Knoblauchpulver, Senfmehl, Salz, Pfeffer)",
+    baseAmountPerPortion: 3,
+    unit: "TL",
+    optional: false,
+  },
+  {
+    name: "Gewürzgurken (in Scheiben)",
+    baseAmountPerPortion: 8,
+    unit: "Stk.",
+    optional: false,
+  },
+  {
+    name: "Frische Petersilie oder Dill",
+    baseAmountPerPortion: 2,
+    unit: "EL",
+    optional: false,
+  },
+];
+
+const decomposedSpices = decomposeCompositeIngredients(lumpedSpiceItem);
+
+assert(decomposedSpices.length === 7, `Decomposed composite spice into individual spices + 2 preserved items (found ${decomposedSpices.length})`);
+assert(decomposedSpices.some((i) => i.name === "Paprikapulver edelsüß"), "Extracted Paprikapulver edelsüß as individual ingredient");
+assert(decomposedSpices.some((i) => i.name === "Knoblauchpulver"), "Extracted Knoblauchpulver as individual ingredient");
+assert(decomposedSpices.some((i) => i.name === "Senfmehl"), "Extracted Senfmehl as individual ingredient");
+assert(decomposedSpices.some((i) => i.name === "Salz"), "Extracted Salz as individual ingredient");
+assert(decomposedSpices.some((i) => i.name === "Schwarzer Pfeffer"), "Extracted Schwarzer Pfeffer as individual ingredient");
+assert(decomposedSpices.some((i) => i.name === "Gewürzgurken (in Scheiben)"), "Preserved Gewürzgurken (in Scheiben) intact without false decomposition");
+assert(decomposedSpices.some((i) => i.name === "Frische Petersilie oder Dill"), "Preserved Frische Petersilie oder Dill intact");
+
+// 2. Test Salt & Pepper shorthand
+const saltPepperList = decomposeCompositeIngredients([
+  { name: "Salz & Pfeffer", amount: "nach Geschmack" },
+]);
+assert(saltPepperList.length === 2, "Decomposed 'Salz & Pfeffer' into exactly 2 items");
+assert(saltPepperList.some((i) => i.name === "Salz"), "Extracted Salz");
+assert(saltPepperList.some((i) => i.name === "Schwarzer Pfeffer"), "Extracted Schwarzer Pfeffer");
+
+// 3. Test culinary pantry matching of individual spices
+const userPantryWithSpices = [
+  { name: "Paprikapulver", amount: 100, unit: "g" },
+  { name: "Knoblauchzehen", amount: 5, unit: "Stk." },
+  { name: "Meersalz", amount: 500, unit: "g" },
+];
+
+const matchPaprika = findMatchingPantryItem("Paprika edelsüß", userPantryWithSpices);
+assert(Boolean(matchPaprika), "Paprika edelsüß matches user's Paprikapulver in pantry");
+
+const matchKnoblauch = findMatchingPantryItem("Knoblauchpulver", userPantryWithSpices);
+assert(Boolean(matchKnoblauch), "Knoblauchpulver matches user's Knoblauchzehen in pantry");
+
+const matchSalz = findMatchingPantryItem("Salz", userPantryWithSpices);
+assert(Boolean(matchSalz), "Salz matches user's Meersalz in pantry");
+
+const matchSenfmehl = findMatchingPantryItem("Senfmehl", userPantryWithSpices);
+assert(matchSenfmehl === null, "Senfmehl is correctly recognized as MISSING since not in pantry");
+
+// 4. Test rehydrating a recipe that had a lumped spice line
+const recipeWithLumpedSpices = {
+  id: "test-lumped-recipe",
+  title: "Crispy Chicken Sandwich",
+  rawIngredients: lumpedSpiceItem,
+};
+const rehydratedSpicesRecipe = rehydrateRecipe(recipeWithLumpedSpices);
+const rehydratedIngList = rehydratedSpicesRecipe.ingredientsList(2);
+assert(rehydratedIngList.length === 7, `Rehydrated recipe exposes all 7 individual ingredients (found ${rehydratedIngList.length})`);
+
+// 5. Test getRecipePantryBreakdown with decomposed recipe
+const spiceBreakdown = getRecipePantryBreakdown(rehydratedSpicesRecipe, userPantryWithSpices, 2);
+assert(spiceBreakdown.inStock.length >= 3, `Breakdown correctly matches in-stock spices individually (found ${spiceBreakdown.inStock.length} in stock)`);
+assert(spiceBreakdown.missing.some((m) => m.name === "Senfmehl"), "Senfmehl is listed as missing individually on grocery breakdown");
+assert(!spiceBreakdown.missing.some((m) => m.name.includes("Gewürze (")), "Composite lumped string is NOT in missing grocery list");
 
 // -----------------------------------------------------------------------------
 // SUMMARY

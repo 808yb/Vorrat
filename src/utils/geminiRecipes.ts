@@ -1,6 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 import { type CatalogRecipe, type RecipeStep } from '../data/recipeCatalog';
 import { findMatchingPantryItem } from './pantryMatching';
+import { decomposeCompositeIngredients } from './recipeHelpers';
 
 // High-resolution food images from Unsplash (matching common dishes)
 export const FOOD_IMAGE_PRESETS: Record<string, string> = {
@@ -367,6 +368,7 @@ Regeln:
 5. Führe 3 bis 5 präzise Zubereitungsschritte auf mit Zeitangaben.
 6. Gib für jede Zutat die Basismenge pro 1 Portion als Zahl ('baseAmountPerPortion') und Einheit ('unit') an.
 7. Gib 'imageKeywords' auf Englisch an (z. B. "tiramisu dessert mascarpone" oder "ramen noodles egg").
+8. GEWÜRZE NIEMALS ZUSAMMENFASSEN: Jedes Gewürz muss ein einzelner Zutateneintrag im "ingredients"-Array sein (z. B. "Paprikapulver edelsüß", "Knoblauchpulver", "Salz", "Schwarzer Pfeffer"). NIEMALS "Gewürze (A, B, C)" oder "Salz & Pfeffer" als einen einzigen Eintrag ausgeben.
 
 Antworte STRIKT als valides JSON nach diesem Schema (OHNE Markdown, kein \`\`\`json):
 {
@@ -738,6 +740,8 @@ async function callGeminiCascade(apiKey: string, prompt: string): Promise<RawGem
     parsed = buildSmartFallbackRecipe(userQuery, pantry);
   }
 
+  parsed.ingredients = decomposeCompositeIngredients(parsed.ingredients);
+
   const recipeId = `ai-${Date.now()}`;
   const imageUrl = resolveRecipeFoodImage(parsed.title, parsed.imageKeywords);
 
@@ -823,6 +827,10 @@ export async function importRecipeFromTextOrUrlWithGemini(
 
   const prompt = `Du bist ein Rezept-Extraktor. Analysiere diesen Rezept-Inhalt (${isUrl ? "Weblink" : "Text/Social-Media Caption/Notiz"}) und extrahiere daraus ein strukturiertes Rezept für EINE PORTION (Basisportionierung).
 
+WICHTIGE REGEL FÜR GEWÜRZE & ZUTATEN:
+- Fasse Gewürze NIEMALS zusammen! Jedes Gewürz (z.B. "Paprikapulver edelsüß", "Knoblauchpulver", "Salz", "Schwarzer Pfeffer") MUSS als separater Eintrag im "ingredients"-Array aufgeführt werden.
+- NIEMALS "Gewürze (Paprika, Knoblauch, Salz)" oder "Salz & Pfeffer" in einer einzigen Zeile bündeln!
+
 Inhalt zum Extrahieren:
 """
 ${content.trim().slice(0, 4000)}
@@ -872,6 +880,7 @@ Antworte AUSSCHLIESSLICH mit gültigem JSON im folgenden Schema ohne Markdown-Fo
   const responseText = response.text?.trim() || "";
   const cleaned = responseText.replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
   const parsed: RawGeminiRecipe = JSON.parse(cleaned);
+  parsed.ingredients = decomposeCompositeIngredients(parsed.ingredients);
 
   const recipeId = "imported-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6);
   const imageUrl = resolveRecipeFoodImage(parsed.title, parsed.imageKeywords);
@@ -984,6 +993,10 @@ Analysiere dieses Kochvideo (Reel, TikTok oder Video-Clip) ganzheitlich:
 3. Extrahiere daraus ein strukturiertes Rezept für EINE PORTION (Basisportionierung).
 4. Schätze realistische Nährwerte (Kalorien, Protein, Kohlenhydrate) und erstelle eine klare Schritt-für-Schritt-Anleitung.
 
+WICHTIGE REGEL FÜR GEWÜRZE & ZUTATEN:
+- Fasse Gewürze NIEMALS zusammen! Jedes Gewürz (z.B. "Paprikapulver edelsüß", "Knoblauchpulver", "Salz", "Schwarzer Pfeffer") MUSS als separater Eintrag im "ingredients"-Array aufgeführt werden.
+- NIEMALS "Gewürze (Paprika, Knoblauch, Salz)" oder "Salz & Pfeffer" in einer einzigen Zeile bündeln!
+
 Antworte AUSSCHLIESSLICH mit gültigem JSON im folgenden Schema ohne Markdown-Formatierung:
 {
   "title": "Prägnanter, ansprechender Rezeptname",
@@ -1040,6 +1053,7 @@ Antworte AUSSCHLIESSLICH mit gültigem JSON im folgenden Schema ohne Markdown-Fo
   const responseText = response.text?.trim() || "";
   const cleaned = responseText.replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
   const parsed: RawGeminiRecipe = JSON.parse(cleaned);
+  parsed.ingredients = decomposeCompositeIngredients(parsed.ingredients);
 
   const recipeId = "video-recipe-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6);
   const imageUrl = resolveRecipeFoodImage(parsed.title, parsed.imageKeywords);

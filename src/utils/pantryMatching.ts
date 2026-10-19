@@ -57,6 +57,22 @@ const EQUIVALENCE_GROUPS: string[][] = [
   ["ei", "eier", "bio eier", "hühnerei", "hühnereier"],
   // Peas
   ["erbsen", "erbse", "tk-erbsen", "junge erbsen", "tiefkühlerbsen"],
+  // Salt
+  ["salz", "meersalz", "speisesalz", "jodsalz", "steinsalz", "grobes salz", "fleur de sel"],
+  // Pepper
+  ["pfeffer", "schwarzer pfeffer", "bunter pfeffer", "pfefferkörner", "gemahlener pfeffer", "weißer pfeffer"],
+  // Paprika
+  ["paprika", "paprikapulver", "paprika edelsüß", "paprika rosenscharf", "paprikapulver edelsüß", "paprika geräuchert", "pimentón"],
+  // Garlic
+  ["knoblauch", "knoblauchzehe", "knoblauchzehen", "knoblauchpulver", "knoblauchgranulat"],
+  // Onion powder / Onions
+  ["zwiebelpulver", "zwiebelgranulat", "getrocknete zwiebeln"],
+  // Chili
+  ["chili", "chiliflocken", "chilipulver", "cayennepfeffer", "chilisauce"],
+  // Herbs / Oregano
+  ["oregano", "italienische kräuter", "kräuter der provence", "thymian", "basilikum", "rosmarin"],
+  // Cumin
+  ["kreuzkümmel", "cumin", "kumin"],
 ];
 
 export function areCulinaryEquivalents(ingA: string, ingB: string): boolean {
@@ -162,6 +178,34 @@ export function findMatchingPantryItem(
         pantryItem: { name: "Leitungswasser", amount: 999999, unit: "ml", isUnlimited: true },
         matchedByAlternative: undefined,
       };
+    }
+
+    // Generic spices or seasoning fallback: matches if user has any basic spice in pantry
+    if (
+      candNorm === "gewürze" ||
+      candNorm === "gewürz" ||
+      candNorm === "gewürzmischung" ||
+      candNorm === "kräuter & gewürze" ||
+      candNorm === "kräuter und gewürze" ||
+      candNorm === "trockengewürze"
+    ) {
+      const spiceItem = pantry.find((p) => {
+        const pNorm = normalizeIngredientName(p.name);
+        return (
+          pNorm.includes("salz") ||
+          pNorm.includes("pfeffer") ||
+          pNorm.includes("paprika") ||
+          pNorm.includes("gewürz") ||
+          pNorm.includes("kräuter") ||
+          (p as any).category?.toLowerCase().includes("gewürz")
+        );
+      });
+      if (spiceItem) {
+        return {
+          pantryItem: spiceItem,
+          matchedByAlternative: spiceItem.name,
+        };
+      }
     }
 
     // Direct / whole-word / compound match
