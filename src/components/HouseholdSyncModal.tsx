@@ -359,10 +359,19 @@ export function HouseholdSyncModal({
   if (!isOpen) return null;
 
   return (
-    <div className="modal-overlay" onClick={onClose} style={{ zIndex: 60 }}>
+    <div
+      className="modal-overlay"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
+      style={{ zIndex: 60 }}
+    >
       <div
         className="modal-content hide-scrollbar"
         onClick={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
         style={{ maxWidth: "440px", borderRadius: "24px", maxHeight: "90vh", overflowY: "auto" }}
       >
         {/* Header */}
@@ -416,13 +425,16 @@ export function HouseholdSyncModal({
               cursor: "pointer",
               color: "#64748b",
               fontSize: "14px",
-              width: "32px",
-              height: "32px",
+              width: "36px",
+              height: "36px",
+              minWidth: "36px",
+              minHeight: "36px",
               borderRadius: "50%",
               display: "grid",
               placeItems: "center",
               fontWeight: 700,
               transition: "all 140ms ease",
+              touchAction: "manipulation",
             }}
           >
             ✕
@@ -654,12 +666,14 @@ export function HouseholdSyncModal({
                       autoCorrect="off"
                       required
                       style={{
-                        padding: "9px 12px",
+                        padding: "10px 12px",
                         borderRadius: "10px",
                         border: "1px solid #cbd5e1",
-                        fontSize: "12.5px",
+                        fontSize: "14px",
                         outline: "none",
                         background: "#ffffff",
+                        minHeight: "44px",
+                        boxSizing: "border-box",
                       }}
                     />
                     <input
@@ -669,12 +683,14 @@ export function HouseholdSyncModal({
                       placeholder="Passwort"
                       required
                       style={{
-                        padding: "9px 12px",
+                        padding: "10px 12px",
                         borderRadius: "10px",
                         border: "1px solid #cbd5e1",
-                        fontSize: "12.5px",
+                        fontSize: "14px",
                         outline: "none",
                         background: "#ffffff",
+                        minHeight: "44px",
+                        boxSizing: "border-box",
                       }}
                     />
 
@@ -690,18 +706,20 @@ export function HouseholdSyncModal({
                       disabled={authLoading}
                       style={{
                         marginTop: "4px",
-                        padding: "10px 14px",
+                        padding: "11px 14px",
                         background: "#059669",
                         color: "white",
                         border: "none",
                         borderRadius: "10px",
-                        fontSize: "12.5px",
+                        fontSize: "13.5px",
                         fontWeight: 750,
                         cursor: "pointer",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
                         gap: "6px",
+                        minHeight: "44px",
+                        touchAction: "manipulation",
                       }}
                     >
                       {authMode === "login" ? <LogIn size={15} /> : <UserPlus size={15} />}
