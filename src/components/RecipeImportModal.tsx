@@ -47,10 +47,35 @@ export function RecipeImportModal({
       return;
     }
 
-    setSelectedVideoFile(file);
-    setError(null);
-    const url = URL.createObjectURL(file);
-    setVideoPreviewUrl(url);
+    const videoEl = document.createElement("video");
+    videoEl.preload = "metadata";
+    const objectUrl = URL.createObjectURL(file);
+
+    videoEl.onloadedmetadata = () => {
+      if (videoEl.duration > 130) {
+        URL.revokeObjectURL(objectUrl);
+        const mins = Math.floor(videoEl.duration / 60);
+        const secs = Math.floor(videoEl.duration % 60).toString().padStart(2, "0");
+        setError(
+          `Das Video ist länger als 2:10 Minuten (${mins}:${secs} Min.). Bitte wähle ein kürzeres Video / Reel unter 2:10 Min., um die Analyse schnell und präzise zu halten.`
+        );
+        setSelectedVideoFile(null);
+        setVideoPreviewUrl(null);
+        return;
+      }
+      setSelectedVideoFile(file);
+      setError(null);
+      setVideoPreviewUrl(objectUrl);
+    };
+
+    videoEl.onerror = () => {
+      // Fallback if browser codec metadata cannot load asynchronously
+      setSelectedVideoFile(file);
+      setError(null);
+      setVideoPreviewUrl(objectUrl);
+    };
+
+    videoEl.src = objectUrl;
   };
 
   const handleLoadDemoReel = () => {
@@ -252,7 +277,7 @@ export function RecipeImportModal({
                     <label className="text-xs font-semibold text-slate-700">
                       Kochvideo, TikTok oder Reel hochladen
                     </label>
-                    <span className="text-[10px] text-slate-400">MP4, MOV, WebM (bis 25 MB)</span>
+                    <span className="text-[10px] text-slate-400">MP4, MOV, WebM (&lt; 2:10 Min., bis 25 MB)</span>
                   </div>
 
                   {/* Dropzone */}

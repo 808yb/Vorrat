@@ -22,7 +22,7 @@ import { PwaInstallBanner } from "./components/PwaInstallBanner";
 import { RecipeImportModal } from "./components/RecipeImportModal";
 import { NutritionCoachModal } from "./components/NutritionCoachModal";
 import { AccountResetModal } from "./components/AccountResetModal";
-import { SurpriseMeModal } from "./components/SurpriseMeModal";
+import { SurpriseMeModal, type SurpriseFilters } from "./components/SurpriseMeModal";
 import {
   WeeklyMealPlannerScreen,
   type PlannedMeal,
@@ -653,10 +653,10 @@ function AppHeader({
             type="button"
             className="coach-header-btn"
             onClick={onOpenCoach}
-            title="Smarter Ernährungs-Coach & Makros"
+            title="Smarter Rezept-Finder & Überraschung"
           >
             <Icon name="sparkles" size={13} />
-            <span>Coach</span>
+            <span>Überrasch mich</span>
           </button>
         )}
         <div
@@ -1099,6 +1099,8 @@ function CookScreen({
   onNotify,
   onAddMissingToGroceries,
   onOpenImportRecipe,
+  isSurpriseModalOpen: externalSurpriseOpen,
+  onSetIsSurpriseModalOpen: setExternalSurpriseOpen,
 }: {
   pantry: PantryItem[];
   customRecipes?: CatalogRecipe[];
@@ -1112,6 +1114,8 @@ function CookScreen({
   onNotify?: (message: string) => void;
   onAddMissingToGroceries?: (items: Array<{ name: string; amount?: string }>) => void;
   onOpenImportRecipe?: () => void;
+  isSurpriseModalOpen?: boolean;
+  onSetIsSurpriseModalOpen?: (open: boolean) => void;
 }) {
   const [servings, setServings] = useState(3);
   const [intent, setIntent] = useState("");
@@ -1123,13 +1127,19 @@ function CookScreen({
   const [activeSearchedRecipe, setActiveSearchedRecipe] = useState<CatalogRecipe | null>(null);
   const [deckKey, setDeckKey] = useState(0);
 
-
   const [activeModalRecipe, setActiveModalRecipe] = useState<CatalogRecipe | null>(null);
-  const [isSurpriseModalOpen, setIsSurpriseModalOpen] = useState(false);
+  const [localSurpriseModalOpen, setLocalSurpriseModalOpen] = useState(false);
+  const [surpriseFilters, setSurpriseFilters] = useState<SurpriseFilters | null>(null);
+
+  const isSurpriseModalOpen = externalSurpriseOpen !== undefined ? externalSurpriseOpen : localSurpriseModalOpen;
+  const setSurpriseModalOpen = (open: boolean) => {
+    setLocalSurpriseModalOpen(open);
+    if (setExternalSurpriseOpen) setExternalSurpriseOpen(open);
+  };
 
   const currentMealSlot = useMemo(() => getCurrentMealTimeSlot(), []);
 
-  // Dynamic curated recipes for the Tinder Swipe Deck:
+  // Dynamic curated recipes for Daily Discover:
   // Automatically rotates 3× daily (Morgens, Mittags, Abends) + shifts every day + prioritizes pantry matches
   const catalogShuffleList = useMemo(() => {
     // Include all catalog recipes plus any custom/AI recipes saved by user
@@ -1141,6 +1151,7 @@ function CookScreen({
     const dayOfYear = Math.floor((now.getTime() - startOfYear.getTime()) / (1000 * 60 * 60 * 24));
     // Time slot offset (0 = Morning, 1 = Midday, 2 = Evening) plus shuffleIndex for manual reshuffling
     const timeSlotBonusOffset = dayOfYear * 11 + currentMealSlot.slotId * 17 + shuffleIndex * 19;
+    const isPantry100Requested = Boolean(surpriseFilters?.preferences?.includes("pantry100"));
 
     const scored = combined.map((rec, origIdx) => {
       const breakdown = getRecipePantryBreakdown(rec, pantry, servings);
@@ -1157,7 +1168,8 @@ function CookScreen({
           titleLower.includes("omelett") ||
           titleLower.includes("shakshuka") ||
           titleLower.includes("bowl") ||
-          titleLower.includes("toast")
+          titleLower.includes("toast") ||
+          rec.mealType === "breakfast"
         ) {
           slotBonus = 0.22;
         }
@@ -1169,7 +1181,8 @@ function CookScreen({
           titleLower.includes("reis") ||
           titleLower.includes("wok") ||
           titleLower.includes("bolognese") ||
-          titleLower.includes("alfredo")
+          titleLower.includes("alfredo") ||
+          rec.mealType === "dinner"
         ) {
           slotBonus = 0.22;
         }
@@ -1182,29 +1195,67 @@ function CookScreen({
           titleLower.includes("teriyaki") ||
           titleLower.includes("arrabbiata") ||
           titleLower.includes("geschnetzeltes") ||
-          rec.baseProt >= 20
+          rec.baseProt >= 20 ||
+          rec.mealType === "dinner"
         ) {
           slotBonus = 0.22;
         }
       }
 
-      // Heavy weight to real pantry availability:
-      // 100% matched recipes get +10 boost to always appear at the top!
-      let pantryScore = matchPct * 5;
-      if (breakdown.missing.length === 0 && breakdown.inStock.length > 0) {
-        pantryScore += 10;
-      } else if (breakdown.missing.length >= 3) {
-        pantryScore -= 3;
+      // 70-80% Matching Priority Algorithm:
+      // In default/standard mode, prioritize recipes matching 70-85% (needing 1-2 items) for variety and gourmet meals,
+      // unless 100% Vorrat (pantry100) is explicitly chosen.
+      let pantryScore = 0;
+      if (isPantry100Requested) {
+        if (breakdown.missing.length === 0 && breakdown.inStock.length > 0) {
+          pantryScore = 20; // Maximum boost for 100% match
+        } else {
+          pantryScore = matchPct * 5 - 12;
+        }
+      } else {
+        if (matchPct >= 0.68 && matchPct <= 0.85) {
+          pantryScore = 12; // Top priority recommendation
+        } else if (matchPct > 0.85) {
+          pantryScore = 6;
+        } else if (matchPct >= 0.50) {
+          pantryScore = 3;
+        } else {
+          pantryScore = -2;
+        }
+      }
+
+      // Bonus points for surpriseFilters
+      let preferenceBonus = 0;
+      if (surpriseFilters?.mealType && surpriseFilters.mealType !== "all") {
+        if (rec.mealType === surpriseFilters.mealType) {
+          preferenceBonus += 12;
+        }
+      }
+      if (surpriseFilters?.preferences && surpriseFilters.preferences.length > 0) {
+        const timeNum = parseInt(rec.time.replace(/\D/g, "") || "20", 10);
+        for (const pref of surpriseFilters.preferences) {
+          if (pref === "quick" && timeNum <= 15) preferenceBonus += 4;
+          if (pref === "veggie" && !rec.title.toLowerCase().match(/hähnchen|rind|hack|speck|fleisch|wurst/)) preferenceBonus += 4;
+          if (pref === "protein" && rec.baseProt >= 15) preferenceBonus += 4;
+          if (pref === "lowcarb" && rec.baseCarb <= 18) preferenceBonus += 4;
+          if (pref === "budget" && rec.baseCost <= 2.0) preferenceBonus += 4;
+          if (pref === "spicy" && rec.title.toLowerCase().match(/chili|scharf|arrabbiata|teriyaki|wok/)) preferenceBonus += 4;
+        }
+      }
+      if (surpriseFilters?.equipment && rec.equipment) {
+        if (rec.equipment.some((eq) => surpriseFilters.equipment.includes(eq))) {
+          preferenceBonus += 4;
+        }
       }
 
       // Rotational hash with time slot variance to cycle top recipes 3× a day
       const variance = ((origIdx * 23 + timeSlotBonusOffset) % 100) / 350;
-      return { rec, score: pantryScore + slotBonus + variance };
+      return { rec, score: pantryScore + preferenceBonus + slotBonus + variance };
     });
 
     scored.sort((a, b) => b.score - a.score);
     return scored.map((s) => s.rec);
-  }, [shuffleIndex, pantry, servings, currentMealSlot]);
+  }, [shuffleIndex, pantry, servings, currentMealSlot, surpriseFilters]);
 
   // Pre-calculated list of bookmarked favorite recipes (calories & macros remain constant per portion)
   const favoriteRecipes = useMemo(() => {
@@ -1220,11 +1271,9 @@ function CookScreen({
   }, [activeSearchedRecipe, favorites, servings]);
 
   const [isSwipeExpanded, setIsSwipeExpanded] = useState(true);
-  const [stockFilter, setStockFilter] = useState<"all" | "perfect" | "max2">("all");
 
-  // All catalog recipes formatted for the Tinder Swipe Deck (calories & macros per portion)
+  // All catalog recipes formatted for the Daily Discover Deck (calories & macros per portion)
   // When a recipe is searched, it becomes the CURRENT (first) card at index 0!
-  // It is explicitly NOT part of the shuffle list.
   const allCatalogRecipesFormatted = useMemo(() => {
     const deckList = activeSearchedRecipe
       ? [activeSearchedRecipe, ...catalogShuffleList.filter((r) => r.id !== activeSearchedRecipe.id)]
@@ -1245,37 +1294,18 @@ function CookScreen({
     });
   }, [activeSearchedRecipe, catalogShuffleList, servings, pantry]);
 
-  // Calculate missing ingredient counts for every recipe in the catalog
-  const recipesWithStockStats = useMemo(() => {
-    return allCatalogRecipesFormatted;
-  }, [allCatalogRecipesFormatted]);
-
-  const perfectStockCount = useMemo(() => {
-    return recipesWithStockStats.filter((r) => r.missingCount === 0).length;
-  }, [recipesWithStockStats]);
-
-  const max2StockCount = useMemo(() => {
-    return recipesWithStockStats.filter((r) => r.missingCount <= 2).length;
-  }, [recipesWithStockStats]);
-
   const filteredDeckRecipes = useMemo(() => {
-    if (stockFilter === "perfect") {
-      const filtered = recipesWithStockStats.filter((r) => r.missingCount === 0);
-      return filtered.length > 0 ? filtered : recipesWithStockStats;
+    if (surpriseFilters?.preferences?.includes("pantry100")) {
+      const perfectOnly = allCatalogRecipesFormatted.filter((r) => r.missingCount === 0);
+      return perfectOnly.length > 0 ? perfectOnly : allCatalogRecipesFormatted;
     }
-    if (stockFilter === "max2") {
-      const filtered = recipesWithStockStats.filter((r) => r.missingCount <= 2);
-      return filtered.length > 0 ? filtered : recipesWithStockStats;
-    }
-    return recipesWithStockStats;
-  }, [stockFilter, recipesWithStockStats]);
-
-
+    return allCatalogRecipesFormatted;
+  }, [surpriseFilters, allCatalogRecipesFormatted]);
 
   // Überrasch mich Handler: Open interactive preference dialog
   const handleSurpriseMe = () => {
     setIsRotating(true);
-    setIsSurpriseModalOpen(true);
+    setSurpriseModalOpen(true);
     setTimeout(() => {
       setIsRotating(false);
     }, 350);
@@ -1447,108 +1477,11 @@ function CookScreen({
         </div>
       )}
 
-      {/* Resteverwertungs-Filter & View Mode Toolbar */}
-      <div
-        className="stock-filter-toolbar"
-        style={{
-          margin: "10px 0 14px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: "8px",
-          flexWrap: "wrap",
-        }}
-      >
-        <div style={{ display: "flex", gap: "6px", overflowX: "auto", paddingBottom: "4px", flex: 1, minWidth: "220px" }}>
-          <button
-            type="button"
-            className={`chip ${stockFilter === "all" ? "active" : ""}`}
-            style={{
-              background: stockFilter === "all" ? "#0f172a" : "#ffffff",
-              color: stockFilter === "all" ? "#ffffff" : "#475569",
-              borderColor: stockFilter === "all" ? "#0f172a" : "#e2e8f0",
-              fontWeight: 700,
-            }}
-            onClick={() => {
-              setStockFilter("all");
-              setDeckKey((k) => k + 1);
-            }}
-          >
-            Alle Rezepte ({allCatalogRecipesFormatted.length})
-          </button>
-          <button
-            type="button"
-            className={`chip ${stockFilter === "perfect" ? "active" : ""}`}
-            style={{
-              background: stockFilter === "perfect" ? "#059669" : "#ffffff",
-              color: stockFilter === "perfect" ? "#ffffff" : "#047857",
-              borderColor: stockFilter === "perfect" ? "#059669" : "#a7f3d0",
-              fontWeight: 700,
-              display: "flex",
-              alignItems: "center",
-              gap: "4px",
-            }}
-            onClick={() => {
-              setStockFilter("perfect");
-              setDeckKey((k) => k + 1);
-            }}
-            title="Kein Zukauf nötig · Perfekt wenn Läden abends schon zu haben"
-          >
-            <Icon name="moon" size={13} /> 100% Vorrat ({perfectStockCount})
-          </button>
-          <button
-            type="button"
-            className={`chip ${stockFilter === "max2" ? "active" : ""}`}
-            style={{
-              background: stockFilter === "max2" ? "#0284c7" : "#ffffff",
-              color: stockFilter === "max2" ? "#ffffff" : "#0369a1",
-              borderColor: stockFilter === "max2" ? "#0284c7" : "#bae6fd",
-              fontWeight: 700,
-              display: "flex",
-              alignItems: "center",
-              gap: "4px",
-            }}
-            onClick={() => {
-              setStockFilter("max2");
-              setDeckKey((k) => k + 1);
-            }}
-            title="Maximal 1 bis 2 Zutaten nachkaufen"
-          >
-            <Icon name="cart" size={13} /> Max. 1–2 Zukauf ({max2StockCount})
-          </button>
-        </div>
-
-        {stockFilter === "perfect" && (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              padding: "10px 12px",
-              background: "#ecfdf5",
-              border: "1px solid #a7f3d0",
-              borderRadius: "12px",
-              marginTop: "8px",
-              fontSize: "11px",
-              color: "#065f46",
-            }}
-          >
-            <Icon name="moon" size={15} />
-            <div>
-              <strong>Abend-Filter aktiv: Läden schon zu?</strong>
-              <div style={{ color: "#047857", fontSize: "10.5px" }}>
-                Zeige nur Rezepte, für die du 0 Zutaten nachkaufen musst.
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* TinderSwipe Collapsible Container (Cards & Action Buttons) */}
+      {/* Daily Discover Collapsible Container (Cards & Action Buttons) */}
       <div
         className="tinderswipe-collapsible-wrapper"
         style={{
-          margin: "8px 0 16px",
+          margin: "12px 0 16px",
           background: "#ffffff",
           border: "1.5px solid #e2e8f0",
           borderRadius: "16px",
@@ -1596,7 +1529,7 @@ function CookScreen({
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "6px", minWidth: 0, flexWrap: "wrap" }}>
               <span style={{ fontSize: "13px", fontWeight: 800, color: "#0f172a", whiteSpace: "nowrap" }}>
-                TinderSwipe
+                Daily Discover
               </span>
               <span
                 style={{
@@ -1634,12 +1567,13 @@ function CookScreen({
                   cursor: "pointer",
                   display: "inline-flex",
                   alignItems: "center",
-                  gap: "3px",
+                  gap: "4px",
                   whiteSpace: "nowrap",
                 }}
                 title="Deck für diesen Slot jetzt neu mischen"
               >
-                ↻ Neu mischen
+                <Icon name="sync" size={11} />
+                <span>Neu mischen</span>
               </button>
             </div>
           </div>
@@ -1663,13 +1597,13 @@ function CookScreen({
             <span>{isSwipeExpanded ? "Einklappen" : "Aufklappen"}</span>
             <span
               style={{
-                display: "inline-block",
+                display: "inline-flex",
+                alignItems: "center",
                 transform: isSwipeExpanded ? "rotate(180deg)" : "rotate(0deg)",
                 transition: "transform 0.2s ease",
-                fontSize: "9px",
               }}
             >
-              ▼
+              <Icon name="chevron" size={10} />
             </span>
           </div>
         </button>
@@ -1678,7 +1612,7 @@ function CookScreen({
         {isSwipeExpanded && (
           <div style={{ padding: "14px 10px 10px", background: "#f8fafc" }}>
             <RecipeSwipeDeck
-              key={`${deckKey}-${stockFilter}`}
+              key={`${deckKey}-${surpriseFilters ? JSON.stringify(surpriseFilters) : "default"}`}
               recipes={filteredDeckRecipes}
               servings={servings}
               pantry={pantry}
@@ -1696,9 +1630,7 @@ function CookScreen({
         )}
       </div>
 
-
-
-          {/* Full-screen / Rich Step-by-Step Cooking Modal */}
+      {/* Full-screen / Rich Step-by-Step Cooking Modal */}
       <CookingModal
         recipe={activeModalRecipe}
         isOpen={Boolean(activeModalRecipe)}
@@ -1713,10 +1645,15 @@ function CookScreen({
       {/* Surprise Me Preferences Dialog Modal */}
       <SurpriseMeModal
         isOpen={isSurpriseModalOpen}
-        onClose={() => setIsSurpriseModalOpen(false)}
+        onClose={() => setSurpriseModalOpen(false)}
         recipes={FULL_RECIPE_CATALOG}
         pantry={pantry}
         servings={servings}
+        onApplyFilters={(filters) => {
+          setSurpriseFilters(filters);
+          setDeckKey((k) => k + 1);
+          setIsSwipeExpanded(true);
+        }}
         onSelectRecipe={(rec) => {
           setActiveSearchedRecipe(rec);
           setDeckKey((k) => k + 1);
@@ -2188,6 +2125,7 @@ export default function App() {
   }, [favorites]);
 
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [isSurpriseModalOpen, setIsSurpriseModalOpen] = useState(false);
 
   const [pantry, setPantry] = useState<PantryItem[]>(() => {
     try {
@@ -2901,7 +2839,10 @@ export default function App() {
     <div className="app-shell">
       <AppHeader
         onOpenHousehold={() => setIsHouseholdModalOpen(true)}
-        onOpenCoach={() => setIsCoachModalOpen(true)}
+        onOpenCoach={() => {
+          setActiveTab("discover");
+          setIsSurpriseModalOpen(true);
+        }}
         isCloudSyncing={isCloudSyncing}
         hasCloudUser={hasCloudUser}
       />
@@ -2932,6 +2873,8 @@ export default function App() {
           onNavigateToCook={() => setActiveTab("cook")}
           onAddMissingToGroceries={handleAddMissingToGroceries}
           onOpenImportRecipe={() => setIsImportModalOpen(true)}
+          isSurpriseModalOpen={isSurpriseModalOpen}
+          onSetIsSurpriseModalOpen={setIsSurpriseModalOpen}
           onMicTrigger={() => {
             notify("Sprachnotiz: 'Reis & Eier schnell'");
           }}

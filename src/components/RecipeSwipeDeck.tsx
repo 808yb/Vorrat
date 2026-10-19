@@ -95,7 +95,7 @@ function SwipeCardContent({
                     fontWeight: 750,
                   }}
                 >
-                  ✓ 100% Vorrat da
+                  100% Vorrat da
                 </span>
               );
             }
@@ -268,7 +268,9 @@ function SwipeCardContent({
                   <div className="pantry-chips-wrap">
                     {breakdown.inStock.map((item, idx) => (
                       <span key={idx} className="pantry-chip instock">
-                        <span className="chip-bullet">✓</span>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ marginRight: "3px", flexShrink: 0 }}>
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
                         <span className="chip-name">
                           {item.name}
                           {item.matchedByAlternative && (
@@ -298,7 +300,9 @@ function SwipeCardContent({
               <div className="pantry-chips-wrap">
                 {breakdown.all.map((item, idx) => (
                   <span key={idx} className="pantry-chip instock">
-                    <span className="chip-bullet">✓</span>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ marginRight: "3px", flexShrink: 0 }}>
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
                     <span className="chip-name">
                       {item.name}
                       {item.matchedByAlternative && (
@@ -396,7 +400,7 @@ export function RecipeSwipeDeck({
         }
       }
       if (onNotify) {
-        onNotify(`✓ «${currentRecipe.title}» in Gemerkte Rezepte (Tab "Kochen") gespeichert!`);
+        onNotify(`«${currentRecipe.title}» in Gemerkte Rezepte (Tab "Kochen") gespeichert!`);
       }
     } else {
       // Swipe Left = PASS / Überspringen

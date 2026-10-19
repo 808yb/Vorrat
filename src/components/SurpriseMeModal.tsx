@@ -1,8 +1,34 @@
 import React, { useState, useMemo } from "react";
-import { Dices, Check, AlertCircle, Sparkles, X, ArrowLeft, Clock } from "lucide-react";
+import {
+  Utensils,
+  Sun,
+  Sparkles,
+  Flame,
+  Zap,
+  Clock,
+  CheckCircle2,
+  Leaf,
+  Dumbbell,
+  Coins,
+  Wind,
+  Box,
+  Radio,
+  RefreshCw,
+  X,
+  ArrowLeft,
+  ArrowRight,
+  Dices,
+  Check,
+} from "lucide-react";
 import type { CatalogRecipe } from "../data/recipeCatalog";
 import { getRecipePantryBreakdown } from "../utils/pantryMatching";
 import { getSafeIngredientsList } from "../utils/recipeHelpers";
+
+export interface SurpriseFilters {
+  mealType: "dinner" | "breakfast" | "dessert" | "baking" | "snack" | "all";
+  preferences: string[];
+  equipment: string[];
+}
 
 interface SurpriseMeModalProps {
   isOpen: boolean;
@@ -10,42 +36,142 @@ interface SurpriseMeModalProps {
   recipes: CatalogRecipe[];
   pantry?: Array<{ name: string; amount?: number; unit?: string; isUnlimited?: boolean }>;
   servings: number;
+  onApplyFilters?: (filters: SurpriseFilters) => void;
   onSelectRecipe: (recipe: CatalogRecipe) => void;
   onCookRecipe?: (recipe: CatalogRecipe) => void;
   onNotify?: (message: string) => void;
 }
 
-export type PreferenceCategory =
-  | "quick" // <= 15 Min
-  | "meat" // Fleisch / Geflügel
-  | "veggie" // Vegetarisch
-  | "egg" // Eier / Pfanne
-  | "rice" // Reis & Bowls
-  | "pasta" // Pasta & Nudeln
-  | "protein" // High Protein >= 15g
-  | "lowcarb" // Low Carb
-  | "pantry100" // 100% Vorrat
-  | "budget" // <= 1.50 €
-  | "spicy"; // Pikant / Scharf
-
-interface PreferenceOption {
-  id: PreferenceCategory;
-  label: string;
+interface MealTypeOption {
+  id: "dinner" | "breakfast" | "dessert" | "baking" | "snack" | "all";
+  title: string;
   description: string;
+  iconName: "utensils" | "sun" | "sparkles" | "flame" | "zap" | "all";
 }
 
-const PREFERENCE_OPTIONS: PreferenceOption[] = [
-  { id: "quick", label: "Schnell (≤ 15 Min.)", description: "In wenigen Minuten auf dem Tisch" },
-  { id: "meat", label: "Fleisch & Geflügel", description: "Hähnchenfilet, Rind oder herzhaft" },
-  { id: "veggie", label: "Vegetarisch & Plant", description: "Ohne Fleisch, frisch & grün" },
-  { id: "protein", label: "High Protein (≥ 15g)", description: "Perfekt für Training & Muskelaufbau" },
-  { id: "lowcarb", label: "Low Carb & Leicht", description: "Wenig Kohlenhydrate, leicht bekömmlich" },
-  { id: "pantry100", label: "100% im Vorrat", description: "0 Zutaten nachkaufen nötig" },
-  { id: "egg", label: "Eier & Pfanne", description: "Omelett, Rührei oder Fried Rice" },
-  { id: "rice", label: "Reis & Bowls", description: "Bunte Bowls & asiatische Wok-Hits" },
-  { id: "pasta", label: "Pasta & Nudeln", description: "Klassiker & schnelle Nudelgerichte" },
-  { id: "budget", label: "Budget (≤ 1,50 €)", description: "Maximal preiswert pro Portion" },
-  { id: "spicy", label: "Pikant & Herzhaft", description: "Mit Chili, Knoblauch oder Soja" },
+const MEAL_TYPES: MealTypeOption[] = [
+  {
+    id: "dinner",
+    title: "Mittag- & Abendessen",
+    description: "Herzhafte Pfannen, One-Pot Gerichte, Pasta, Wok & Bowls",
+    iconName: "utensils",
+  },
+  {
+    id: "breakfast",
+    title: "Frühstück & Brunch",
+    description: "Fluffige Protein-Pancakes, Eiergerichte & Frühstücks-Bowls",
+    iconName: "sun",
+  },
+  {
+    id: "dessert",
+    title: "Dessert & Süßes",
+    description: "Kaiserschmarrn, süße Crepes & fruchtige Nachspeisen",
+    iconName: "sparkles",
+  },
+  {
+    id: "baking",
+    title: "Backen & Teige",
+    description: "Apfel-Crumble, schnelle Tassenkuchen & Aufläufe",
+    iconName: "flame",
+  },
+  {
+    id: "snack",
+    title: "Snack & Heißhunger",
+    description: "Knusprige Wedges, schnelle Bissen & kleine Leckereien",
+    iconName: "zap",
+  },
+];
+
+interface GoalOption {
+  id: string;
+  title: string;
+  description: string;
+  iconName: "clock" | "check" | "leaf" | "dumbbell" | "sparkles" | "flame" | "coins";
+}
+
+const GOAL_OPTIONS: GoalOption[] = [
+  {
+    id: "quick",
+    title: "Blitz-Rezept (<= 15 Min.)",
+    description: "Schnell fertig, minimaler Vorbereitungsaufwand",
+    iconName: "clock",
+  },
+  {
+    id: "pantry100",
+    title: "100% Vorrat (Restekochen)",
+    description: "Exakt 0 Zutaten nachkaufen nötig",
+    iconName: "check",
+  },
+  {
+    id: "veggie",
+    title: "Vegetarisch & Plant-based",
+    description: "Frisch, pflanzlich und ohne Fleisch",
+    iconName: "leaf",
+  },
+  {
+    id: "protein",
+    title: "High Protein (>= 15g)",
+    description: "Sättigend, ideal für Training & Muskelaufbau",
+    iconName: "dumbbell",
+  },
+  {
+    id: "lowcarb",
+    title: "Low Carb & Leicht",
+    description: "Wenig Kohlenhydrate, leicht bekömmlich",
+    iconName: "sparkles",
+  },
+  {
+    id: "spicy",
+    title: "Pikant & Würzig",
+    description: "Mit Chili, Knoblauch, Wok-Sauce & Röstaromen",
+    iconName: "flame",
+  },
+  {
+    id: "budget",
+    title: "Budget (<= 2 € / Portion)",
+    description: "Maximal preiswert und schonend für den Geldbeutel",
+    iconName: "coins",
+  },
+];
+
+interface EquipmentOption {
+  id: string;
+  title: string;
+  description: string;
+  iconName: "utensils" | "wind" | "box" | "radio" | "refresh";
+}
+
+const EQUIPMENT_OPTIONS: EquipmentOption[] = [
+  {
+    id: "pan",
+    title: "Pfanne & Kochtopf",
+    description: "Klassisches Kochen auf dem Herd",
+    iconName: "utensils",
+  },
+  {
+    id: "airfryer",
+    title: "Heißluftfritteuse (Airfryer)",
+    description: "Knusprig rösten & backen mit Heißluft",
+    iconName: "wind",
+  },
+  {
+    id: "oven",
+    title: "Backofen",
+    description: "Aufläufe, Gratins & Crumble",
+    iconName: "box",
+  },
+  {
+    id: "microwave",
+    title: "Mikrowelle",
+    description: "Blitz-Tassenkuchen & schnelles Garen",
+    iconName: "radio",
+  },
+  {
+    id: "blender",
+    title: "Standmixer / Pürierstab",
+    description: "Pancaketeig, Cremes & Dressings",
+    iconName: "refresh",
+  },
 ];
 
 export function SurpriseMeModal({
@@ -54,651 +180,631 @@ export function SurpriseMeModal({
   recipes,
   pantry = [],
   servings,
+  onApplyFilters,
   onSelectRecipe,
   onCookRecipe,
   onNotify,
 }: SurpriseMeModalProps) {
-  const [selectedPreferences, setSelectedPreferences] = useState<PreferenceCategory[]>([]);
+  const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
+  const [selectedMealType, setSelectedMealType] = useState<"dinner" | "breakfast" | "dessert" | "baking" | "snack" | "all">("all");
+  const [selectedGoals, setSelectedGoals] = useState<string[]>([]);
+  const [selectedEquipment, setSelectedEquipment] = useState<string[]>(["pan"]);
   const [pickedRecipe, setPickedRecipe] = useState<CatalogRecipe | null>(null);
-  const [customWish, setCustomWish] = useState("");
-
-  // Helper to test if a recipe matches a category
-  const matchesCategory = (recipe: CatalogRecipe, cat: PreferenceCategory): boolean => {
-    const titleLower = recipe.title.toLowerCase();
-    const subLower = recipe.subtitle.toLowerCase();
-    const ings = typeof recipe.ingredientsList === "function"
-      ? recipe.ingredientsList(1)
-      : getSafeIngredientsList(recipe, 1);
-    const ingsText = ings.map((i) => i.name).join(" ").toLowerCase();
-    const fullText = `${titleLower} ${subLower} ${ingsText}`;
-
-    // Extract minutes from recipe time like "15 Min." -> 15
-    const timeMatch = recipe.time.match(/\d+/);
-    const minutes = timeMatch ? parseInt(timeMatch[0], 10) : 20;
-
-    switch (cat) {
-      case "quick":
-        return minutes <= 15;
-      case "meat":
-        return (
-          fullText.includes("hähnchen") ||
-          fullText.includes("fleisch") ||
-          fullText.includes("rind") ||
-          fullText.includes("speck") ||
-          fullText.includes("filet") ||
-          fullText.includes("chicken") ||
-          fullText.includes("wurst") ||
-          fullText.includes("hackfleisch") ||
-          fullText.includes("schinken") ||
-          fullText.includes("bacon")
-        );
-      case "veggie":
-        return !(
-          fullText.includes("hähnchen") ||
-          fullText.includes("fleisch") ||
-          fullText.includes("rind") ||
-          fullText.includes("speck") ||
-          fullText.includes("filet") ||
-          fullText.includes("chicken") ||
-          fullText.includes("wurst") ||
-          fullText.includes("hackfleisch") ||
-          fullText.includes("schinken") ||
-          fullText.includes("bacon")
-        );
-      case "protein":
-        return recipe.baseProt >= 14;
-      case "lowcarb":
-        return recipe.baseCarb <= 16;
-      case "pantry100": {
-        const breakdown = getRecipePantryBreakdown(recipe, pantry, servings);
-        return breakdown.missing.length === 0;
-      }
-      case "budget":
-        return recipe.baseCost <= 1.55;
-      case "egg":
-        return (
-          fullText.includes("ei") ||
-          fullText.includes("eier") ||
-          fullText.includes("omelett") ||
-          fullText.includes("rührei") ||
-          fullText.includes("fried rice")
-        );
-      case "rice":
-        return fullText.includes("reis") || fullText.includes("bowl") || fullText.includes("rice");
-      case "pasta":
-        return (
-          fullText.includes("pasta") ||
-          fullText.includes("nudel") ||
-          fullText.includes("penne") ||
-          fullText.includes("spaghetti") ||
-          fullText.includes("alfredo") ||
-          fullText.includes("bolognese")
-        );
-      case "spicy":
-        return (
-          fullText.includes("chili") ||
-          fullText.includes("knoblauch") ||
-          fullText.includes("scharf") ||
-          fullText.includes("teriyaki") ||
-          fullText.includes("pikant") ||
-          fullText.includes("arrabbiata")
-        );
-      default:
-        return true;
-    }
-  };
-
-  // Filter pool based on active preferences & custom search term
-  const matchingPool = useMemo(() => {
-    let pool = [...recipes];
-
-    // Filter by custom wish text if present
-    if (customWish.trim().length > 1) {
-      const q = customWish.trim().toLowerCase();
-      pool = pool.filter(
-        (r) => r.title.toLowerCase().includes(q) || r.subtitle.toLowerCase().includes(q)
-      );
-    }
-
-    // Filter by selected preferences
-    if (selectedPreferences.length > 0) {
-      pool = pool.filter((r) => {
-        return selectedPreferences.every((cat) => matchesCategory(r, cat));
-      });
-    }
-
-    return pool;
-  }, [recipes, selectedPreferences, customWish, pantry, servings]);
-
-  const togglePreference = (cat: PreferenceCategory) => {
-    // If switching between meat and veggie, make them mutually exclusive
-    if (cat === "meat") {
-      setSelectedPreferences((prev) =>
-        prev.includes("meat")
-          ? prev.filter((c) => c !== "meat")
-          : [...prev.filter((c) => c !== "veggie"), "meat"]
-      );
-      setPickedRecipe(null);
-      return;
-    }
-
-    if (cat === "veggie") {
-      setSelectedPreferences((prev) =>
-        prev.includes("veggie")
-          ? prev.filter((c) => c !== "veggie")
-          : [...prev.filter((c) => c !== "meat"), "veggie"]
-      );
-      setPickedRecipe(null);
-      return;
-    }
-
-    setSelectedPreferences((prev) =>
-      prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]
-    );
-    setPickedRecipe(null);
-  };
-
-  const handlePickRandom = () => {
-    let pool = matchingPool;
-    let isPartialFallback = false;
-
-    // If no exact match for this multi-filter combination, find best partial matches
-    if (pool.length === 0 && selectedPreferences.length > 0) {
-      const scored = recipes.map((r) => {
-        const matchesCount = selectedPreferences.filter((cat) => matchesCategory(r, cat)).length;
-        const breakdown = getRecipePantryBreakdown(r, pantry, servings);
-        const inStock = breakdown.inStock.length;
-        const total = breakdown.inStock.length + breakdown.missing.length;
-        const pct = total > 0 ? inStock / total : 0;
-        return { recipe: r, matchesCount, pct };
-      });
-
-      const maxMatches = Math.max(...scored.map((s) => s.matchesCount));
-      if (maxMatches > 0) {
-        const bestCandidates = scored.filter((s) => s.matchesCount === maxMatches);
-        bestCandidates.sort((a, b) => b.pct - a.pct + (Math.random() * 0.3 - 0.15));
-        pool = bestCandidates.map((c) => c.recipe);
-        isPartialFallback = true;
-      }
-    }
-
-    if (pool.length === 0) {
-      pool = recipes;
-    }
-
-    if (pool.length === 0) return;
-
-    // Weight selection towards higher pantry match
-    const scored = pool.map((r) => {
-      const breakdown = getRecipePantryBreakdown(r, pantry, servings);
-      const inStock = breakdown.inStock.length;
-      const total = breakdown.inStock.length + breakdown.missing.length;
-      const pct = total > 0 ? inStock / total : 0;
-      return { recipe: r, pct };
-    });
-
-    // Sort by pantry percentage descending with some random variance
-    scored.sort((a, b) => b.pct - a.pct + (Math.random() * 0.4 - 0.2));
-    const chosen = scored[0].recipe;
-
-    setPickedRecipe(chosen);
-    if (onNotify) {
-      const breakdown = getRecipePantryBreakdown(chosen, pantry, servings);
-      const total = breakdown.inStock.length + breakdown.missing.length;
-      const pct = total > 0 ? Math.round((breakdown.inStock.length / total) * 100) : 0;
-      if (isPartialFallback) {
-        onNotify(`Bester Treffer für deine Wünsche: «${chosen.title}» (${pct}% vorrätig)!`);
-      } else {
-        onNotify(`Überraschung: «${chosen.title}» (${pct}% vorrätig)!`);
-      }
-    }
-  };
-
-  const handleAcceptSwipe = () => {
-    if (pickedRecipe) {
-      onSelectRecipe(pickedRecipe);
-      onClose();
-    }
-  };
-
-  const handleAcceptCook = () => {
-    if (pickedRecipe && onCookRecipe) {
-      onCookRecipe(pickedRecipe);
-      onClose();
-    } else if (pickedRecipe) {
-      handleAcceptSwipe();
-    }
-  };
 
   if (!isOpen) return null;
 
+  const toggleGoal = (id: string) => {
+    setSelectedGoals((prev) =>
+      prev.includes(id) ? prev.filter((g) => g !== id) : [...prev, id]
+    );
+  };
+
+  const toggleEquipment = (id: string) => {
+    setSelectedEquipment((prev) =>
+      prev.includes(id) ? (prev.length > 1 ? prev.filter((e) => e !== id) : prev) : [...prev, id]
+    );
+  };
+
+  // Helper to evaluate recipe matching
+  const testRecipeMatch = (r: CatalogRecipe): boolean => {
+    // 1. Meal type filter
+    if (selectedMealType !== "all") {
+      if (r.mealType && r.mealType !== selectedMealType) return false;
+      const titleLower = r.title.toLowerCase();
+      const subLower = r.subtitle.toLowerCase();
+      if (selectedMealType === "breakfast" && !(r.mealType === "breakfast" || titleLower.includes("pancake") || titleLower.includes("rührei") || titleLower.includes("ei") || titleLower.includes("toast"))) {
+        return false;
+      }
+      if (selectedMealType === "dessert" && !(r.mealType === "dessert" || titleLower.includes("schmarrn") || titleLower.includes("süß") || titleLower.includes("dessert") || subLower.includes("puderzucker"))) {
+        return false;
+      }
+      if (selectedMealType === "baking" && !(r.mealType === "baking" || titleLower.includes("crumble") || titleLower.includes("kuchen") || titleLower.includes("back") || titleLower.includes("teig"))) {
+        return false;
+      }
+    }
+
+    // 2. Goals filter
+    const ings = typeof r.ingredientsList === "function" ? r.ingredientsList(1) : getSafeIngredientsList(r, 1);
+    const ingsText = ings.map((i) => i.name).join(" ").toLowerCase();
+    const fullText = `${r.title} ${r.subtitle} ${ingsText}`.toLowerCase();
+    const timeNum = parseInt(r.time.replace(/\D/g, ""), 10) || 20;
+
+    for (const goal of selectedGoals) {
+      if (goal === "quick" && timeNum > 15) return false;
+      if (goal === "veggie" && (fullText.includes("hähnchen") || fullText.includes("rind") || fullText.includes("hack") || fullText.includes("fleisch") || fullText.includes("speck") || fullText.includes("wurst"))) {
+        return false;
+      }
+      if (goal === "protein" && r.baseProt < 15) return false;
+      if (goal === "lowcarb" && r.baseCarb > 18) return false;
+      if (goal === "budget" && r.baseCost > 2.0) return false;
+      if (goal === "spicy" && !(fullText.includes("chili") || fullText.includes("knoblauch") || fullText.includes("scharf") || fullText.includes("pikant") || fullText.includes("arrabbiata") || fullText.includes("teriyaki"))) {
+        return false;
+      }
+      if (goal === "pantry100") {
+        const breakdown = getRecipePantryBreakdown(r, pantry, servings);
+        if (breakdown.missing.length > 0) return false;
+      }
+    }
+
+    // 3. Equipment filter
+    if (selectedEquipment.length > 0 && r.equipment && r.equipment.length > 0) {
+      const hasEquipmentMatch = r.equipment.some((eq) => selectedEquipment.includes(eq));
+      if (!hasEquipmentMatch) return false;
+    }
+
+    return true;
+  };
+
+  const matchingPool = useMemo(() => {
+    return recipes.filter(testRecipeMatch);
+  }, [recipes, selectedMealType, selectedGoals, selectedEquipment, pantry, servings]);
+
+  const handleApplyAndClose = () => {
+    const filters: SurpriseFilters = {
+      mealType: selectedMealType,
+      preferences: selectedGoals,
+      equipment: selectedEquipment,
+    };
+    if (onApplyFilters) {
+      onApplyFilters(filters);
+    }
+    if (onNotify) {
+      onNotify(`Daily Discover mit deinen Wünschen aktualisiert (${matchingPool.length > 0 ? matchingPool.length : recipes.length} Rezepte)!`);
+    }
+    onClose();
+  };
+
+  const handleInstantSurprise = () => {
+    const pool = matchingPool.length > 0 ? matchingPool : recipes;
+    if (pool.length === 0) return;
+
+    // Rank candidate by standard 70-80% match rule unless 100% pantry is requested
+    const isPantry100 = selectedGoals.includes("pantry100");
+    const scored = pool.map((r) => {
+      const breakdown = getRecipePantryBreakdown(r, pantry, servings);
+      const total = breakdown.inStock.length + breakdown.missing.length;
+      const pct = total > 0 ? breakdown.inStock.length / total : 0;
+      let score = 0;
+      if (isPantry100) {
+        score = breakdown.missing.length === 0 ? 100 : pct * 20;
+      } else {
+        // Favor 70-85% pantry match for variety
+        if (pct >= 0.70 && pct <= 0.85) {
+          score = 80 + Math.random() * 10;
+        } else if (pct > 0.85) {
+          score = 60 + Math.random() * 10;
+        } else {
+          score = pct * 40 + Math.random() * 10;
+        }
+      }
+      return { recipe: r, score };
+    });
+
+    scored.sort((a, b) => b.score - a.score);
+    const chosen = scored[0].recipe;
+    setPickedRecipe(chosen);
+    onSelectRecipe(chosen);
+    if (onNotify) {
+      onNotify(`Überraschungs-Treffer: «${chosen.title}»`);
+    }
+    onClose();
+  };
+
   return (
-    <div className="modal-overlay" onClick={onClose} style={{ zIndex: 70 }}>
+    <div className="modal-backdrop">
       <div
-        className="modal-content"
-        onClick={(e) => e.stopPropagation()}
+        className="modal-container"
         style={{
-          maxWidth: "480px",
-          width: "92%",
-          borderRadius: "20px",
-          padding: "20px",
-          background: "#ffffff",
+          maxWidth: "460px",
+          width: "94%",
           maxHeight: "90vh",
-          overflowY: "auto",
+          display: "flex",
+          flexDirection: "column",
+          borderRadius: "20px",
+          overflow: "hidden",
+          background: "#ffffff",
+          boxShadow: "0 20px 40px rgba(0,0,0,0.22)",
         }}
       >
         {/* Header */}
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "16px" }}>
+        <div
+          style={{
+            padding: "16px 20px 14px",
+            borderBottom: "1px solid #e2e8f0",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            background: "#f8fafc",
+          }}
+        >
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            {pickedRecipe ? (
-              <button
-                type="button"
-                onClick={() => setPickedRecipe(null)}
-                style={{
-                  width: "40px",
-                  height: "40px",
-                  borderRadius: "12px",
-                  background: "#ebf3ee",
-                  color: "#2d5a3e",
-                  border: "1px solid #c6dcce",
-                  display: "grid",
-                  placeItems: "center",
-                  cursor: "pointer",
-                }}
-                aria-label="Zurück zur Auswahl"
-                title="Zurück zu den Kriterien"
-              >
-                <ArrowLeft size={20} />
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={onClose}
-                style={{
-                  width: "40px",
-                  height: "40px",
-                  borderRadius: "12px",
-                  background: "#ebf3ee",
-                  color: "#2d5a3e",
-                  border: "1px solid #c6dcce",
-                  display: "grid",
-                  placeItems: "center",
-                  cursor: "pointer",
-                }}
-                aria-label="Zurück zum Rezeptbildschirm"
-                title="Zurück"
-              >
-                <ArrowLeft size={20} />
-              </button>
-            )}
+            <div
+              style={{
+                width: "36px",
+                height: "36px",
+                borderRadius: "10px",
+                background: "#dcfce7",
+                color: "#15803d",
+                display: "grid",
+                placeItems: "center",
+              }}
+            >
+              <Sparkles size={18} />
+            </div>
             <div>
-              <h2 style={{ margin: 0, fontSize: "17px", fontWeight: 800, color: "#0f172a" }}>
-                {pickedRecipe ? "Dein Treffer" : "Überrasch mich"}
+              <h2 style={{ margin: 0, fontSize: "16px", fontWeight: 800, color: "#0f172a" }}>
+                Überrasch mich
               </h2>
-              <p style={{ margin: "2px 0 0", fontSize: "11px", color: "#64748b" }}>
-                {pickedRecipe
-                  ? "Passt zu deinen Vorlieben aus dem Vorrat"
-                  : "Was möchtest du heute essen? Wähle deine Wünsche:"}
-              </p>
+              <span style={{ fontSize: "11px", color: "#64748b", fontWeight: 600 }}>
+                Schritt {currentStep} von 3 · Daily Discover anpassen
+              </span>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="clear-button"
-            style={{ border: "none", background: "transparent", cursor: "pointer", color: "#64748b", fontSize: "16px", padding: "6px" }}
-            aria-label="Schließen"
+            style={{
+              background: "#f1f5f9",
+              border: "none",
+              borderRadius: "50%",
+              width: "32px",
+              height: "32px",
+              display: "grid",
+              placeItems: "center",
+              cursor: "pointer",
+              color: "#64748b",
+            }}
           >
-            <X size={18} />
+            <X size={16} />
           </button>
         </div>
 
-        {/* ========================================================
-            VIEW 1: SELECTION MENU (If no recipe picked yet)
-            ======================================================== */}
-        {!pickedRecipe ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-            {/* Quick Keyword Search Input */}
-            <div>
-              <label style={{ fontSize: "11px", fontWeight: 700, color: "#475569", display: "block", marginBottom: "4px" }}>
-                Spezielle Zutat oder Wunsch (optional)
-              </label>
-              <input
-                type="text"
-                value={customWish}
-                onChange={(e) => {
-                  setCustomWish(e.target.value);
-                  setPickedRecipe(null);
-                }}
-                placeholder="z. B. Hähnchen, Pasta, Erbsen, Curry..."
-                className="search-field"
-                style={{ width: "100%", height: "38px", fontSize: "12px" }}
-              />
-            </div>
+        {/* 3-Step Progress Bar Indicator */}
+        <div style={{ display: "flex", height: "4px", background: "#f1f5f9" }}>
+          <div
+            style={{
+              flex: 1,
+              background: currentStep >= 1 ? "#10b981" : "#e2e8f0",
+              transition: "background 0.3s ease",
+            }}
+          />
+          <div
+            style={{
+              flex: 1,
+              background: currentStep >= 2 ? "#10b981" : "#e2e8f0",
+              transition: "background 0.3s ease",
+            }}
+          />
+          <div
+            style={{
+              flex: 1,
+              background: currentStep >= 3 ? "#10b981" : "#e2e8f0",
+              transition: "background 0.3s ease",
+            }}
+          />
+        </div>
 
-            {/* Category Preference Chips */}
+        {/* Content Body */}
+        <div style={{ padding: "18px 20px", overflowY: "auto", flex: 1 }}>
+          {/* STEP 1: Mahlzeit & Typ */}
+          {currentStep === 1 && (
             <div>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
-                <span style={{ fontSize: "11px", fontWeight: 750, color: "#334155", textTransform: "uppercase", letterSpacing: "0.4px" }}>
-                  Worauf hast du Lust?
-                </span>
-                {selectedPreferences.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setSelectedPreferences([])}
-                    style={{ border: "none", background: "none", color: "#dc2626", fontSize: "10.5px", fontWeight: 700, cursor: "pointer" }}
-                  >
-                    Filter leeren
-                  </button>
-                )}
+              <div style={{ marginBottom: "14px" }}>
+                <h3 style={{ margin: "0 0 4px", fontSize: "15px", fontWeight: 800, color: "#0f172a" }}>
+                  Worauf hast du heute Lust?
+                </h3>
+                <p style={{ margin: 0, fontSize: "12px", color: "#64748b" }}>
+                  Wähle eine Kategorie für passende Rezeptvorschläge
+                </p>
               </div>
 
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "7px" }}>
-                {PREFERENCE_OPTIONS.map((opt) => {
-                  const isSelected = selectedPreferences.includes(opt.id);
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedMealType("all")}
+                  style={{
+                    padding: "12px 14px",
+                    borderRadius: "12px",
+                    border: `1.5px solid ${selectedMealType === "all" ? "#10b981" : "#e2e8f0"}`,
+                    background: selectedMealType === "all" ? "#f0fdf4" : "#ffffff",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    textAlign: "left",
+                    transition: "all 0.15s ease",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <div
+                      style={{
+                        width: "32px",
+                        height: "32px",
+                        borderRadius: "8px",
+                        background: selectedMealType === "all" ? "#dcfce7" : "#f1f5f9",
+                        color: selectedMealType === "all" ? "#15803d" : "#64748b",
+                        display: "grid",
+                        placeItems: "center",
+                      }}
+                    >
+                      <Sparkles size={16} />
+                    </div>
+                    <div>
+                      <strong style={{ fontSize: "13px", color: "#0f172a", display: "block" }}>
+                        Alles anzeigen (Beste Mischung)
+                      </strong>
+                      <span style={{ fontSize: "11px", color: "#64748b" }}>
+                        Vielfältige Vorschläge über alle Gerichte
+                      </span>
+                    </div>
+                  </div>
+                  {selectedMealType === "all" && <Check size={18} color="#10b981" />}
+                </button>
+
+                {MEAL_TYPES.map((type) => {
+                  const isSelected = selectedMealType === type.id;
                   return (
                     <button
-                      key={opt.id}
+                      key={type.id}
                       type="button"
-                      onClick={() => togglePreference(opt.id)}
+                      onClick={() => setSelectedMealType(type.id)}
                       style={{
-                        padding: "7px 12px",
-                        borderRadius: "11px",
-                        border: isSelected ? "1.5px solid #2d5a3e" : "1px solid #cbd5e1",
-                        background: isSelected ? "#2d5a3e" : "#f8fafc",
-                        color: isSelected ? "#ffffff" : "#334155",
-                        fontSize: "11.5px",
-                        fontWeight: isSelected ? 750 : 600,
+                        padding: "12px 14px",
+                        borderRadius: "12px",
+                        border: `1.5px solid ${isSelected ? "#10b981" : "#e2e8f0"}`,
+                        background: isSelected ? "#f0fdf4" : "#ffffff",
                         cursor: "pointer",
-                        display: "inline-flex",
+                        display: "flex",
                         alignItems: "center",
-                        gap: "6px",
-                        boxShadow: isSelected ? "0 2px 6px rgba(45, 90, 62, 0.25)" : "none",
+                        justifyContent: "space-between",
+                        textAlign: "left",
                         transition: "all 0.15s ease",
                       }}
                     >
-                      {isSelected && <Check size={12} strokeWidth={2.8} />}
-                      <span>{opt.label}</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                        <div
+                          style={{
+                            width: "32px",
+                            height: "32px",
+                            borderRadius: "8px",
+                            background: isSelected ? "#dcfce7" : "#f1f5f9",
+                            color: isSelected ? "#15803d" : "#64748b",
+                            display: "grid",
+                            placeItems: "center",
+                          }}
+                        >
+                          {type.iconName === "utensils" && <Utensils size={16} />}
+                          {type.iconName === "sun" && <Sun size={16} />}
+                          {type.iconName === "sparkles" && <Sparkles size={16} />}
+                          {type.iconName === "flame" && <Flame size={16} />}
+                          {type.iconName === "zap" && <Zap size={16} />}
+                        </div>
+                        <div>
+                          <strong style={{ fontSize: "13px", color: "#0f172a", display: "block" }}>
+                            {type.title}
+                          </strong>
+                          <span style={{ fontSize: "11px", color: "#64748b" }}>
+                            {type.description}
+                          </span>
+                        </div>
+                      </div>
+                      {isSelected && <Check size={18} color="#10b981" />}
                     </button>
                   );
                 })}
               </div>
             </div>
+          )}
 
-            {/* Matching Counter Banner */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                padding: "10px 14px",
-                background: matchingPool.length > 0 ? "#f4f7f5" : "#fef2f2",
-                border: `1px solid ${matchingPool.length > 0 ? "#c6dcce" : "#fecaca"}`,
-                borderRadius: "12px",
-                fontSize: "11.5px",
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                {matchingPool.length > 0 ? (
-                  <Check size={15} color="#166534" />
-                ) : (
-                  <AlertCircle size={15} color="#991b1b" />
-                )}
-                <span style={{ fontWeight: 700, color: matchingPool.length > 0 ? "#1b4332" : "#991b1b" }}>
-                  {matchingPool.length > 0
-                    ? `${matchingPool.length} passende Rezepte gefunden`
-                    : "Kein exakter Treffer für diese Kombination"}
-                </span>
-              </div>
-              {selectedPreferences.length > 0 && (
-                <span style={{ fontSize: "10px", color: "#64748b" }}>
-                  {selectedPreferences.length} aktiv
-                </span>
-              )}
-            </div>
-
-            {/* Action Button: Überrasch mich */}
-            <button
-              type="button"
-              className="primary-button"
-              onClick={handlePickRandom}
-              style={{
-                height: "46px",
-                borderRadius: "13px",
-                fontSize: "13px",
-                fontWeight: 750,
-                background: "#2d5a3e",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "8px",
-                boxShadow: "0 3px 10px rgba(45, 90, 62, 0.25)",
-              }}
-            >
-              <Dices size={18} />
-              <span>Zufälliges Rezept würfeln</span>
-            </button>
-          </div>
-        ) : (
-          /* ========================================================
-             VIEW 2: SURPRISE RESULT CARD
-             ======================================================== */
-          <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-            <div
-              style={{
-                padding: "8px 12px",
-                background: "#ecfdf5",
-                borderRadius: "12px",
-                border: "1px solid #a7f3d0",
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                color: "#065f46",
-                fontSize: "11px",
-                fontWeight: 700,
-              }}
-            >
-              <Sparkles size={14} color="#059669" />
-              <span>Dein Überraschungs-Treffer nach deinen Wünschen:</span>
-            </div>
-
-            {/* Highlight Recipe Card */}
-            <div
-              style={{
-                background: "#ffffff",
-                border: "1.5px solid #2d5a3e",
-                borderRadius: "16px",
-                overflow: "hidden",
-                boxShadow: "0 4px 16px rgba(45, 90, 62, 0.12)",
-              }}
-            >
-              {pickedRecipe.imageUrl && (
-                <div style={{ width: "100%", height: "140px", overflow: "hidden", position: "relative" }}>
-                  <img
-                    src={pickedRecipe.imageUrl}
-                    alt={pickedRecipe.title}
-                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                    onError={(e) => {
-                      (e.currentTarget as HTMLImageElement).src = "https://images.unsplash.com/photo-1498837167922-ddd27525d352?auto=format&fit=crop&w=800&q=80";
-                    }}
-                  />
-                  <span
-                    style={{
-                      position: "absolute",
-                      top: "8px",
-                      right: "8px",
-                      background: "rgba(15, 23, 42, 0.85)",
-                      color: "white",
-                      fontSize: "10.5px",
-                      fontWeight: 700,
-                      padding: "3px 8px",
-                      borderRadius: "6px",
-                      backdropFilter: "blur(6px)",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "4px",
-                    }}
-                  >
-                    <Clock size={11} />
-                    <span>{pickedRecipe.time}</span>
-                  </span>
-                </div>
-              )}
-
-              <div style={{ padding: "14px" }}>
-                <h3 style={{ margin: "0 0 3px", fontSize: "16px", fontWeight: 800, color: "#0f172a" }}>
-                  {pickedRecipe.title}
+          {/* STEP 2: Ernährungsziel & Stil */}
+          {currentStep === 2 && (
+            <div>
+              <div style={{ marginBottom: "14px" }}>
+                <h3 style={{ margin: "0 0 4px", fontSize: "15px", fontWeight: 800, color: "#0f172a" }}>
+                  Ernährungsziel & Stil
                 </h3>
-                <p style={{ margin: "0 0 10px", fontSize: "11px", color: "#64748b" }}>
-                  {pickedRecipe.subtitle}
+                <p style={{ margin: 0, fontSize: "12px", color: "#64748b" }}>
+                  Mehrfachauswahl möglich oder einfach weitergehen
                 </p>
+              </div>
 
-                {/* Macro & Stats row */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: "6px", marginBottom: "10px" }}>
-                  <div style={{ background: "#f8fafc", padding: "6px", borderRadius: "8px", textAlign: "center" }}>
-                    <span style={{ fontSize: "9px", color: "#64748b", display: "block" }}>KCAL</span>
-                    <strong style={{ fontSize: "11.5px", color: "#0f172a" }}>{pickedRecipe.baseCal}</strong>
-                  </div>
-                  <div style={{ background: "#f8fafc", padding: "6px", borderRadius: "8px", textAlign: "center" }}>
-                    <span style={{ fontSize: "9px", color: "#059669", display: "block" }}>PROTEIN</span>
-                    <strong style={{ fontSize: "11.5px", color: "#047857" }}>{pickedRecipe.baseProt}g</strong>
-                  </div>
-                  <div style={{ background: "#f8fafc", padding: "6px", borderRadius: "8px", textAlign: "center" }}>
-                    <span style={{ fontSize: "9px", color: "#d97706", display: "block" }}>CARBS</span>
-                    <strong style={{ fontSize: "11.5px", color: "#b45309" }}>{pickedRecipe.baseCarb}g</strong>
-                  </div>
-                  <div style={{ background: "#f8fafc", padding: "6px", borderRadius: "8px", textAlign: "center" }}>
-                    <span style={{ fontSize: "9px", color: "#2563eb", display: "block" }}>PREIS</span>
-                    <strong style={{ fontSize: "11.5px", color: "#1d4ed8" }}>{pickedRecipe.baseCost.toFixed(2).replace(".", ",")}€</strong>
-                  </div>
-                </div>
-
-                {/* Pantry coverage note */}
-                {(() => {
-                  const breakdown = getRecipePantryBreakdown(pickedRecipe, pantry, servings);
-                  const inStock = breakdown.inStock.length;
-                  const total = inStock + breakdown.missing.length;
-                  const pct = total > 0 ? Math.round((inStock / total) * 100) : 0;
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                {GOAL_OPTIONS.map((goal) => {
+                  const isSelected = selectedGoals.includes(goal.id);
                   return (
-                    <div
+                    <button
+                      key={goal.id}
+                      type="button"
+                      onClick={() => toggleGoal(goal.id)}
                       style={{
+                        padding: "11px 14px",
+                        borderRadius: "12px",
+                        border: `1.5px solid ${isSelected ? "#10b981" : "#e2e8f0"}`,
+                        background: isSelected ? "#f0fdf4" : "#ffffff",
+                        cursor: "pointer",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "space-between",
-                        padding: "8px 10px",
-                        background: pct === 100 ? "#ecfdf5" : "#f1f5f9",
-                        borderRadius: "8px",
-                        fontSize: "11px",
+                        textAlign: "left",
+                        transition: "all 0.15s ease",
                       }}
                     >
-                      <span style={{ color: pct === 100 ? "#047857" : "#334155", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "5px" }}>
-                        {pct === 100 ? (
-                          <>
-                            <Check size={13} strokeWidth={2.5} />
-                            <span>Alle Zutaten vorrätig!</span>
-                          </>
-                        ) : (
-                          <span>{inStock} von {total} Zutaten im Vorrat</span>
-                        )}
-                      </span>
-                      <span style={{ fontWeight: 800, color: pct === 100 ? "#059669" : "#0284c7" }}>
-                        {pct}% Match
-                      </span>
-                    </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                        <div
+                          style={{
+                            width: "30px",
+                            height: "30px",
+                            borderRadius: "8px",
+                            background: isSelected ? "#dcfce7" : "#f1f5f9",
+                            color: isSelected ? "#15803d" : "#64748b",
+                            display: "grid",
+                            placeItems: "center",
+                          }}
+                        >
+                          {goal.iconName === "clock" && <Clock size={15} />}
+                          {goal.iconName === "check" && <CheckCircle2 size={15} />}
+                          {goal.iconName === "leaf" && <Leaf size={15} />}
+                          {goal.iconName === "dumbbell" && <Dumbbell size={15} />}
+                          {goal.iconName === "sparkles" && <Sparkles size={15} />}
+                          {goal.iconName === "flame" && <Flame size={15} />}
+                          {goal.iconName === "coins" && <Coins size={15} />}
+                        </div>
+                        <div>
+                          <strong style={{ fontSize: "12.5px", color: "#0f172a", display: "block" }}>
+                            {goal.title}
+                          </strong>
+                          <span style={{ fontSize: "11px", color: "#64748b" }}>
+                            {goal.description}
+                          </span>
+                        </div>
+                      </div>
+                      <div
+                        style={{
+                          width: "20px",
+                          height: "20px",
+                          borderRadius: "6px",
+                          border: `1.5px solid ${isSelected ? "#10b981" : "#cbd5e1"}`,
+                          background: isSelected ? "#10b981" : "#ffffff",
+                          display: "grid",
+                          placeItems: "center",
+                        }}
+                      >
+                        {isSelected && <Check size={14} color="#ffffff" strokeWidth={3} />}
+                      </div>
+                    </button>
                   );
-                })()}
+                })}
               </div>
             </div>
+          )}
 
-            {/* Action Buttons */}
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-              <div style={{ display: "flex", gap: "8px" }}>
-                {onCookRecipe && (
-                  <button
-                    type="button"
-                    onClick={handleAcceptCook}
-                    className="primary-button"
-                    style={{
-                      flex: 1,
-                      height: "44px",
-                      borderRadius: "12px",
-                      fontSize: "12.5px",
-                      fontWeight: 750,
-                      background: "#2d5a3e",
-                    }}
-                  >
-                    Jetzt kochen
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={handleAcceptSwipe}
-                  className="secondary-button"
-                  style={{
-                    flex: 1,
-                    height: "44px",
-                    borderRadius: "12px",
-                    fontSize: "12.5px",
-                    fontWeight: 750,
-                    background: "#ffffff",
-                    border: "1.5px solid #cbd5e1",
-                    color: "#1e293b",
-                  }}
-                >
-                  Im Swipe-Deck ansehen
-                </button>
+          {/* STEP 3: Küchengeräte */}
+          {currentStep === 3 && (
+            <div>
+              <div style={{ marginBottom: "14px" }}>
+                <h3 style={{ margin: "0 0 4px", fontSize: "15px", fontWeight: 800, color: "#0f172a" }}>
+                  Küchengeräte & Zubereitung
+                </h3>
+                <p style={{ margin: 0, fontSize: "12px", color: "#64748b" }}>
+                  Welche Geräte möchtest du heute verwenden?
+                </p>
               </div>
 
-              <div style={{ display: "flex", gap: "8px" }}>
-                <button
-                  type="button"
-                  onClick={() => setPickedRecipe(null)}
-                  style={{
-                    flex: 1,
-                    height: "38px",
-                    border: "1.5px solid #cbd5e1",
-                    background: "#ffffff",
-                    borderRadius: "10px",
-                    color: "#334155",
-                    fontSize: "11.5px",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: "6px",
-                  }}
-                >
-                  <ArrowLeft size={14} />
-                  <span>Zurück zu Kriterien</span>
-                </button>
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                {EQUIPMENT_OPTIONS.map((eq) => {
+                  const isSelected = selectedEquipment.includes(eq.id);
+                  return (
+                    <button
+                      key={eq.id}
+                      type="button"
+                      onClick={() => toggleEquipment(eq.id)}
+                      style={{
+                        padding: "11px 14px",
+                        borderRadius: "12px",
+                        border: `1.5px solid ${isSelected ? "#10b981" : "#e2e8f0"}`,
+                        background: isSelected ? "#f0fdf4" : "#ffffff",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        textAlign: "left",
+                        transition: "all 0.15s ease",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                        <div
+                          style={{
+                            width: "30px",
+                            height: "30px",
+                            borderRadius: "8px",
+                            background: isSelected ? "#dcfce7" : "#f1f5f9",
+                            color: isSelected ? "#15803d" : "#64748b",
+                            display: "grid",
+                            placeItems: "center",
+                          }}
+                        >
+                          {eq.iconName === "utensils" && <Utensils size={15} />}
+                          {eq.iconName === "wind" && <Wind size={15} />}
+                          {eq.iconName === "box" && <Box size={15} />}
+                          {eq.iconName === "radio" && <Radio size={15} />}
+                          {eq.iconName === "refresh" && <RefreshCw size={15} />}
+                        </div>
+                        <div>
+                          <strong style={{ fontSize: "12.5px", color: "#0f172a", display: "block" }}>
+                            {eq.title}
+                          </strong>
+                          <span style={{ fontSize: "11px", color: "#64748b" }}>
+                            {eq.description}
+                          </span>
+                        </div>
+                      </div>
+                      <div
+                        style={{
+                          width: "20px",
+                          height: "20px",
+                          borderRadius: "6px",
+                          border: `1.5px solid ${isSelected ? "#10b981" : "#cbd5e1"}`,
+                          background: isSelected ? "#10b981" : "#ffffff",
+                          display: "grid",
+                          placeItems: "center",
+                        }}
+                      >
+                        {isSelected && <Check size={14} color="#ffffff" strokeWidth={3} />}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
 
-                <button
-                  type="button"
-                  onClick={handlePickRandom}
-                  style={{
-                    flex: 1,
-                    height: "38px",
-                    border: "none",
-                    background: "#f1f5f9",
-                    borderRadius: "10px",
-                    color: "#475569",
-                    fontSize: "11.5px",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: "6px",
-                  }}
-                >
-                  <Dices size={15} />
-                  <span>Nochmal würfeln</span>
-                </button>
+              {/* Summary pill */}
+              <div
+                style={{
+                  marginTop: "16px",
+                  padding: "10px 14px",
+                  background: "#f8fafc",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: "12px",
+                  fontSize: "11.5px",
+                  color: "#475569",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
+                <span>Passende Rezepte im Katalog:</span>
+                <strong style={{ color: "#0f172a" }}>
+                  {matchingPool.length > 0 ? `${matchingPool.length} Treffer` : "Alle Rezepte"}
+                </strong>
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
+
+        {/* Footer Navigation Buttons */}
+        <div
+          style={{
+            padding: "14px 20px 16px",
+            borderTop: "1px solid #e2e8f0",
+            background: "#ffffff",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "10px",
+          }}
+        >
+          {currentStep > 1 ? (
+            <button
+              type="button"
+              onClick={() => setCurrentStep((s) => (s - 1) as any)}
+              style={{
+                padding: "10px 14px",
+                borderRadius: "10px",
+                border: "1px solid #cbd5e1",
+                background: "#ffffff",
+                color: "#475569",
+                fontSize: "12px",
+                fontWeight: 700,
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "5px",
+              }}
+            >
+              <ArrowLeft size={14} />
+              Zurück
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleInstantSurprise}
+              style={{
+                padding: "10px 14px",
+                borderRadius: "10px",
+                border: "1px solid #cbd5e1",
+                background: "#f8fafc",
+                color: "#334155",
+                fontSize: "12px",
+                fontWeight: 700,
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "5px",
+              }}
+              title="Direkt ein passendes Zufallsrezept öffnen"
+            >
+              <Dices size={14} />
+              Sofort würfeln
+            </button>
+          )}
+
+          {currentStep < 3 ? (
+            <button
+              type="button"
+              onClick={() => setCurrentStep((s) => (s + 1) as any)}
+              style={{
+                flex: 1,
+                padding: "10px 16px",
+                borderRadius: "10px",
+                border: "none",
+                background: "#0f172a",
+                color: "#ffffff",
+                fontSize: "12.5px",
+                fontWeight: 700,
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "6px",
+              }}
+            >
+              Weiter
+              <ArrowRight size={14} />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleApplyAndClose}
+              style={{
+                flex: 1,
+                padding: "10px 16px",
+                borderRadius: "10px",
+                border: "none",
+                background: "#059669",
+                color: "#ffffff",
+                fontSize: "12.5px",
+                fontWeight: 750,
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "6px",
+              }}
+            >
+              <Check size={15} />
+              Daily Discover aktualisieren
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

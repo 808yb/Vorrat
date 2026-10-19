@@ -131,6 +131,36 @@ export const normalizeIngredientName = (str: string): string =>
     .replace(/frühlingszwiebeln/g, "frühlingszwiebel")
     .trim();
 
+/**
+ * Checks if a string specifically refers to drinking or tap water.
+ * Excludes culinary liquids like Gurkenwasser, Rosenwasser, Kirschwasser, Kokoswasser, etc.
+ */
+export function isDrinkingWater(name: string): boolean {
+  if (!name) return false;
+  const clean = name.trim().toLowerCase().replace(/\(.*?\)/g, "").trim();
+
+  // Explicit non-tap water culinary products
+  if (
+    clean.includes("gurke") ||
+    clean.includes("rose") ||
+    clean.includes("kirsch") ||
+    clean.includes("koko") ||
+    clean.includes("blüte") ||
+    clean.includes("reiswasser") ||
+    clean.includes("tonic") ||
+    clean.includes("soda") ||
+    clean.includes("melisse") ||
+    clean.includes("gesicht")
+  ) {
+    return false;
+  }
+
+  // Exact drinking water keywords & natural phrases
+  return /^(?:(?:kaltes|warmes|heißes|kochendes|lauwarmes|stilles|sprudelndes|frisches|etwas)\s+)?(?:leitungs[ -]?wasser|trink[ -]?wasser|hahn[ -]?wasser|mineral[ -]?wasser|sprudel[ -]?wasser|wasser|tap[ -]?water|water)$/i.test(
+    clean
+  );
+}
+
 export interface MatchedPantryResult {
   pantryItem: { name: string; amount?: number; unit?: string; isUnlimited?: boolean };
   matchedByAlternative?: string;
@@ -147,10 +177,8 @@ export function findMatchingPantryItem(
 ): MatchedPantryResult | null {
   if (!ingredientName || !pantry || pantry.length === 0) return null;
 
-  const ingLower = ingredientName.toLowerCase();
-
-  // Water is always unlimited
-  if (ingLower.includes("wasser") || ingLower.includes("water") || ingLower.includes("leitung")) {
+  // Water is always unlimited only if it is actually plain drinking/tap water
+  if (isDrinkingWater(ingredientName)) {
     return {
       pantryItem: { name: "Leitungswasser", amount: 999999, unit: "ml", isUnlimited: true },
       matchedByAlternative: undefined,
@@ -172,8 +200,8 @@ export function findMatchingPantryItem(
     const candNorm = normalizeIngredientName(candidate);
     if (!candNorm) continue;
 
-    // Check if candidate is water
-    if (candNorm.includes("wasser") || candNorm.includes("water") || candNorm.includes("leitung")) {
+    // Check if candidate is drinking water
+    if (isDrinkingWater(candidate) || isDrinkingWater(candNorm)) {
       return {
         pantryItem: { name: "Leitungswasser", amount: 999999, unit: "ml", isUnlimited: true },
         matchedByAlternative: undefined,

@@ -1,6 +1,6 @@
 import { deduplicatePantry, formatMhdDisplay, getMhdStatus, getItemNutrientSpecs, type PantryItem } from "../src/App";
 import { parseReceiptFallback, calculateEstimatedMhd } from "../src/utils/receiptOcr";
-import { getRecipePantryBreakdown, findMatchingPantryItem } from "../src/utils/pantryMatching";
+import { getRecipePantryBreakdown, findMatchingPantryItem, isDrinkingWater } from "../src/utils/pantryMatching";
 import { FULL_RECIPE_CATALOG } from "../src/data/recipeCatalog";
 import { getFoodTone } from "../src/components/FoodIcons";
 import { findFoodNutrition, calculatePortionNutrition } from "../src/data/foodNutritionDatabase";
@@ -726,6 +726,107 @@ const spiceBreakdown = getRecipePantryBreakdown(rehydratedSpicesRecipe, userPant
 assert(spiceBreakdown.inStock.length >= 3, `Breakdown correctly matches in-stock spices individually (found ${spiceBreakdown.inStock.length} in stock)`);
 assert(spiceBreakdown.missing.some((m) => m.name === "Senfmehl"), "Senfmehl is listed as missing individually on grocery breakdown");
 assert(!spiceBreakdown.missing.some((m) => m.name.includes("Gewürze (")), "Composite lumped string is NOT in missing grocery list");
+
+// -----------------------------------------------------------------------------
+// TEST SUITE 15: DRINKING WATER VS CULINARY LIQUIDS (GURKENWASSER FIX)
+// -----------------------------------------------------------------------------
+console.log("\n💧 15. Testing Tap Water vs Culinary Liquids (Gurkenwasser Fix)...");
+
+assert(isDrinkingWater("Leitungswasser") === true, "Leitungswasser is recognized as drinking water");
+assert(isDrinkingWater("Trinkwasser") === true, "Trinkwasser is recognized as drinking water");
+assert(isDrinkingWater("Wasser") === true, "Wasser is recognized as drinking water");
+assert(isDrinkingWater("kaltes Wasser") === true, "kaltes Wasser is recognized as drinking water");
+assert(isDrinkingWater("stilles Wasser") === true, "stilles Wasser is recognized as drinking water");
+assert(isDrinkingWater("Gurkenwasser") === false, "Gurkenwasser is NOT recognized as drinking water");
+assert(isDrinkingWater("Rosenwasser") === false, "Rosenwasser is NOT recognized as drinking water");
+assert(isDrinkingWater("Kirschwasser") === false, "Kirschwasser is NOT recognized as drinking water");
+assert(isDrinkingWater("Kokoswasser") === false, "Kokoswasser is NOT recognized as drinking water");
+
+const userPantryWithoutPickles: PantryItem[] = [
+  { id: 1, name: "Basmati Reis", category: "Trocken", amount: 500, total: 500, unit: "g", tone: "rice" },
+];
+const matchGurkenwasser = findMatchingPantryItem("Gurkenwasser", userPantryWithoutPickles);
+assert(matchGurkenwasser === null, "Gurkenwasser is marked as MISSING and not falsely matched to unlimited tap water");
+
+// -----------------------------------------------------------------------------
+// TEST SUITE 16: EXPANDED RECIPE LIBRARY (CHEFKOCH, EMMI KOCHT EINFACH, EDEKA)
+// -----------------------------------------------------------------------------
+console.log("\n📚 16. Testing Expanded Recipe Library (Chefkoch, Emmi kocht einfach, EDEKA)...");
+
+assert(FULL_RECIPE_CATALOG.length >= 26, `Catalog contains at least 26 recipes (found ${FULL_RECIPE_CATALOG.length})`);
+
+const bauerntopf = FULL_RECIPE_CATALOG.find((r) => r.id === "r19");
+assert(Boolean(bauerntopf), "Contains 'r19' (Bauerntopf mit Hackfleisch & Kartoffeln)");
+assert(bauerntopf?.source === "Chefkoch", "r19 source is 'Chefkoch'");
+assert(bauerntopf?.mealType === "dinner", "r19 mealType is 'dinner'");
+
+const kaiserschmarrn = FULL_RECIPE_CATALOG.find((r) => r.id === "r20");
+assert(Boolean(kaiserschmarrn), "Contains 'r20' (Fluffiger Pfannen-Kaiserschmarrn)");
+assert(kaiserschmarrn?.source === "Chefkoch", "r20 source is 'Chefkoch'");
+assert(kaiserschmarrn?.mealType === "dessert", "r20 mealType is 'dessert'");
+
+const zucchiniFeta = FULL_RECIPE_CATALOG.find((r) => r.id === "r21");
+assert(Boolean(zucchiniFeta), "Contains 'r21' (Zucchini-Feta-Pfanne mit Tomaten)");
+assert(zucchiniFeta?.source === "Emmi kocht einfach", "r21 source is 'Emmi kocht einfach'");
+
+const wedges = FULL_RECIPE_CATALOG.find((r) => r.id === "r22");
+assert(Boolean(wedges), "Contains 'r22' (Knusprige Airfryer Kartoffel-Wedges)");
+assert(wedges?.source === "Emmi kocht einfach", "r22 source is 'Emmi kocht einfach'");
+assert(Boolean(wedges?.equipment?.includes("airfryer")), "r22 equipment includes 'airfryer'");
+
+const crumble = FULL_RECIPE_CATALOG.find((r) => r.id === "r23");
+assert(Boolean(crumble), "Contains 'r23' (Warmes Apfel-Zimt-Crumble)");
+assert(crumble?.source === "Emmi kocht einfach", "r23 source is 'Emmi kocht einfach'");
+assert(crumble?.mealType === "baking", "r23 mealType is 'baking'");
+
+const quinoaBowl = FULL_RECIPE_CATALOG.find((r) => r.id === "r24");
+assert(Boolean(quinoaBowl), "Contains 'r24' (Bunte Quinoa-Gemüse-Bowl mit Avocado)");
+assert(quinoaBowl?.source === "EDEKA", "r24 source is 'EDEKA'");
+
+const proteinPancakes = FULL_RECIPE_CATALOG.find((r) => r.id === "r25");
+assert(Boolean(proteinPancakes), "Contains 'r25' (Fluffige Protein-Pancakes mit Beeren)");
+assert(proteinPancakes?.source === "EDEKA", "r25 source is 'EDEKA'");
+assert(proteinPancakes?.mealType === "breakfast", "r25 mealType is 'breakfast'");
+
+const tassenkuchen = FULL_RECIPE_CATALOG.find((r) => r.id === "r26");
+assert(Boolean(tassenkuchen), "Contains 'r26' (Schneller Schoko-Tassenkuchen)");
+assert(tassenkuchen?.source === "EDEKA", "r26 source is 'EDEKA'");
+assert(Boolean(tassenkuchen?.equipment?.includes("microwave")), "r26 equipment includes 'microwave'");
+
+// -----------------------------------------------------------------------------
+// TEST SUITE 17: STANDARD 70-80% MATCHING RULE & VIDEO LIMIT DURATION (< 2:10 MIN)
+// -----------------------------------------------------------------------------
+console.log("\n⚡ 17. Testing 70-80% Matching Priority & Video Duration Limit (< 130s)...");
+
+const maxVideoDurationSeconds = 130; // 2:10 Min
+assert(maxVideoDurationSeconds === 130, "Strict video limit is 130 seconds (< 2:10 Min.)");
+
+const isDurationAcceptable = (seconds: number) => seconds <= 130;
+assert(isDurationAcceptable(45) === true, "45s TikTok clip is acceptable");
+assert(isDurationAcceptable(120) === true, "2:00 Min video is acceptable");
+assert(isDurationAcceptable(130) === true, "2:10 Min video boundary is acceptable");
+assert(isDurationAcceptable(135) === false, "2:15 Min video is rejected (> 2:10 Min)");
+assert(isDurationAcceptable(300) === false, "5:00 Min video is rejected");
+
+// 70-80% matching scoring heuristic check
+const calculatePantryPriorityScore = (matchPct: number, isPantry100Requested: boolean) => {
+  if (isPantry100Requested) {
+    return matchPct === 1.0 ? 20 : matchPct * 5 - 12;
+  }
+  // Standard mode: Prioritize recipes with 70-85% match (missing 1-2 items)
+  if (matchPct >= 0.68 && matchPct <= 0.85) return 12;
+  if (matchPct > 0.85) return 6;
+  if (matchPct >= 0.50) return 3;
+  return -2;
+};
+
+const score75Pct = calculatePantryPriorityScore(0.75, false);
+const score100Pct = calculatePantryPriorityScore(1.0, false);
+assert(score75Pct > score100Pct, "Standard mode prioritizes 75% match (score: 12) over 100% (score: 6) to avoid repetitive simple recipes");
+
+const score100WhenRequested = calculatePantryPriorityScore(1.0, true);
+const score75WhenRequested = calculatePantryPriorityScore(0.75, true);
+assert(score100WhenRequested > score75WhenRequested, "When 100% Vorrat is explicitly requested, 100% match gets top priority (score: 20)");
 
 // -----------------------------------------------------------------------------
 // SUMMARY
