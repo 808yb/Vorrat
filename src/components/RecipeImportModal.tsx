@@ -1,14 +1,33 @@
-import React, { useState, useRef } from "react";
-import { X, Sparkles, Link as LinkIcon, FileText, CheckCircle2, ShoppingCart, AlertCircle, ChefHat, Clock, Flame, Video, UploadCloud, Play, Film } from "lucide-react";
+import React, { useState } from "react";
+import {
+  X,
+  Sparkles,
+  Link as LinkIcon,
+  FileText,
+  CheckCircle2,
+  ShoppingCart,
+  AlertCircle,
+  ChefHat,
+  Clock,
+  Flame,
+  Video,
+} from "lucide-react";
 import { type CatalogRecipe } from "../data/recipeCatalog";
-import { importRecipeFromTextOrUrlWithGemini, importRecipeFromVideoWithGemini, type RawGeminiIngredient } from "../utils/geminiRecipes";
+import {
+  importRecipeFromTextOrUrlWithGemini,
+  type RawGeminiIngredient,
+} from "../utils/geminiRecipes";
 import { findMatchingPantryItem } from "../utils/pantryMatching";
 
 interface RecipeImportModalProps {
   isOpen: boolean;
   onClose: () => void;
   pantryItems: Array<{ name: string; amount?: number }>;
-  onSaveRecipe: (recipe: CatalogRecipe, addMissingToGroceries: boolean, missingItems: Array<{ name: string; amount?: string }>) => void;
+  onSaveRecipe: (
+    recipe: CatalogRecipe,
+    addMissingToGroceries: boolean,
+    missingItems: Array<{ name: string; amount?: string }>
+  ) => void;
   onNotify: (msg: string) => void;
 }
 
@@ -19,15 +38,11 @@ export function RecipeImportModal({
   onSaveRecipe,
   onNotify,
 }: RecipeImportModalProps) {
-  const [activeTab, setActiveTab] = useState<"url" | "video" | "text">("video");
+  const [activeTab, setActiveTab] = useState<"url" | "text">("url");
   const [inputUrl, setInputUrl] = useState("");
   const [inputText, setInputText] = useState("");
-  const [selectedVideoFile, setSelectedVideoFile] = useState<File | null>(null);
-  const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Extracted preview state
   const [importedData, setImportedData] = useState<{
@@ -37,46 +52,6 @@ export function RecipeImportModal({
   const [addToGroceries, setAddToGroceries] = useState(true);
 
   if (!isOpen) return null;
-
-  const handleVideoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 26 * 1024 * 1024) {
-      setError("Das Video ist über 25 MB groß. Bitte wähle einen kürzeren Clip oder komprimiere das Video für die Analyse.");
-      return;
-    }
-
-    const videoEl = document.createElement("video");
-    videoEl.preload = "metadata";
-    const objectUrl = URL.createObjectURL(file);
-
-    videoEl.onloadedmetadata = () => {
-      if (videoEl.duration > 130) {
-        URL.revokeObjectURL(objectUrl);
-        const mins = Math.floor(videoEl.duration / 60);
-        const secs = Math.floor(videoEl.duration % 60).toString().padStart(2, "0");
-        setError(
-          `Das Video ist länger als 2:10 Minuten (${mins}:${secs} Min.). Bitte wähle ein kürzeres Video / Reel unter 2:10 Min., um die Analyse schnell und präzise zu halten.`
-        );
-        setSelectedVideoFile(null);
-        setVideoPreviewUrl(null);
-        return;
-      }
-      setSelectedVideoFile(file);
-      setError(null);
-      setVideoPreviewUrl(objectUrl);
-    };
-
-    videoEl.onerror = () => {
-      // Fallback if browser codec metadata cannot load asynchronously
-      setSelectedVideoFile(file);
-      setError(null);
-      setVideoPreviewUrl(objectUrl);
-    };
-
-    videoEl.src = objectUrl;
-  };
 
   const handleLoadDemoReel = () => {
     // Instant test with real viral TikTok / Reel recipe
@@ -106,9 +81,27 @@ export function RecipeImportModal({
         { name: "Olivenöl / Pflanzenöl", amount: `${Math.round(10 * s)} ml`, optional: false },
       ],
       steps: [
-        { stepNumber: 1, title: "Hähnchen anbraten", instruction: "Hähnchen in Streifen schneiden, mit Salz, Pfeffer und Paprika würzen und in heißem Öl 4–5 Min. goldbraun braten.", duration: "5 Min.", tag: "Braten" },
-        { stepNumber: 2, title: "Limetten-Creme anrühren", instruction: "Joghurt mit dem Saft einer halben Limette, Salz und einem Hauch Knoblauch glattrühren.", duration: "2 Min.", tag: "Sauce" },
-        { stepNumber: 3, title: "Wrap belegen & rollen", instruction: "Tortilla mit der Creme bestreichen, mit frischem Pflücksalat und warmem Knusper-Hähnchen belegen, straff einrollen.", duration: "3 Min.", tag: "Rollen" },
+        {
+          stepNumber: 1,
+          title: "Hähnchen anbraten",
+          instruction: "Hähnchen in Streifen schneiden, mit Salz, Pfeffer und Paprika würzen und in heißem Öl 4–5 Min. goldbraun braten.",
+          duration: "5 Min.",
+          tag: "Braten",
+        },
+        {
+          stepNumber: 2,
+          title: "Limetten-Creme anrühren",
+          instruction: "Joghurt mit dem Saft einer halben Limette, Salz und einem Hauch Knoblauch glattrühren.",
+          duration: "2 Min.",
+          tag: "Sauce",
+        },
+        {
+          stepNumber: 3,
+          title: "Wrap belegen & rollen",
+          instruction: "Tortilla mit der Creme bestreichen, mit frischem Pflücksalat und warmem Knusper-Hähnchen belegen, straff einrollen.",
+          duration: "3 Min.",
+          tag: "Rollen",
+        },
       ],
     };
 
@@ -138,32 +131,22 @@ export function RecipeImportModal({
     setError(null);
 
     try {
-      if (activeTab === "video") {
-        if (!selectedVideoFile) {
-          setError("Bitte wähle ein Video (MP4, WebM oder MOV) aus.");
-          setIsLoading(false);
-          return;
-        }
-        const result = await importRecipeFromVideoWithGemini(selectedVideoFile, pantryItems);
-        setImportedData({
-          recipe: result.recipe,
-          missingIngredients: result.missingIngredients,
-        });
-        onNotify("Video-Rezept erfolgreich analysiert!");
-      } else {
-        const content = activeTab === "url" ? inputUrl.trim() : inputText.trim();
-        if (!content) {
-          setError(activeTab === "url" ? "Bitte gib eine Rezept-URL ein." : "Bitte füge Rezept-Text oder eine Caption ein.");
-          setIsLoading(false);
-          return;
-        }
-        const result = await importRecipeFromTextOrUrlWithGemini(content, pantryItems);
-        setImportedData({
-          recipe: result.recipe,
-          missingIngredients: result.missingIngredients,
-        });
-        onNotify("Rezept erfolgreich analysiert!");
+      const content = activeTab === "url" ? inputUrl.trim() : inputText.trim();
+      if (!content) {
+        setError(
+          activeTab === "url"
+            ? "Bitte gib eine Rezept-URL oder einen Video-Link (TikTok, Reels, Shorts) ein."
+            : "Bitte füge Rezept-Text oder eine Notiz ein."
+        );
+        setIsLoading(false);
+        return;
       }
+      const result = await importRecipeFromTextOrUrlWithGemini(content, pantryItems);
+      setImportedData({
+        recipe: result.recipe,
+        missingIngredients: result.missingIngredients,
+      });
+      onNotify("Rezept erfolgreich analysiert!");
     } catch (err: unknown) {
       console.error(err);
       const msg = err instanceof Error ? err.message : "Fehler beim Analysieren des Rezepts.";
@@ -190,11 +173,6 @@ export function RecipeImportModal({
   const handleReset = () => {
     setInputUrl("");
     setInputText("");
-    setSelectedVideoFile(null);
-    if (videoPreviewUrl) {
-      URL.revokeObjectURL(videoPreviewUrl);
-      setVideoPreviewUrl(null);
-    }
     setError(null);
     setImportedData(null);
     setIsLoading(false);
@@ -203,7 +181,6 @@ export function RecipeImportModal({
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
       <div className="w-full sm:max-w-xl bg-white border border-slate-200 rounded-t-3xl sm:rounded-3xl shadow-2xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-6 duration-300">
-        
         {/* Header */}
         <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-white sticky top-0 z-10">
           <div className="flex items-center gap-2.5">
@@ -211,8 +188,8 @@ export function RecipeImportModal({
               <Sparkles size={18} />
             </div>
             <div>
-              <h3 className="font-bold text-base text-slate-900">Rezept mit KI importieren</h3>
-              <p className="text-xs text-slate-500">Aus Videos, TikToks, Reels, URLs oder Text</p>
+              <h3 className="font-bold text-base text-slate-900">Rezept importieren</h3>
+              <p className="text-xs text-slate-500">Aus Web-Links, TikTok, Reels (&lt; 2:10 Min.) oder Notizen</p>
             </div>
           </div>
           <button
@@ -230,113 +207,66 @@ export function RecipeImportModal({
         <div className="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1 bg-white">
           {!importedData ? (
             <>
-              {/* 3-Way Mode Switcher */}
-              <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200/80">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab("video")}
-                  className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                    activeTab === "video"
-                      ? "bg-white text-emerald-700 shadow-sm font-bold border border-slate-200/60"
-                      : "text-slate-600 hover:text-slate-900"
-                  }`}
-                >
-                  <Video size={14} />
-                  <span>Video / Reel</span>
-                </button>
+              {/* 2-Way Tab Switcher: Link vs. Notiz */}
+              <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200/80">
                 <button
                   type="button"
                   onClick={() => setActiveTab("url")}
-                  className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                     activeTab === "url"
                       ? "bg-white text-emerald-700 shadow-sm font-bold border border-slate-200/60"
                       : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
                   <LinkIcon size={14} />
-                  <span>Web-Link</span>
+                  <span>Web-Link / Social Reel</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setActiveTab("text")}
-                  className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                  className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
                     activeTab === "text"
                       ? "bg-white text-emerald-700 shadow-sm font-bold border border-slate-200/60"
                       : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
                   <FileText size={14} />
-                  <span>Text / Notiz</span>
+                  <span>Notiz / Text</span>
                 </button>
               </div>
 
-              {/* VIDEO TAB */}
-              {activeTab === "video" && (
+              {/* LINK TAB */}
+              {activeTab === "url" && (
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-slate-700">
-                      Kochvideo, TikTok oder Reel hochladen
-                    </label>
-                    <span className="text-[10px] text-slate-400">MP4, MOV, WebM (&lt; 2:10 Min., bis 25 MB)</span>
-                  </div>
-
-                  {/* Dropzone */}
-                  <div
-                    onClick={() => fileInputRef.current?.click()}
-                    className={`border-2 border-dashed rounded-2xl p-5 text-center cursor-pointer transition-all ${
-                      selectedVideoFile
-                        ? "border-emerald-500 bg-emerald-50/40"
-                        : "border-slate-300 hover:border-emerald-500 bg-slate-50 hover:bg-emerald-50/20"
-                    }`}
-                  >
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-700">Rezept- oder Video-Link einfügen</label>
                     <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="video/mp4,video/webm,video/quicktime,video/*"
-                      onChange={handleVideoFileChange}
-                      className="hidden"
+                      type="url"
+                      value={inputUrl}
+                      onChange={(e) => setInputUrl(e.target.value)}
+                      placeholder="https://tiktok.com/@... oder https://instagram.com/reel/... oder https://chefkoch.de/..."
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-3 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
                     />
-
-                    {selectedVideoFile ? (
-                      <div className="space-y-3">
-                        {videoPreviewUrl && (
-                          <div className="max-h-40 rounded-xl overflow-hidden bg-black flex justify-center">
-                            <video
-                              src={videoPreviewUrl}
-                              controls
-                              className="max-h-40 rounded-xl"
-                            />
-                          </div>
-                        )}
-                        <div className="flex items-center justify-center gap-2 text-xs font-bold text-emerald-700">
-                          <CheckCircle2 size={16} />
-                          <span>{selectedVideoFile.name}</span>
-                          <span className="text-slate-500 font-normal">
-                            ({(selectedVideoFile.size / (1024 * 1024)).toFixed(1)} MB)
-                          </span>
-                        </div>
-                        <span className="text-[11px] text-slate-500 block">Klicke, um ein anderes Video zu wählen</span>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto shadow-sm">
-                          <UploadCloud size={24} />
-                        </div>
-                        <strong className="text-xs text-slate-800 block">
-                          Video hier ablegen oder Datei auswählen
-                        </strong>
-                        <p className="text-[11px] text-slate-500 max-w-xs mx-auto">
-                          Gemini analysiert visuelle Zutaten, Text-Einblendungen & gesprochene Mengenangaben.
-                        </p>
-                      </div>
-                    )}
                   </div>
 
-                  {/* Demo Reel Button for Quick Test */}
+                  {/* Prominent Video & Recipe Notice Banner (< 2:10 Min.) */}
+                  <div className="flex items-start gap-2.5 p-3 rounded-xl bg-emerald-50/70 border border-emerald-200/80 text-emerald-950 text-xs">
+                    <Video size={16} className="text-emerald-700 shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="font-bold text-emerald-950 block">
+                        Videos & Reels unter 2:10 Min. werden direkt analysiert
+                      </strong>
+                      <span className="text-[11.5px] text-emerald-800 leading-relaxed block mt-0.5">
+                        Unterstützt Links zu TikTok, Instagram Reels, YouTube Shorts sowie Foodblogs & Rezept-Websites. Videos unter 2:10 Min. (130s) werden sekundenschnell von der KI erfasst.
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Demo Button for Testing */}
                   <button
                     type="button"
                     onClick={handleLoadDemoReel}
-                    className="w-full py-2.5 px-3 rounded-xl bg-emerald-50/80 hover:bg-emerald-100/80 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    className="w-full py-2.5 px-3 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer"
                   >
                     <Sparkles size={14} className="text-emerald-600" />
                     <span>Beispiel-Reel testen: Crispy Chicken Wraps (TikTok)</span>
@@ -344,36 +274,19 @@ export function RecipeImportModal({
                 </div>
               )}
 
-              {/* URL TAB */}
-              {activeTab === "url" && (
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-slate-700">Rezept-Link einfügen</label>
-                  <input
-                    type="url"
-                    value={inputUrl}
-                    onChange={(e) => setInputUrl(e.target.value)}
-                    placeholder="https://chefkoch.de/... oder foodblog.com/..."
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3.5 py-3 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
-                  />
-                  <p className="text-[11px] text-slate-500">
-                    Unterstützt Koch-Websites, Foodblogs und Online-Rezepte.
-                  </p>
-                </div>
-              )}
-
               {/* TEXT TAB */}
               {activeTab === "text" && (
                 <div className="space-y-2">
-                  <label className="text-xs font-semibold text-slate-700">Rezept-Text oder Social-Media Caption</label>
+                  <label className="text-xs font-semibold text-slate-700">Rezept-Text oder Notiz einfügen</label>
                   <textarea
                     rows={6}
                     value={inputText}
                     onChange={(e) => setInputText(e.target.value)}
-                    placeholder="Kopiere hier Zutaten & Zubereitung aus Instagram, TikTok, WhatsApp oder Kochbuch..."
+                    placeholder="Kopiere hier Zutaten & Zubereitung aus Instagram, WhatsApp, Notizen oder Kochbuch..."
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl p-3.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:bg-white focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all resize-none"
                   />
                   <p className="text-[11px] text-slate-500">
-                    Die KI erkennt Zutaten, Mengenangaben und Schritte automatisch.
+                    Die KI erkennt Zutaten, Mengenangaben und Schritte automatisch und gleicht sie mit deinem Vorrat ab.
                   </p>
                 </div>
               )}
@@ -394,20 +307,12 @@ export function RecipeImportModal({
                 {isLoading ? (
                   <>
                     <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>
-                      {activeTab === "video"
-                        ? "Gemini analysiert Video & Tonspur..."
-                        : "Gemini analysiert Rezept..."}
-                    </span>
+                    <span>Gemini analysiert Rezept...</span>
                   </>
                 ) : (
                   <>
                     <Sparkles size={16} />
-                    <span>
-                      {activeTab === "video"
-                        ? "Rezept aus Video extrahieren"
-                        : "Rezept mit KI erfassen"}
-                    </span>
+                    <span>Rezept mit KI erfassen</span>
                   </>
                 )}
               </button>
@@ -422,7 +327,7 @@ export function RecipeImportModal({
                   className="w-full h-44 object-cover"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-950/30 to-transparent" />
-                
+
                 <div className="absolute top-3 right-3 bg-emerald-500 text-slate-950 font-bold text-xs px-2.5 py-1 rounded-full backdrop-blur-md shadow-sm">
                   {importedData.recipe.matchScore}% im Vorrat
                 </div>

@@ -632,12 +632,10 @@ const defaultGroceries: GroceryItem[] = [
 
 function AppHeader({
   onOpenHousehold,
-  onOpenCoach,
   isCloudSyncing = false,
   hasCloudUser = false,
 }: {
   onOpenHousehold: () => void;
-  onOpenCoach?: () => void;
   isCloudSyncing?: boolean;
   hasCloudUser?: boolean;
 }) {
@@ -648,17 +646,6 @@ function AppHeader({
         <span>Vorrat</span>
       </div>
       <div className="header-actions">
-        {onOpenCoach && (
-          <button
-            type="button"
-            className="coach-header-btn"
-            onClick={onOpenCoach}
-            title="Smarter Rezept-Finder & Überraschung"
-          >
-            <Icon name="sparkles" size={13} />
-            <span>Überrasch mich</span>
-          </button>
-        )}
         <div
           className={`sync-state ${hasCloudUser ? "cloud-live" : ""} ${isCloudSyncing ? "syncing" : ""}`}
           onClick={onOpenHousehold}
@@ -1260,14 +1247,17 @@ function CookScreen({
   // Pre-calculated list of bookmarked favorite recipes (calories & macros remain constant per portion)
   const favoriteRecipes = useMemo(() => {
     const all = activeSearchedRecipe ? [activeSearchedRecipe, ...FULL_RECIPE_CATALOG] : FULL_RECIPE_CATALOG;
-    return all.filter((item) => favorites.includes(item.id)).map((item) => ({
-      ...item,
-      calories: `${Math.round(item.baseCal)}`,
-      protein: `${Math.round(item.baseProt)}g`,
-      carbs: `${Math.round(item.baseCarb)}g`,
-      cost: `${item.baseCost.toFixed(2).replace(".", ",")} €`,
-      availableFormatted: typeof item.available === "function" ? item.available(servings) : getSafeAvailable(item, servings),
-    }));
+    return all.filter((item) => favorites.includes(item.id)).map((item) => {
+      const costNum = typeof item.baseCost === "number" ? item.baseCost : parseFloat(String(item.baseCost || "1.5").replace(",", ".")) || 1.5;
+      return {
+        ...item,
+        calories: `${Math.round(Number(item.baseCal) || 350)}`,
+        protein: `${Math.round(Number(item.baseProt) || 15)}g`,
+        carbs: `${Math.round(Number(item.baseCarb) || 40)}g`,
+        cost: `${costNum.toFixed(2).replace(".", ",")} €`,
+        availableFormatted: typeof item.available === "function" ? item.available(servings) : getSafeAvailable(item, servings),
+      };
+    });
   }, [activeSearchedRecipe, favorites, servings]);
 
   const [isSwipeExpanded, setIsSwipeExpanded] = useState(true);
@@ -1281,14 +1271,15 @@ function CookScreen({
 
     return deckList.map((item) => {
       const breakdown = getRecipePantryBreakdown(item, pantry, servings);
+      const costNum = typeof item.baseCost === "number" ? item.baseCost : parseFloat(String(item.baseCost || "1.5").replace(",", ".")) || 1.5;
       return {
         ...item,
         matchScore: breakdown.matchPercentage,
         missingCount: breakdown.missing.length,
-        calories: `${Math.round(item.baseCal)}`,
-        protein: `${Math.round(item.baseProt)}g`,
-        carbs: `${Math.round(item.baseCarb)}g`,
-        cost: `${item.baseCost.toFixed(2).replace(".", ",")} €`,
+        calories: `${Math.round(Number(item.baseCal) || 350)}`,
+        protein: `${Math.round(Number(item.baseProt) || 15)}g`,
+        carbs: `${Math.round(Number(item.baseCarb) || 40)}g`,
+        cost: `${costNum.toFixed(2).replace(".", ",")} €`,
         availableFormatted: typeof item.available === "function" ? item.available(servings) : getSafeAvailable(item, servings),
       };
     });
@@ -1646,7 +1637,7 @@ function CookScreen({
       <SurpriseMeModal
         isOpen={isSurpriseModalOpen}
         onClose={() => setSurpriseModalOpen(false)}
-        recipes={FULL_RECIPE_CATALOG}
+        recipes={catalogShuffleList}
         pantry={pantry}
         servings={servings}
         onApplyFilters={(filters) => {
@@ -2839,10 +2830,6 @@ export default function App() {
     <div className="app-shell">
       <AppHeader
         onOpenHousehold={() => setIsHouseholdModalOpen(true)}
-        onOpenCoach={() => {
-          setActiveTab("discover");
-          setIsSurpriseModalOpen(true);
-        }}
         isCloudSyncing={isCloudSyncing}
         hasCloudUser={hasCloudUser}
       />

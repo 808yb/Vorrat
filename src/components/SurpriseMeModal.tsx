@@ -205,59 +205,87 @@ export function SurpriseMeModal({
     );
   };
 
-  // Helper to evaluate recipe matching
+  // Helper to evaluate recipe matching defensively
   const testRecipeMatch = (r: CatalogRecipe): boolean => {
-    // 1. Meal type filter
-    if (selectedMealType !== "all") {
-      if (r.mealType && r.mealType !== selectedMealType) return false;
-      const titleLower = r.title.toLowerCase();
-      const subLower = r.subtitle.toLowerCase();
-      if (selectedMealType === "breakfast" && !(r.mealType === "breakfast" || titleLower.includes("pancake") || titleLower.includes("rührei") || titleLower.includes("ei") || titleLower.includes("toast"))) {
-        return false;
+    if (!r) return false;
+    try {
+      const titleLower = String(r.title || "").toLowerCase();
+      const subLower = String(r.subtitle || "").toLowerCase();
+
+      // 1. Meal type filter
+      if (selectedMealType !== "all") {
+        if (r.mealType && r.mealType !== selectedMealType) return false;
+        if (selectedMealType === "breakfast" && !(r.mealType === "breakfast" || titleLower.includes("pancake") || titleLower.includes("rührei") || titleLower.includes("ei") || titleLower.includes("toast"))) {
+          return false;
+        }
+        if (selectedMealType === "dessert" && !(r.mealType === "dessert" || titleLower.includes("schmarrn") || titleLower.includes("süß") || titleLower.includes("dessert") || subLower.includes("puderzucker"))) {
+          return false;
+        }
+        if (selectedMealType === "baking" && !(r.mealType === "baking" || titleLower.includes("crumble") || titleLower.includes("kuchen") || titleLower.includes("back") || titleLower.includes("teig"))) {
+          return false;
+        }
       }
-      if (selectedMealType === "dessert" && !(r.mealType === "dessert" || titleLower.includes("schmarrn") || titleLower.includes("süß") || titleLower.includes("dessert") || subLower.includes("puderzucker"))) {
-        return false;
+
+      // 2. Goals filter
+      let ings: Array<{ name: string; amount?: string; optional?: boolean }> = [];
+      try {
+        ings = typeof r.ingredientsList === "function" ? r.ingredientsList(1) : getSafeIngredientsList(r, 1);
+      } catch {
+        ings = [];
       }
-      if (selectedMealType === "baking" && !(r.mealType === "baking" || titleLower.includes("crumble") || titleLower.includes("kuchen") || titleLower.includes("back") || titleLower.includes("teig"))) {
-        return false;
+      const ingsText = Array.isArray(ings) ? ings.map((i) => i?.name || "").join(" ").toLowerCase() : "";
+      const fullText = `${titleLower} ${subLower} ${ingsText}`;
+
+      const rawTime = typeof r.time === "string" ? r.time : (typeof r.time === "number" ? `${r.time} Min.` : "20 Min.");
+      const timeNum = parseInt(String(rawTime).replace(/\D/g, ""), 10) || 20;
+
+      const baseProt = Number(r.baseProt) || 0;
+      const baseCarb = Number(r.baseCarb) || 0;
+      const baseCost = Number(r.baseCost) || 0;
+
+      for (const goal of selectedGoals) {
+        if (goal === "quick" && timeNum > 15) return false;
+        if (goal === "veggie" && (fullText.includes("hähnchen") || fullText.includes("rind") || fullText.includes("hack") || fullText.includes("fleisch") || fullText.includes("speck") || fullText.includes("wurst"))) {
+          return false;
+        }
+        if (goal === "protein" && baseProt < 15) return false;
+        if (goal === "lowcarb" && baseCarb > 18) return false;
+        if (goal === "budget" && baseCost > 2.0) return false;
+        if (goal === "spicy" && !(fullText.includes("chili") || fullText.includes("knoblauch") || fullText.includes("scharf") || fullText.includes("pikant") || fullText.includes("arrabbiata") || fullText.includes("teriyaki"))) {
+          return false;
+        }
+        if (goal === "pantry100") {
+          try {
+            const breakdown = getRecipePantryBreakdown(r, pantry || [], servings || 1);
+            if (breakdown.missing.length > 0) return false;
+          } catch {
+            return false;
+          }
+        }
       }
+
+      // 3. Equipment filter
+      if (selectedEquipment.length > 0 && Array.isArray(r.equipment) && r.equipment.length > 0) {
+        const hasEquipmentMatch = r.equipment.some((eq) => selectedEquipment.includes(eq));
+        if (!hasEquipmentMatch) return false;
+      }
+
+      return true;
+    } catch (err) {
+      console.warn("Recipe filter fallback on error:", err);
+      return true;
     }
-
-    // 2. Goals filter
-    const ings = typeof r.ingredientsList === "function" ? r.ingredientsList(1) : getSafeIngredientsList(r, 1);
-    const ingsText = ings.map((i) => i.name).join(" ").toLowerCase();
-    const fullText = `${r.title} ${r.subtitle} ${ingsText}`.toLowerCase();
-    const timeNum = parseInt(r.time.replace(/\D/g, ""), 10) || 20;
-
-    for (const goal of selectedGoals) {
-      if (goal === "quick" && timeNum > 15) return false;
-      if (goal === "veggie" && (fullText.includes("hähnchen") || fullText.includes("rind") || fullText.includes("hack") || fullText.includes("fleisch") || fullText.includes("speck") || fullText.includes("wurst"))) {
-        return false;
-      }
-      if (goal === "protein" && r.baseProt < 15) return false;
-      if (goal === "lowcarb" && r.baseCarb > 18) return false;
-      if (goal === "budget" && r.baseCost > 2.0) return false;
-      if (goal === "spicy" && !(fullText.includes("chili") || fullText.includes("knoblauch") || fullText.includes("scharf") || fullText.includes("pikant") || fullText.includes("arrabbiata") || fullText.includes("teriyaki"))) {
-        return false;
-      }
-      if (goal === "pantry100") {
-        const breakdown = getRecipePantryBreakdown(r, pantry, servings);
-        if (breakdown.missing.length > 0) return false;
-      }
-    }
-
-    // 3. Equipment filter
-    if (selectedEquipment.length > 0 && r.equipment && r.equipment.length > 0) {
-      const hasEquipmentMatch = r.equipment.some((eq) => selectedEquipment.includes(eq));
-      if (!hasEquipmentMatch) return false;
-    }
-
-    return true;
   };
 
+  const safeRecipes = useMemo(() => (Array.isArray(recipes) ? recipes.filter(Boolean) : []), [recipes]);
+
   const matchingPool = useMemo(() => {
-    return recipes.filter(testRecipeMatch);
-  }, [recipes, selectedMealType, selectedGoals, selectedEquipment, pantry, servings]);
+    try {
+      return safeRecipes.filter(testRecipeMatch);
+    } catch {
+      return safeRecipes;
+    }
+  }, [safeRecipes, selectedMealType, selectedGoals, selectedEquipment, pantry, servings]);
 
   const handleApplyAndClose = () => {
     const filters: SurpriseFilters = {
@@ -269,45 +297,57 @@ export function SurpriseMeModal({
       onApplyFilters(filters);
     }
     if (onNotify) {
-      onNotify(`Daily Discover mit deinen Wünschen aktualisiert (${matchingPool.length > 0 ? matchingPool.length : recipes.length} Rezepte)!`);
+      onNotify(`Daily Discover mit deinen Wünschen aktualisiert (${matchingPool.length > 0 ? matchingPool.length : safeRecipes.length} Rezepte)!`);
     }
     onClose();
   };
 
   const handleInstantSurprise = () => {
-    const pool = matchingPool.length > 0 ? matchingPool : recipes;
+    const pool = matchingPool.length > 0 ? matchingPool : safeRecipes;
     if (pool.length === 0) return;
 
-    // Rank candidate by standard 70-80% match rule unless 100% pantry is requested
-    const isPantry100 = selectedGoals.includes("pantry100");
-    const scored = pool.map((r) => {
-      const breakdown = getRecipePantryBreakdown(r, pantry, servings);
-      const total = breakdown.inStock.length + breakdown.missing.length;
-      const pct = total > 0 ? breakdown.inStock.length / total : 0;
-      let score = 0;
-      if (isPantry100) {
-        score = breakdown.missing.length === 0 ? 100 : pct * 20;
-      } else {
-        // Favor 70-85% pantry match for variety
-        if (pct >= 0.70 && pct <= 0.85) {
-          score = 80 + Math.random() * 10;
-        } else if (pct > 0.85) {
-          score = 60 + Math.random() * 10;
-        } else {
-          score = pct * 40 + Math.random() * 10;
+    try {
+      // Rank candidate by standard 70-80% match rule unless 100% pantry is requested
+      const isPantry100 = selectedGoals.includes("pantry100");
+      const scored = pool.map((r) => {
+        try {
+          const breakdown = getRecipePantryBreakdown(r, pantry || [], servings || 1);
+          const total = breakdown.inStock.length + breakdown.missing.length;
+          const pct = total > 0 ? breakdown.inStock.length / total : 0;
+          let score = 0;
+          if (isPantry100) {
+            score = breakdown.missing.length === 0 ? 100 : pct * 20;
+          } else {
+            // Favor 70-85% pantry match for variety
+            if (pct >= 0.70 && pct <= 0.85) {
+              score = 80 + Math.random() * 10;
+            } else if (pct > 0.85) {
+              score = 60 + Math.random() * 10;
+            } else {
+              score = pct * 40 + Math.random() * 10;
+            }
+          }
+          return { recipe: r, score };
+        } catch {
+          return { recipe: r, score: 50 };
         }
-      }
-      return { recipe: r, score };
-    });
+      });
 
-    scored.sort((a, b) => b.score - a.score);
-    const chosen = scored[0].recipe;
-    setPickedRecipe(chosen);
-    onSelectRecipe(chosen);
-    if (onNotify) {
-      onNotify(`Überraschungs-Treffer: «${chosen.title}»`);
+      scored.sort((a, b) => b.score - a.score);
+      const chosen = scored[0].recipe;
+      setPickedRecipe(chosen);
+      onSelectRecipe(chosen);
+      if (onNotify) {
+        onNotify(`Überraschungs-Treffer: «${chosen.title || "Rezept"}»`);
+      }
+      onClose();
+    } catch (err) {
+      console.error("handleInstantSurprise error:", err);
+      if (pool[0]) {
+        onSelectRecipe(pool[0]);
+        onClose();
+      }
     }
-    onClose();
   };
 
   return (
