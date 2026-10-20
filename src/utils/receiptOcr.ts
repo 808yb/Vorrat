@@ -1,4 +1,5 @@
 import { callGeminiProxy, extractTextFromGeminiResponse } from './geminiProxy';
+import { isEggIngredientName } from "./recipeHelpers";
 import { getFoodTone } from "../components/FoodIcons";
 import { findFoodNutrition } from "../data/foodNutritionDatabase";
 
@@ -495,7 +496,7 @@ export function parseReceiptFallback(rawText: string): ParsedReceiptFoodItem[] {
     } else if (
       nameLower.includes("milch") ||
       nameLower.includes("joghurt") ||
-      nameLower.includes("ei") ||
+      isEggIngredientName(nameLower) ||
       nameLower.includes("käse") ||
       nameLower.includes("butter") ||
       nameLower.includes("hähn") ||
@@ -507,7 +508,7 @@ export function parseReceiptFallback(rawText: string): ParsedReceiptFoodItem[] {
       if (nameLower.includes("milch")) {
         unit = "ml";
         amount = 1000;
-      } else if (nameLower.includes("ei")) {
+      } else if (isEggIngredientName(nameLower)) {
         unit = "Stk.";
         amount = 10;
       } else if (nameLower.includes("butter")) {

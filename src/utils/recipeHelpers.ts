@@ -41,6 +41,54 @@ export function cleanSpiceName(name: string): string {
 }
 
 /**
+ * Accurately determines if a string refers to eggs (Ei, Eier, Bio-Eier, etc.)
+ * while strictly avoiding false positives for ingredients containing "ei" as a substring
+ * (e.g., Speisestärke, Weizenmehl, Schweinefleisch, Reis, Seitan, Brei, Teig, etc.).
+ */
+export function isEggIngredientName(name: string): boolean {
+  if (!name) return false;
+  const n = name.toLowerCase().trim();
+
+  // Explicit exclude list of common German food terms containing "ei"
+  if (
+    n.includes("stärke") ||
+    n.includes("mehl") ||
+    n.includes("fleisch") ||
+    n.includes("reis") ||
+    n.includes("brei") ||
+    n.includes("teig") ||
+    n.includes("feig") ||
+    n.includes("seitan") ||
+    n.includes("pastete") ||
+    n.includes("speise") ||
+    n.includes("heidelbeer") ||
+    n.includes("preiselbeer") ||
+    n.includes("bleich") ||
+    n.includes("kleie") ||
+    n.includes("grieß")
+  ) {
+    return false;
+  }
+
+  // Exact matches
+  if (n === "ei" || n === "eier") return true;
+
+  // Word boundary regex
+  return /(^|\s|[(\[-])(ei|eier|bio-eier|bio-ei|hühnerei|hühnereier|frischeier|wachteleier)($|\s|[)\]-])/i.test(n);
+}
+
+/**
+ * Accurately determines if a string refers to rice, avoiding words like Preiselbeeren.
+ */
+export function isRiceIngredientName(name: string): boolean {
+  if (!name) return false;
+  const n = name.toLowerCase().trim();
+  if (n.includes("preiselbeer") || n.includes("kreis")) return false;
+  return /(^|\s|[(\[-])(reis|basmatireis|jasminreis|rundkornreis|langkornreis|milchreis|sushireis|naturreis|wildreis)($|\s|[)\]-])/i.test(n) ||
+    n === "reis";
+}
+
+/**
  * Decomposes composite spice or multi-ingredient lines into distinct individual ingredients.
  * For example:
  * "Gewürze (Paprika edelsüß, Knoblauchpulver, Senfmehl, Salz, Pfeffer)" with 3 TL
@@ -241,7 +289,7 @@ export function getSafeIngredientsList(
       customList.push({ name: "Rindfleischstreifen", amount: `${125 * servings} g` });
     } else if (fullText.includes("hackfleisch") || fullText.includes("bolognese")) {
       customList.push({ name: "Rinderhackfleisch", amount: `${120 * servings} g` });
-    } else if (fullText.includes("ei") || fullText.includes("eier") || fullText.includes("shakshuka") || fullText.includes("omelett") || fullText.includes("rührei")) {
+    } else if (isEggIngredientName(fullText) || fullText.includes("shakshuka") || fullText.includes("omelett") || fullText.includes("rührei")) {
       customList.push({ name: "Bio Eier", amount: `${2 * servings} Stk.` });
     }
 

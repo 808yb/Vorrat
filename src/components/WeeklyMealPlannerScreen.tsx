@@ -2,7 +2,7 @@ import React, { useState, useMemo } from "react";
 import { FULL_RECIPE_CATALOG, type CatalogRecipe } from "../data/recipeCatalog";
 import { type PantryItem, type GroceryItem } from "../App";
 import { ProductMark, getFoodTone } from "./FoodIcons";
-import { getSafeIngredientsList } from "../utils/recipeHelpers";
+import { getSafeIngredientsList, isEggIngredientName, isRiceIngredientName } from "../utils/recipeHelpers";
 import { findMatchingPantryItem } from "../utils/pantryMatching";
 
 export type WeekdayId = "mo" | "di" | "mi" | "do" | "fr" | "sa" | "so";
@@ -194,27 +194,27 @@ export function WeeklyMealPlannerScreen({
           .trim();
         const lowerClean = cleanName.toLowerCase();
 
-        // Standardize keys
-        let groupKey = lowerClean;
-        if (lowerClean.includes("reis")) groupKey = "reis";
-        else if (lowerClean.includes("ei") || lowerClean.includes("eier")) groupKey = "eier";
-        else if (lowerClean.includes("soja")) groupKey = "sojasauce";
-        else if (lowerClean.includes("erbse")) groupKey = "erbsen";
-        else if (lowerClean.includes("hähnchen")) groupKey = "hähnchenbrust";
-        else if (lowerClean.includes("zwiebel")) groupKey = "frühlingszwiebeln";
-        else if (lowerClean.includes("öl")) groupKey = "öl";
-        else if (lowerClean.includes("ingwer")) groupKey = "ingwer";
-        else if (lowerClean.includes("knoblauch")) groupKey = "knoblauch";
-
-        // Parse amount and unit
-        const match = ing.amount.match(/^(\d+(?:[.,]\d+)?)\s*(g|kg|ml|l|stk\.?|bund|el|tl)?/i);
+        // Parse amount and unit first so unit can disambiguate
+        const match = ing.amount.match(/^(\d+(?:[.,]\d+)?)\s*(g|kg|ml|l|stk\.?|bund|el|tl|prise|zehe|dose|packung)?/i);
         let amount = match ? parseFloat(match[1].replace(",", ".")) : 1;
         let unit = match && match[2] ? match[2].toLowerCase() : "g";
         if (unit.startsWith("stk")) unit = "Stk.";
 
+        // Standardize keys with strict ingredient word matching
+        let groupKey = lowerClean;
+        if (isRiceIngredientName(lowerClean)) groupKey = "reis";
+        else if (isEggIngredientName(lowerClean)) groupKey = "eier";
+        else if (lowerClean.includes("soja") && (lowerClean.includes("sauce") || lowerClean.includes("soße"))) groupKey = "sojasauce";
+        else if (/(^|\s)erbsen?(\s|$)/i.test(lowerClean)) groupKey = "erbsen";
+        else if (lowerClean.includes("hähnchen") || lowerClean.includes("chicken")) groupKey = "hähnchenbrust";
+        else if (lowerClean.includes("frühlingszwiebel") || lowerClean.includes("lauchzwiebel")) groupKey = "frühlingszwiebeln";
+        else if (/(^|\s)(speiseöl|pflanzenöl|olivenöl|rapsöl|sonnenblumenöl|öl)(\s|$)/i.test(lowerClean)) groupKey = "öl";
+        else if (/(^|\s)ingwer(\s|$)/i.test(lowerClean)) groupKey = "ingwer";
+        else if (/(^|\s)knoblauch(\s|$)/i.test(lowerClean)) groupKey = "knoblauch";
+
         // Determine category
         let category = "Trockenvorrat";
-        if (lowerClean.includes("ei") || lowerClean.includes("hähnchen") || lowerClean.includes("fleisch")) {
+        if (isEggIngredientName(lowerClean) || lowerClean.includes("hähnchen") || lowerClean.includes("fleisch")) {
           category = "Kühl & Tiefkühl";
         } else if (lowerClean.includes("erbse") || lowerClean.includes("spinat")) {
           category = "Kühl & Tiefkühl";
@@ -224,14 +224,17 @@ export function WeeklyMealPlannerScreen({
           category = "Saucen & Gewürze";
         }
 
-        const existing = map.get(groupKey);
+        // Composite key ensures different units (e.g. g vs Stk.) are NEVER merged!
+        const mapKey = `${groupKey}__${unit}`;
+
+        const existing = map.get(mapKey);
         if (existing) {
           existing.totalNeeded += amount;
           existing.recipes.add(recipe.title);
           existing.days.add(planned.dayId);
           if (!ing.optional) existing.isOptional = false;
         } else {
-          map.set(groupKey, {
+          map.set(mapKey, {
             name: ing.name,
             cleanName,
             totalNeeded: amount,
@@ -246,12 +249,15 @@ export function WeeklyMealPlannerScreen({
     });
 
     const result: AggregatedIngredient[] = [];
-    map.forEach((item, key) => {
+    map.forEach((item, mapKey) => {
+      const groupKey = mapKey.split("__")[0];
       // Find matching item in user's pantry
-      const matchRes = findMatchingPantryItem(key, pantry);
+      const matchRes = findMatchingPantryItem(item.cleanName, pantry) ||
+                       findMatchingPantryItem(item.name, pantry) ||
+                       findMatchingPantryItem(groupKey, pantry);
       const pantryMatch = matchRes?.pantryItem;
 
-      const isWater = key.includes("wasser") || key.includes("water") || key.includes("leitung");
+      const isWater = groupKey.includes("wasser") || groupKey.includes("water") || groupKey.includes("leitung");
       const isUnlimited = isWater || Boolean(pantryMatch?.isUnlimited) || (pantryMatch ? (pantryMatch.amount ?? 0) >= 99999 : false);
       const inStock = isUnlimited ? 999999 : (pantryMatch?.amount ?? 0);
       const missingAmount = isUnlimited ? 0 : Math.max(0, item.totalNeeded - inStock);
@@ -260,12 +266,12 @@ export function WeeklyMealPlannerScreen({
       // Estimate price for missing portion
       let price = 0;
       if (missingAmount > 0 && !isUnlimited) {
-        if (key === "eier") price = Math.ceil(missingAmount / 10) * 3.29;
-        else if (key === "reis") price = 2.49;
-        else if (key === "hähnchenbrust") price = Math.max(3.99, (missingAmount / 1000) * 12.5);
-        else if (key === "erbsen") price = 2.19;
-        else if (key === "frühlingszwiebeln") price = 1.19;
-        else if (key === "sojasauce") price = 2.49;
+        if (groupKey === "eier") price = Math.ceil(missingAmount / 10) * 3.29;
+        else if (groupKey === "reis") price = 2.49;
+        else if (groupKey === "hähnchenbrust") price = Math.max(3.99, (missingAmount / 1000) * 12.5);
+        else if (groupKey === "erbsen") price = 2.19;
+        else if (groupKey === "frühlingszwiebeln") price = 1.19;
+        else if (groupKey === "sojasauce") price = 2.49;
         else price = 1.99;
       }
 

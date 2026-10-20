@@ -3,7 +3,7 @@ import { motion } from "motion/react";
 import { ProductMark, getFoodTone } from "./components/FoodIcons";
 import { FULL_RECIPE_CATALOG, type CatalogRecipe } from "./data/recipeCatalog";
 import { getStoredCustomRecipes, generateRecipeWithGemini, rehydrateCustomRecipe } from "./utils/geminiRecipes";
-import { getSafeIngredientsList, getSafeAvailable, getCurrentMealTimeSlot, decomposeCompositeIngredients } from "./utils/recipeHelpers";
+import { getSafeIngredientsList, getSafeAvailable, getCurrentMealTimeSlot, decomposeCompositeIngredients, isEggIngredientName } from "./utils/recipeHelpers";
 import { RecipeSwipeDeck } from "./components/RecipeSwipeDeck";
 import { getRecipePantryBreakdown, findMatchingPantryItem } from "./utils/pantryMatching";
 import { EditPantryItemModal } from "./components/EditPantryItemModal";
@@ -585,7 +585,7 @@ export function calculateItemTotalNutrients(item: PantryItem) {
     factor = (item.amount * 100) / 100;
   } else if (unit.includes("stk") || unit.includes("stück")) {
     const lower = item.name.toLowerCase();
-    const weightPerPiece = lower.includes("ei")
+    const weightPerPiece = isEggIngredientName(lower)
       ? 55
       : lower.includes("frühlingszwiebel") || lower.includes("lauchzwiebel")
       ? 20
@@ -1848,7 +1848,7 @@ export function parseGroceryQuantity(
   if (numMatch) {
     const val = Math.round(parseFloat(numMatch[1].replace(",", ".")));
     if (
-      name.includes("ei") ||
+      isEggIngredientName(name) ||
       name.includes("zwiebel") ||
       name.includes("limette") ||
       name.includes("zitrone") ||
@@ -1864,7 +1864,7 @@ export function parseGroceryQuantity(
   if (name.includes("soja") || name.includes("öl") || name.includes("sauce") || name.includes("milch")) {
     return { amount: 250, unit: "ml", total: 250 };
   }
-  if (name.includes("ei")) {
+  if (isEggIngredientName(name)) {
     return { amount: 10, unit: "Stk.", total: 10 };
   }
   if (name.includes("zwiebel")) {
@@ -2634,7 +2634,7 @@ export default function App() {
         if (deductAmount === 0) {
           if (itemNameLower.includes("reis") && (recipeTitle.toLowerCase().includes("reis") || recipeTitle.toLowerCase().includes("fried") || recipeTitle.toLowerCase().includes("rice"))) {
             deductAmount = 90 * servings;
-          } else if (itemNameLower.includes("eier") && (recipeTitle.toLowerCase().includes("ei") || recipeTitle.toLowerCase().includes("omelett"))) {
+          } else if (isEggIngredientName(itemNameLower) && (isEggIngredientName(recipeTitle) || recipeTitle.toLowerCase().includes("omelett") || recipeTitle.toLowerCase().includes("rührei") || recipeTitle.toLowerCase().includes("shakshuka"))) {
             deductAmount = servings;
           } else if (itemNameLower.includes("soja") && (recipeTitle.toLowerCase().includes("soja") || recipeTitle.toLowerCase().includes("fried") || recipeTitle.toLowerCase().includes("teriyaki") || recipeTitle.toLowerCase().includes("bowl"))) {
             deductAmount = 12 * servings;

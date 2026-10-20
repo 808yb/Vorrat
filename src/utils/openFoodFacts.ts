@@ -1,4 +1,5 @@
 import { findFoodNutrition, FOOD_NUTRITION_DATABASE } from "../data/foodNutritionDatabase";
+import { isEggIngredientName } from "./recipeHelpers";
 
 export interface OFFProduct {
   code: string;
@@ -435,7 +436,7 @@ export function mapOffCategoriesToApp(rawCategory: string = "", name: string = "
     lower.includes("dairy") ||
     lower.includes("milch") ||
     lower.includes("egg") ||
-    lower.includes("ei") ||
+    isEggIngredientName(lower) ||
     lower.includes("cheese") ||
     lower.includes("käse") ||
     lower.includes("meat") ||
@@ -451,7 +452,7 @@ export function mapOffCategoriesToApp(rawCategory: string = "", name: string = "
   let tone = "rice";
   if (lower.includes("reis") || lower.includes("grain") || lower.includes("pasta") || lower.includes("nudel") || lower.includes("hafer")) {
     tone = "rice";
-  } else if (lower.includes("ei") || lower.includes("egg") || lower.includes("tofu")) {
+  } else if (isEggIngredientName(lower) || lower.includes("egg") || lower.includes("tofu")) {
     tone = "egg";
   } else if (lower.includes("sauce") || lower.includes("soja") || lower.includes("öl")) {
     tone = "sauce";

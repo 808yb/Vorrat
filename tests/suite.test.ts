@@ -4,7 +4,7 @@ import { getRecipePantryBreakdown, findMatchingPantryItem, isDrinkingWater } fro
 import { FULL_RECIPE_CATALOG } from "../src/data/recipeCatalog";
 import { getFoodTone } from "../src/components/FoodIcons";
 import { findFoodNutrition, calculatePortionNutrition } from "../src/data/foodNutritionDatabase";
-import { getSafeIngredientsList, getSafeSteps, getSafeAvailable, rehydrateRecipe, getCurrentMealTimeSlot, decomposeCompositeIngredients, cleanSpiceName } from "../src/utils/recipeHelpers";
+import { getSafeIngredientsList, getSafeSteps, getSafeAvailable, rehydrateRecipe, getCurrentMealTimeSlot, decomposeCompositeIngredients, cleanSpiceName, isEggIngredientName, isRiceIngredientName } from "../src/utils/recipeHelpers";
 import { extractIngredientsFromDishText, resolveRecipeFoodImage, askAboutRecipeWithGemini } from "../src/utils/geminiRecipes";
 
 let passedCount = 0;
@@ -1008,6 +1008,46 @@ const exportedJsonString = JSON.stringify(householdSyncData);
 const importedJson = JSON.parse(exportedJsonString);
 assert(importedJson.householdName === "WG Sonnenallee", "Household JSON: Preserves household name on export/import");
 assert(importedJson.pantry.length === 1 && importedJson.groceries.length === 1, "Household JSON: Correctly restores pantry & shopping items");
+
+console.log("\n🥚 20. Testing Egg & Unit Disambiguation (Prevent Speisestärke Egg Collision)...");
+assert(isEggIngredientName("Ei") === true, "isEggIngredientName: 'Ei' recognized as egg");
+assert(isEggIngredientName("Eier") === true, "isEggIngredientName: 'Eier' recognized as egg");
+assert(isEggIngredientName("Bio Eier") === true, "isEggIngredientName: 'Bio Eier' recognized as egg");
+assert(isEggIngredientName("Hühnereier") === true, "isEggIngredientName: 'Hühnereier' recognized as egg");
+assert(isEggIngredientName("Speisestärke") === false, "isEggIngredientName: 'Speisestärke' is NOT recognized as egg");
+assert(isEggIngredientName("Mehl & Speisestärke") === false, "isEggIngredientName: 'Mehl & Speisestärke' is NOT recognized as egg");
+assert(isEggIngredientName("Weizenmehl") === false, "isEggIngredientName: 'Weizenmehl' is NOT recognized as egg");
+assert(isEggIngredientName("Schweinefleisch") === false, "isEggIngredientName: 'Schweinefleisch' is NOT recognized as egg");
+assert(isEggIngredientName("Hähnchenbrustfilet") === false, "isEggIngredientName: 'Hähnchenbrustfilet' is NOT recognized as egg");
+assert(isRiceIngredientName("Basmati Reis") === true, "isRiceIngredientName: 'Basmati Reis' recognized as rice");
+assert(isRiceIngredientName("Preiselbeeren") === false, "isRiceIngredientName: 'Preiselbeeren' is NOT recognized as rice");
+
+// Verify that grouping 3 Stk. Ei and 180 g Mehl & Speisestärke never sums to 183 Stk.
+const mockIngredients = [
+  { name: "Ei", amount: "3 Stk." },
+  { name: "Mehl & Speisestärke", amount: "180 g" },
+];
+const aggregatedMap = new Map<string, { totalNeeded: number; unit: string }>();
+mockIngredients.forEach((ing) => {
+  const match = ing.amount.match(/^(\d+(?:[.,]\d+)?)\s*(g|kg|ml|l|stk\.?|bund|el|tl)?/i);
+  const amount = match ? parseFloat(match[1].replace(",", ".")) : 1;
+  let unit = match && match[2] ? match[2].toLowerCase() : "g";
+  if (unit.startsWith("stk")) unit = "Stk.";
+  const lowerClean = ing.name.toLowerCase();
+  let groupKey = lowerClean;
+  if (isEggIngredientName(lowerClean)) groupKey = "eier";
+  const mapKey = `${groupKey}__${unit}`;
+  const existing = aggregatedMap.get(mapKey);
+  if (existing) {
+    existing.totalNeeded += amount;
+  } else {
+    aggregatedMap.set(mapKey, { totalNeeded: amount, unit });
+  }
+});
+const eggEntry = aggregatedMap.get("eier__Stk.");
+const starchEntry = aggregatedMap.get("mehl & speisestärke__g");
+assert(eggEntry !== undefined && eggEntry.totalNeeded === 3 && eggEntry.unit === "Stk.", "Weekly Planner: Exactly 3 Stk. eggs aggregated (not 183)");
+assert(starchEntry !== undefined && starchEntry.totalNeeded === 180 && starchEntry.unit === "g", "Weekly Planner: Exactly 180 g flour & starch aggregated separately");
 
 // -----------------------------------------------------------------------------
 // SUMMARY
