@@ -24,12 +24,11 @@ import {
 } from "./components/WeeklyMealPlannerScreen";
 import { STORAGE_KEYS, wipeAllAppData } from "./constants/storage";
 
+import { UnifiedAddModal } from "./components/UnifiedAddModal";
+
 // Code-splitting heavy modals for faster initial page load
 const CookingModal = lazy(() =>
   import("./components/CookingModal").then((m) => ({ default: m.CookingModal }))
-);
-const UnifiedAddModal = lazy(() =>
-  import("./components/UnifiedAddModal").then((m) => ({ default: m.UnifiedAddModal }))
 );
 const HouseholdSyncModal = lazy(() =>
   import("./components/HouseholdSyncModal").then((m) => ({ default: m.HouseholdSyncModal }))
@@ -2835,9 +2834,12 @@ export default function App() {
   };
 
   const handleAddProduct = (item: Omit<PantryItem, "id">) => {
-    const normName = item.name.trim().toLowerCase();
+    if (!item || !item.name) return;
+    const cleanName = String(item.name).trim();
+    if (!cleanName) return;
+    const normName = cleanName.toLowerCase();
     setPantry((prev) => {
-      const existingIdx = prev.findIndex((p) => p.name.trim().toLowerCase() === normName);
+      const existingIdx = prev.findIndex((p) => String(p.name || "").trim().toLowerCase() === normName);
       if (existingIdx >= 0) {
         const updated = [...prev];
         const existing = updated[existingIdx];
@@ -2852,9 +2854,9 @@ export default function App() {
         return updated;
       }
       const uniqueId = Date.now() + Math.floor(Math.random() * 1000000);
-      return [...prev, { ...item, id: uniqueId }];
+      return [...prev, { ...item, name: cleanName, id: uniqueId }];
     });
-    notify(`«${item.name}» im Vorrat erfasst`);
+    notify(`«${cleanName}» im Vorrat erfasst`);
   };
 
   const handleResetDemo = () => {
@@ -3130,15 +3132,13 @@ export default function App() {
 
       {/* Unified Add Modal (Plus Button: Kamera, Bon, DB-Suche oder Manuell) */}
       {isAddModalOpen && (
-        <Suspense fallback={null}>
-          <UnifiedAddModal
-            isOpen={isAddModalOpen}
-            onClose={() => setIsAddModalOpen(false)}
-            onAddProduct={handleAddProduct}
-            onImportReceipt={handleReceiptImported}
-            onNotify={notify}
-          />
-        </Suspense>
+        <UnifiedAddModal
+          isOpen={isAddModalOpen}
+          onClose={() => setIsAddModalOpen(false)}
+          onAddProduct={handleAddProduct}
+          onImportReceipt={handleReceiptImported}
+          onNotify={notify}
+        />
       )}
 
       {/* Edit Pantry Item Modal (MHD, Name, Bestand, Einheit) */}

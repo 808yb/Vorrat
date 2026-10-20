@@ -1,5 +1,5 @@
+import { useState, useRef, useEffect, type FormEvent } from "react";
 import { Receipt, Sparkles } from "lucide-react";
-import React, { useState, useRef, useEffect } from "react";
 import { BrowserMultiFormatReader } from "@zxing/library";
 import { ProductMark, getFoodTone } from "./FoodIcons";
 import { lookupBarcodeFromOFF, searchProductsInOFF, type OFFProduct } from "../utils/openFoodFacts";
@@ -733,7 +733,7 @@ export function UnifiedAddModal({
   };
 
   // Manual Submit
-  const handleManualSubmit = (e: React.FormEvent) => {
+  const handleManualSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (!manualName.trim()) return;
 
