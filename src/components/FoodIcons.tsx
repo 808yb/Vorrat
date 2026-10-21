@@ -152,20 +152,43 @@ export function getFoodTone(name: string, category?: string): string {
     return 'citrus';
   }
 
+  // 6.5. Spices, Seasonings & Powders (Check BEFORE vegetables so Paprikapulver != Karotte)
+  if (
+    lower.includes('pulver') ||
+    lower.includes('edelsüß') ||
+    lower.includes('edelsuess') ||
+    lower.includes('rosenscharf') ||
+    lower.includes('gemahlen') ||
+    lower.includes('granulat') ||
+    lower.includes('gewürz') ||
+    lower.includes('gewuerz') ||
+    lower.includes('curry') ||
+    lower.includes('kurkuma') ||
+    lower.includes('kreuzkümmel') ||
+    lower.includes('cumin') ||
+    lower.includes('kumin') ||
+    lower.includes('zimt') ||
+    lower.includes('muskat') ||
+    lower.includes('pfeffer') ||
+    catLower.includes('gewürz')
+  ) {
+    return 'sauce';
+  }
+
   // 7. Fresh Vegetables
   if (
     lower.includes('karotte') ||
     lower.includes('möhre') ||
     lower.includes('carrot') ||
-    lower.includes('paprika') ||
+    (lower.includes('paprika') && !lower.includes('pulver') && !lower.includes('edelsüß') && !lower.includes('rosenscharf')) ||
     lower.includes('gurke') ||
     lower.includes('zucchini') ||
     lower.includes('aubergine') ||
     lower.includes('brokkoli') ||
     lower.includes('broccoli') ||
-    lower.includes('zwiebel') ||
+    (lower.includes('zwiebel') && !lower.includes('pulver') && !lower.includes('granulat')) ||
     lower.includes('onion') ||
-    lower.includes('knoblauch') ||
+    (lower.includes('knoblauch') && !lower.includes('pulver') && !lower.includes('granulat')) ||
     lower.includes('garlic') ||
     lower.includes('lauch') ||
     lower.includes('frühlingszwiebel')
@@ -181,7 +204,6 @@ export function getFoodTone(name: string, category?: string): string {
     return 'bread';
   }
 
-
   // 10. Sauces, Spices, Oils
   if (lower.includes('öl') || lower.includes('oil') || lower.includes('olivenöl') || lower.includes('sesamöl')) {
     return 'oil';
@@ -191,6 +213,8 @@ export function getFoodTone(name: string, category?: string): string {
   }
 
   // Category fallback if name didn't match specific foods
+  if (catLower.includes('gemüse')) return 'carrot';
+  if (catLower.includes('gewürz')) return 'sauce';
   if (catLower.includes('tiefkühl') || catLower.includes('tk')) return 'freezer';
   if (catLower.includes('getränk')) return 'drink';
   if (catLower.includes('saucen')) return 'sauce';

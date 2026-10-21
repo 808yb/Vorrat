@@ -1,4 +1,4 @@
-import { deduplicatePantry, formatMhdDisplay, getMhdStatus, getItemNutrientSpecs, type PantryItem } from "../src/App";
+import { deduplicatePantry, formatMhdDisplay, getMhdStatus, getItemNutrientSpecs, isItemExpiringSoonOrCritical, type PantryItem } from "../src/App";
 import { parseReceiptFallback, calculateEstimatedMhd } from "../src/utils/receiptOcr";
 import { getRecipePantryBreakdown, findMatchingPantryItem, isDrinkingWater, cleanAlternativeText, formatAlternativeHint, setAlternativeOverride, getAlternativeOverride } from "../src/utils/pantryMatching";
 import { FULL_RECIPE_CATALOG } from "../src/data/recipeCatalog";
@@ -693,8 +693,10 @@ assert(saltPepperList.some((i) => i.name === "Salz"), "Extracted Salz");
 assert(saltPepperList.some((i) => i.name === "Schwarzer Pfeffer"), "Extracted Schwarzer Pfeffer");
 
 // 3. Test culinary pantry matching of individual spices
+// 3. Test culinary pantry matching of individual spices & strict vegetable vs spice separation
 const userPantryWithSpices = [
   { name: "Paprikapulver", amount: 100, unit: "g" },
+  { name: "Knoblauchpulver", amount: 50, unit: "g" },
   { name: "Knoblauchzehen", amount: 5, unit: "Stk." },
   { name: "Meersalz", amount: 500, unit: "g" },
 ];
@@ -702,8 +704,14 @@ const userPantryWithSpices = [
 const matchPaprika = findMatchingPantryItem("Paprika edelsüß", userPantryWithSpices);
 assert(Boolean(matchPaprika), "Paprika edelsüß matches user's Paprikapulver in pantry");
 
+const matchFreshPaprika = findMatchingPantryItem("Rote Paprika (2 Stk.)", userPantryWithSpices);
+assert(matchFreshPaprika === null, "Fresh vegetable Paprika strictly does NOT match Paprikapulver in pantry");
+
+const matchKnoblauchZehe = findMatchingPantryItem("Knoblauchpulver", [{ name: "Knoblauchzehen", amount: 5, unit: "Stk." }]);
+assert(matchKnoblauchZehe === null, "Knoblauchpulver strictly does NOT match Knoblauchzehen");
+
 const matchKnoblauch = findMatchingPantryItem("Knoblauchpulver", userPantryWithSpices);
-assert(Boolean(matchKnoblauch), "Knoblauchpulver matches user's Knoblauchzehen in pantry");
+assert(Boolean(matchKnoblauch), "Knoblauchpulver matches user's Knoblauchpulver in pantry");
 
 const matchSalz = findMatchingPantryItem("Salz", userPantryWithSpices);
 assert(Boolean(matchSalz), "Salz matches user's Meersalz in pantry");
@@ -1219,6 +1227,131 @@ assert(
   RECIPE_CATEGORIES.includes("Dessert") &&
   RECIPE_CATEGORIES.includes("Backen"),
   "RECIPE_CATEGORIES array contains all 5 required tags"
+);
+
+// -----------------------------------------------------------------------------
+// TEST SUITE 23: EXPIRING PANTRY SINGLE SOURCE OF TRUTH & BADGES
+// -----------------------------------------------------------------------------
+console.log("\n🚨 23. Testing Expiring Pantry Single Source of Truth & Badges...");
+
+const today = new Date();
+const inTwoDays = new Date(today.getTime() + 2 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+const inTenDays = new Date(today.getTime() + 10 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+
+const samplePfluecksalat: PantryItem = {
+  id: 101,
+  name: "Pflücksalat",
+  category: "Kühl",
+  amount: 1,
+  total: 1,
+  unit: "Packung",
+  tone: "salad",
+  mhd: inTwoDays,
+};
+
+const sampleReis: PantryItem = {
+  id: 102,
+  name: "Basmati Reis",
+  category: "Trocken",
+  amount: 1,
+  total: 4,
+  unit: "Packung",
+  tone: "rice",
+};
+
+const sampleWasser: PantryItem = {
+  id: 103,
+  name: "Wasser (Leitung)",
+  category: "Getränke",
+  amount: 999999,
+  total: 999999,
+  unit: "ml",
+  tone: "water",
+  isUnlimited: true,
+};
+
+const sampleGewuerz: PantryItem = {
+  id: 104,
+  name: "Oregano",
+  category: "Gewürze",
+  amount: 15,
+  total: 20,
+  unit: "g",
+  tone: "herb",
+  mhd: inTwoDays,
+};
+
+const sampleEmptyItem: PantryItem = {
+  id: 105,
+  name: "Beeren",
+  category: "Kühl",
+  amount: 0,
+  total: 200,
+  unit: "g",
+  tone: "berry",
+  mhd: inTwoDays,
+};
+
+const sampleSafeItem: PantryItem = {
+  id: 106,
+  name: "Milch",
+  category: "Kühl",
+  amount: 1,
+  total: 1,
+  unit: "l",
+  tone: "milk",
+  mhd: inTenDays,
+};
+
+// 1. Critical expiring item is detected
+assert(
+  isItemExpiringSoonOrCritical(samplePfluecksalat) === true,
+  "Pflücksalat expiring in 2 days is marked as critical/expiring"
+);
+
+// 2. Small amount without MHD is NEVER marked as warning
+assert(
+  isItemExpiringSoonOrCritical(sampleReis) === false,
+  "1 Packung Reis without MHD is NOT marked as warning (prevents false (9) badge)"
+);
+
+// 3. Unlimited water is NEVER marked
+assert(
+  isItemExpiringSoonOrCritical(sampleWasser) === false,
+  "Unlimited water is NEVER marked as warning"
+);
+
+// 4. Spices are NEVER marked
+assert(
+  isItemExpiringSoonOrCritical(sampleGewuerz) === false,
+  "Gewürze category is NEVER marked as expiring warning"
+);
+
+// 5. Empty amount is NOT marked
+assert(
+  isItemExpiringSoonOrCritical(sampleEmptyItem) === false,
+  "Empty pantry item (amount 0) is not marked as expiring"
+);
+
+// 6. Non-expiring item is not marked
+assert(
+  isItemExpiringSoonOrCritical(sampleSafeItem) === false,
+  "Item with MHD in 10 days is not marked as expiring"
+);
+
+// 7. Aggregate count test: exact 1 item among these
+const testPantry = [
+  samplePfluecksalat,
+  sampleReis,
+  sampleWasser,
+  sampleGewuerz,
+  sampleEmptyItem,
+  sampleSafeItem,
+];
+const computedBadgeCount = testPantry.filter((item) => isItemExpiringSoonOrCritical(item)).length;
+assert(
+  computedBadgeCount === 1,
+  `Badge count strictly yields exactly 1 for test pantry (got ${computedBadgeCount})`
 );
 
 // -----------------------------------------------------------------------------

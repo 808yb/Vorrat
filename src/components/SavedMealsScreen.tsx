@@ -7,7 +7,14 @@ import { AlternativeManageModal } from "./AlternativeManageModal";
 const CookingModal = lazy(() =>
   import("./CookingModal").then((m) => ({ default: m.CookingModal }))
 );
-import { getRecipePantryBreakdown, findMatchingPantryItem, cleanAlternativeText, normalizeIngredientName, shouldShowAlternativeHint } from "../utils/pantryMatching";
+import {
+  getRecipePantryBreakdown,
+  findMatchingPantryItem,
+  cleanAlternativeText,
+  normalizeIngredientName,
+  shouldShowAlternativeHint,
+  getAmbiguousIngredientTag,
+} from "../utils/pantryMatching";
 import { getSafeIngredientsList, getSafeSteps, getRecipeCategory, type RecipeCategory } from "../utils/recipeHelpers";
 import { resolveRecipeFoodImage } from "../utils/geminiRecipes";
 import { compressImageFile } from "../utils/imageUtils";
@@ -173,18 +180,23 @@ export function SavedMealsScreen({
           inStock: true,
           isAlternative: false,
           matchedPantryName: undefined,
+          matchedPantryItemName: undefined,
+          ambiguousTag: undefined,
           pantryText: "Vorhanden",
           statusColor: "#059669",
         };
       }
 
-      const match = findMatchingPantryItem(ing.name, pantry, recipe?.id);
+      const ambTag = getAmbiguousIngredientTag(ing.name, undefined, undefined);
+      const match = findMatchingPantryItem(ing.name, pantry, recipe?.id, ing.amount, recipe);
       if (!match) {
         return {
           ...ing,
           inStock: !ing.optional ? false : true,
           isAlternative: false,
           matchedPantryName: undefined as string | undefined,
+          matchedPantryItemName: undefined as string | undefined,
+          ambiguousTag: ambTag,
           pantryText: ing.optional ? "Optional" : "Fehlt",
           statusColor: ing.optional ? "#64748b" : "#e11d48",
         };
@@ -203,6 +215,8 @@ export function SavedMealsScreen({
           inStock: true,
           isAlternative: isAlt,
           matchedPantryName: cleanAltName,
+          matchedPantryItemName: matchedPantry.name,
+          ambiguousTag: ambTag,
           pantryText: "Vorhanden",
           statusColor: "#059669",
         };
@@ -221,6 +235,8 @@ export function SavedMealsScreen({
         inStock: isSufficient,
         isAlternative: isAlt,
         matchedPantryName: cleanAltName,
+        matchedPantryItemName: matchedPantry.name,
+        ambiguousTag: ambTag,
         pantryText: isSufficient
           ? "Vorhanden"
           : currentStock > 0
@@ -583,9 +599,9 @@ export function SavedMealsScreen({
                       {checkIngredientStock(activeRecipe, servings).map((ing, idx) => {
                         const showAltSubline = shouldShowAlternativeHint(ing.name, ing.matchedPantryName);
                         return (
-                          <div key={idx} className="ing-check-row">
-                            <div className="ing-name-wrap" style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "2px", flex: 1, minWidth: 0 }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: "6px", width: "100%", flexWrap: "wrap" }}>
+                          <div key={idx} className="ing-check-row" style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px", width: "100%" }}>
+                              <div className="ing-name-wrap" style={{ display: "flex", alignItems: "center", gap: "6px", flex: 1, minWidth: 0, flexWrap: "wrap" }}>
                                 <span
                                   className="status-dot"
                                   style={{ backgroundColor: ing.statusColor, flexShrink: 0 }}
@@ -593,27 +609,98 @@ export function SavedMealsScreen({
                                 <span className="ing-name" style={{ whiteSpace: "normal", wordBreak: "break-word" }} title={ing.name}>
                                   {ing.name}
                                 </span>
+                                {ing.ambiguousTag && (
+                                  <span
+                                    style={{
+                                      fontSize: "9px",
+                                      fontWeight: 750,
+                                      padding: "1px 5px",
+                                      borderRadius: "4px",
+                                      background: ing.ambiguousTag === "Gemüse" ? "#ecfdf5" : "#fef3c7",
+                                      color: ing.ambiguousTag === "Gemüse" ? "#065f46" : "#92400e",
+                                      border: `1px solid ${ing.ambiguousTag === "Gemüse" ? "#a7f3d0" : "#fde68a"}`,
+                                    }}
+                                  >
+                                    {ing.ambiguousTag}
+                                  </span>
+                                )}
                                 {ing.optional && <span className="optional-badge">opt.</span>}
                               </div>
-                              {showAltSubline && ing.matchedPantryName && (
-                                <span
-                                  style={{
-                                    fontSize: "11px",
-                                    color: "#64748b",
-                                    display: "block",
-                                    paddingLeft: "14px",
-                                    lineHeight: 1.2,
-                                  }}
-                                >
-                                  Aus Vorrat: {ing.matchedPantryName}
+
+                              <div className="ing-amounts" style={{ flexShrink: 0, textAlign: "right" }}>
+                                <strong className="needed-amount">{ing.amount}</strong>
+                                <span className="stock-info" style={{ color: ing.statusColor, marginLeft: "6px" }}>
+                                  {ing.pantryText}
                                 </span>
-                              )}
+                              </div>
                             </div>
-                            <div className="ing-amounts" style={{ flexShrink: 0, textAlign: "right" }}>
-                              <strong className="needed-amount">{ing.amount}</strong>
-                              <span className="stock-info" style={{ color: ing.statusColor }}>
-                                {ing.pantryText}
-                              </span>
+
+                            {/* Clickable Alternative Pill / Choose from pantry button */}
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px", paddingLeft: "14px" }}>
+                              {ing.matchedPantryName ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedAltIng({ name: ing.name, amount: ing.amount, currentMatch: ing.matchedPantryName })}
+                                  style={{
+                                    background: "#ecfdf5",
+                                    border: "1px solid #a7f3d0",
+                                    color: "#047857",
+                                    borderRadius: "6px",
+                                    padding: "2px 8px",
+                                    fontSize: "10.5px",
+                                    fontWeight: 700,
+                                    cursor: "pointer",
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: "4px",
+                                  }}
+                                  title="Alternative ändern oder verwalten"
+                                >
+                                  <span>⇄ Aus Vorrat: {ing.matchedPantryName} ✎</span>
+                                </button>
+                              ) : !ing.inStock ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedAltIng({ name: ing.name, amount: ing.amount, currentMatch: undefined })}
+                                  style={{
+                                    background: "#ffffff",
+                                    border: "1px dashed #f43f5e",
+                                    color: "#e11d48",
+                                    borderRadius: "6px",
+                                    padding: "2px 8px",
+                                    fontSize: "10px",
+                                    fontWeight: 700,
+                                    cursor: "pointer",
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: "4px",
+                                  }}
+                                  title="Aus eigenem Vorrat wählen"
+                                >
+                                  <span>⇄ Aus Vorrat wählen</span>
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedAltIng({ name: ing.name, amount: ing.amount, currentMatch: ing.matchedPantryItemName || ing.name })}
+                                  style={{
+                                    background: "#f8fafc",
+                                    border: "1px dashed #cbd5e1",
+                                    color: "#64748b",
+                                    borderRadius: "6px",
+                                    padding: "2px 6px",
+                                    fontSize: "9.5px",
+                                    fontWeight: 600,
+                                    cursor: "pointer",
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: "3px",
+                                  }}
+                                  title="Andere Zutat aus Vorrat zuweisen"
+                                >
+                                  <span>⇄ Alternative wählen</span>
+                                </button>
+                              )}
                             </div>
                           </div>
                         );
@@ -953,6 +1040,7 @@ export function SavedMealsScreen({
       <AlternativeManageModal
         isOpen={Boolean(selectedAltIng)}
         onClose={() => setSelectedAltIng(null)}
+        recipe={activeRecipe || undefined}
         recipeId={activeRecipe?.id}
         recipeTitle={activeRecipe?.title}
         ingredientName={selectedAltIng?.name || ""}

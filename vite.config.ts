@@ -1,7 +1,7 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
-import {defineConfig} from 'vite';
+import { defineConfig } from 'vite';
 
 export default defineConfig(() => {
   return {
@@ -37,6 +37,14 @@ export default defineConfig(() => {
         '/api/gemini': {
           target: 'http://localhost:3001',
           changeOrigin: true,
+          configure: (proxy) => {
+            proxy.on('error', (_err, _req, res) => {
+              if (res && 'writeHead' in res && !res.headersSent) {
+                res.writeHead(502, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: { message: 'Local Vercel server on port 3001 not running (falling back to direct client API)' } }));
+              }
+            });
+          },
         },
       },
     },

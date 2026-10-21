@@ -1,18 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <defs>
     <linearGradient id="brandGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#10b981"/>
-      <stop offset="60%" stop-color="#059669"/>
-      <stop offset="100%" stop-color="#047857"/>
+      <stop offset="0%" stop-color="#346747"/>
+      <stop offset="60%" stop-color="#2d5a3e"/>
+      <stop offset="100%" stop-color="#244932"/>
     </linearGradient>
     <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
-      <feDropShadow dx="0" dy="16" stdDeviation="24" flood-color="#059669" flood-opacity="0.25"/>
+      <feDropShadow dx="0" dy="14" stdDeviation="20" flood-color="#1b3625" flood-opacity="0.32"/>
     </filter>
   </defs>
 
-  <!-- Background rounded card matching app brand-mark -->
+  <!-- Background rounded card matching app brand-mark (#2d5a3e) -->
   <rect x="24" y="24" width="464" height="464" rx="140" fill="url(#brandGrad)" filter="url(#shadow)"/>
-  <rect x="24" y="24" width="464" height="464" rx="140" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="6"/>
+  <rect x="24" y="24" width="464" height="464" rx="140" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="4"/>
 
   <!-- Centered crisp white Leaf icon (identical to app top-left brand mark) -->
   <g transform="translate(100, 100) scale(13)" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none">

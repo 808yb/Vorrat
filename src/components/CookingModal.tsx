@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import type { CatalogRecipe, RecipeStep } from "../data/recipeCatalog";
-import { getRecipePantryBreakdown, shouldShowAlternativeHint } from "../utils/pantryMatching";
+import { getRecipePantryBreakdown, shouldShowAlternativeHint, isSpiceOrKitchenBasic } from "../utils/pantryMatching";
 import { getSafeSteps, getSafeIngredientsList } from "../utils/recipeHelpers";
 import { askAboutRecipeWithGemini } from "../utils/geminiRecipes";
 import { AlternativeManageModal } from "./AlternativeManageModal";
@@ -580,32 +580,85 @@ export function CookingModal({
                         </button>
                       )}
                     </div>
-                    <div style={{ display: "grid", gap: "5px" }}>
+                    <div style={{ display: "grid", gap: "6px" }}>
                       {breakdown.missing.map((ing) => {
                         const isChecked = !!checkedIngredients[ing.name];
                         return (
-                          <button
+                          <div
                             key={ing.name}
-                            type="button"
-                            onClick={() => toggleIngredient(ing.name)}
                             style={{
                               display: "flex",
-                              alignItems: "center",
-                              justifyContent: "space-between",
+                              flexDirection: "column",
+                              gap: "4px",
                               padding: "6px 8px",
-                              borderRadius: "7px",
+                              borderRadius: "8px",
                               background: isChecked ? "#f0fdf4" : "#ffffff",
                               border: isChecked ? "1px solid #86efac" : "1px solid #fecdd3",
-                              cursor: "pointer",
-                              textAlign: "left",
-                              fontSize: "10.5px",
                             }}
                           >
-                            <span style={{ color: isChecked ? "#15803d" : "#9f1239", textDecoration: isChecked ? "line-through" : "none", fontWeight: 600 }}>
-                              {isChecked ? "✓ " : "• "}{ing.name}
-                            </span>
-                            <strong style={{ fontSize: "10px", color: "#e11d48" }}>{ing.amount}</strong>
-                          </button>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px" }}>
+                              <button
+                                type="button"
+                                onClick={() => toggleIngredient(ing.name)}
+                                style={{
+                                  background: "none",
+                                  border: "none",
+                                  cursor: "pointer",
+                                  padding: 0,
+                                  textAlign: "left",
+                                  fontSize: "11px",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "4px",
+                                  flexWrap: "wrap",
+                                }}
+                              >
+                                <span style={{ color: isChecked ? "#15803d" : "#9f1239", textDecoration: isChecked ? "line-through" : "none", fontWeight: 600 }}>
+                                  {isChecked ? "✓ " : "• "}{ing.name}
+                                </span>
+                                {ing.ambiguousTag && (
+                                  <span
+                                    style={{
+                                      fontSize: "9px",
+                                      fontWeight: 750,
+                                      padding: "1px 5px",
+                                      borderRadius: "4px",
+                                      background: ing.ambiguousTag === "Gemüse" ? "#ecfdf5" : "#fef3c7",
+                                      color: ing.ambiguousTag === "Gemüse" ? "#065f46" : "#92400e",
+                                      border: `1px solid ${ing.ambiguousTag === "Gemüse" ? "#a7f3d0" : "#fde68a"}`,
+                                    }}
+                                  >
+                                    {ing.ambiguousTag}
+                                  </span>
+                                )}
+                              </button>
+                              <strong style={{ fontSize: "10.5px", color: "#e11d48", flexShrink: 0 }}>{ing.amount}</strong>
+                            </div>
+
+                            {/* Button: Aus Vorrat wählen */}
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "2px" }}>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedAltIng({ name: ing.name, amount: ing.amount, currentMatch: undefined })}
+                                style={{
+                                  background: "#ffffff",
+                                  border: "1px dashed #f43f5e",
+                                  color: "#e11d48",
+                                  borderRadius: "6px",
+                                  padding: "2px 8px",
+                                  fontSize: "10px",
+                                  fontWeight: 700,
+                                  cursor: "pointer",
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "4px",
+                                }}
+                                title="Aus eigenem Vorrat eine passende Alternative zuweisen"
+                              >
+                                <span>⇄ Aus Vorrat wählen</span>
+                              </button>
+                            </div>
+                          </div>
                         );
                       })}
                     </div>
@@ -620,39 +673,155 @@ export function CookingModal({
                         <span>Im Vorrat vorhanden ({breakdown.inStock.length})</span>
                       </span>
                     </div>
-                    <div style={{ display: "grid", gap: "5px" }}>
+                    <div style={{ display: "grid", gap: "6px" }}>
                       {breakdown.inStock.map((ing) => {
                         const isChecked = !!checkedIngredients[ing.name];
+                        const hasAlt = Boolean(ing.isAlternative || ing.matchedByAlternative);
+                        const displayedAltName = ing.matchedByAlternative || ing.matchedPantryItemName;
                         return (
-                          <button
+                          <div
                             key={ing.name}
-                            type="button"
-                            onClick={() => toggleIngredient(ing.name)}
                             style={{
                               display: "flex",
-                              alignItems: "center",
-                              justifyContent: "space-between",
+                              flexDirection: "column",
+                              gap: "4px",
                               padding: "6px 8px",
-                              borderRadius: "7px",
+                              borderRadius: "8px",
                               background: isChecked ? "#f0fdf4" : "#ffffff",
                               border: isChecked ? "1px solid #86efac" : "1px solid #e2e8f0",
-                              cursor: "pointer",
-                              textAlign: "left",
-                              fontSize: "10.5px",
                             }}
                           >
-                            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "2px", flex: 1, minWidth: 0, paddingRight: "8px" }}>
-                              <span style={{ color: isChecked ? "#15803d" : "#334155", textDecoration: isChecked ? "line-through" : "none", fontWeight: 500, whiteSpace: "normal", wordBreak: "break-word" }}>
-                                {isChecked ? "✓ " : "✓ "}{ing.name}
-                              </span>
-                              {shouldShowAlternativeHint(ing.name, ing.matchedByAlternative) && ing.matchedByAlternative && (
-                                <span style={{ fontSize: "9.5px", color: "#64748b", display: "block", lineHeight: 1.2 }}>
-                                  Aus Vorrat: {ing.matchedByAlternative}
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "6px" }}>
+                              <button
+                                type="button"
+                                onClick={() => toggleIngredient(ing.name)}
+                                style={{
+                                  background: "none",
+                                  border: "none",
+                                  cursor: "pointer",
+                                  padding: 0,
+                                  textAlign: "left",
+                                  fontSize: "11px",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "4px",
+                                  flexWrap: "wrap",
+                                }}
+                              >
+                                <span style={{ color: isChecked ? "#15803d" : "#334155", textDecoration: isChecked ? "line-through" : "none", fontWeight: 600 }}>
+                                  {isChecked ? "✓ " : "✓ "}{ing.name}
                                 </span>
+                                {ing.ambiguousTag && (
+                                  <span
+                                    style={{
+                                      fontSize: "9px",
+                                      fontWeight: 750,
+                                      padding: "1px 5px",
+                                      borderRadius: "4px",
+                                      background: ing.ambiguousTag === "Gemüse" ? "#ecfdf5" : "#fef3c7",
+                                      color: ing.ambiguousTag === "Gemüse" ? "#065f46" : "#92400e",
+                                      border: `1px solid ${ing.ambiguousTag === "Gemüse" ? "#a7f3d0" : "#fde68a"}`,
+                                    }}
+                                  >
+                                    {ing.ambiguousTag}
+                                  </span>
+                                )}
+                              </button>
+                              <strong style={{ fontSize: "10.5px", color: "#059669", flexShrink: 0 }}>{ing.amount}</strong>
+                            </div>
+
+                            {/* Pill-Button: Gewürzglas, Alternative aktiv oder Vorrat ändern */}
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "2px", flexWrap: "wrap" }}>
+                              {ing.isSpice || isSpiceOrKitchenBasic(ing.name) ? (
+                                <>
+                                  <span
+                                    style={{
+                                      fontSize: "10px",
+                                      fontWeight: 700,
+                                      color: "#065f46",
+                                      background: "#ecfdf5",
+                                      border: "1px solid #a7f3d0",
+                                      padding: "2px 7px",
+                                      borderRadius: "6px",
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      gap: "4px",
+                                    }}
+                                  >
+                                    <span>🧂</span>
+                                    <span>Gewürzglas · Vorhanden</span>
+                                  </span>
+                                  {onAddMissingToGroceries && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        onAddMissingToGroceries([{ name: ing.name, amount: "1 Glas" }]);
+                                      }}
+                                      style={{
+                                        background: "#f8fafc",
+                                        border: "1px solid #cbd5e1",
+                                        color: "#334155",
+                                        borderRadius: "6px",
+                                        padding: "2px 7px",
+                                        fontSize: "10px",
+                                        fontWeight: 700,
+                                        cursor: "pointer",
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        gap: "4px",
+                                      }}
+                                      title="Gewürz neigt sich dem Ende – auf Einkaufsliste setzen"
+                                    >
+                                      <span>🛒</span>
+                                      <span>Nachkaufen</span>
+                                    </button>
+                                  )}
+                                </>
+                              ) : hasAlt && displayedAltName ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedAltIng({ name: ing.name, amount: ing.amount, currentMatch: displayedAltName })}
+                                  style={{
+                                    background: "#ecfdf5",
+                                    border: "1px solid #a7f3d0",
+                                    color: "#047857",
+                                    borderRadius: "6px",
+                                    padding: "2px 8px",
+                                    fontSize: "10px",
+                                    fontWeight: 700,
+                                    cursor: "pointer",
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: "4px",
+                                  }}
+                                  title="Alternative ändern oder verwalten"
+                                >
+                                  <span>⇄ Aus Vorrat: {displayedAltName} ✎</span>
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedAltIng({ name: ing.name, amount: ing.amount, currentMatch: ing.matchedPantryItemName })}
+                                  style={{
+                                    background: "#f8fafc",
+                                    border: "1px dashed #cbd5e1",
+                                    color: "#64748b",
+                                    borderRadius: "6px",
+                                    padding: "2px 7px",
+                                    fontSize: "9.5px",
+                                    fontWeight: 600,
+                                    cursor: "pointer",
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: "3px",
+                                  }}
+                                  title="Andere Zutat aus Vorrat zuweisen"
+                                >
+                                  <span>⇄ Alternative wählen</span>
+                                </button>
                               )}
                             </div>
-                            <strong style={{ fontSize: "10px", color: "#059669", flexShrink: 0 }}>{ing.amount}</strong>
-                          </button>
+                          </div>
                         );
                       })}
                     </div>
@@ -1575,6 +1744,7 @@ export function CookingModal({
       <AlternativeManageModal
         isOpen={Boolean(selectedAltIng)}
         onClose={() => setSelectedAltIng(null)}
+        recipe={recipe || undefined}
         recipeId={recipe?.id}
         recipeTitle={recipe?.title}
         ingredientName={selectedAltIng?.name || ""}

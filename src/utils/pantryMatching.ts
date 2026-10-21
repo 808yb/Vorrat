@@ -8,6 +8,8 @@ export interface AlternativeOverride {
   customName?: string;
 }
 
+export type IngredientKind = "vegetable" | "spice" | "herb" | "other";
+
 export interface IngredientMatch {
   name: string;
   amount: string;
@@ -15,6 +17,9 @@ export interface IngredientMatch {
   matchedByAlternative?: string;
   isAlternative?: boolean;
   matchedPantryItemName?: string;
+  kind?: IngredientKind;
+  ambiguousTag?: "Gemüse" | "Gewürz" | null;
+  isSpice?: boolean;
 }
 
 export interface RecipePantryBreakdown {
@@ -25,6 +30,334 @@ export interface RecipePantryBreakdown {
 }
 
 let inMemoryOverrides: Record<string, AlternativeOverride> = {};
+
+/**
+ * Classifies an ingredient as fresh vegetable, spice, herb, or other.
+ * Strictly separates produce from ground/powdered/dried spices.
+ */
+export function getIngredientKind(
+  name: string,
+  unit?: string,
+  category?: string,
+  amount?: number | string
+): IngredientKind {
+  if (!name) return "other";
+  const norm = name.toLowerCase().trim();
+  const cat = (category || "").toLowerCase().trim();
+  const u = (unit || "").toLowerCase().trim();
+
+  let numAmount = 0;
+  if (typeof amount === "number") {
+    numAmount = amount;
+  } else if (typeof amount === "string") {
+    const m = amount.match(/^(\d+(?:[.,]\d+)?)/);
+    if (m) numAmount = parseFloat(m[1].replace(",", "."));
+  }
+
+  // 1. Spices check (powder, ground, flakes, seeds, etc.)
+  const hasSpiceKeywords =
+    norm.includes("pulver") ||
+    norm.includes("edelsüß") ||
+    norm.includes("edelsuess") ||
+    norm.includes("rosenscharf") ||
+    norm.includes("gemahlen") ||
+    norm.includes("granulat") ||
+    norm.includes("gerebelt") ||
+    norm.includes("flocken") ||
+    norm.includes("körner") ||
+    norm.includes("koerner") ||
+    norm.includes("gewürz") ||
+    norm.includes("gewuerz") ||
+    norm.includes("curry") ||
+    norm.includes("kurkuma") ||
+    norm.includes("kreuzkümmel") ||
+    norm.includes("cumin") ||
+    norm.includes("kumin") ||
+    norm.includes("zimt") ||
+    norm.includes("muskat") ||
+    norm.includes("cayenne") ||
+    norm.includes("piment") ||
+    norm.includes("oregano") ||
+    norm.includes("lorbeer") ||
+    norm.includes("kardamom") ||
+    norm.includes("anissamen");
+
+  const spiceRegex =
+    /(?:^|[^a-zäöüß])(?:pulver|edelsüß|edelsuess|rosenscharf|gemahlen|gewürz|gewuerz|gewürzmischung|flocken|körner|koerner|trocken|gerebelt|salz|pfeffer|curry|kurkuma|kreuzkümmel|cumin|kumin|zimt|muskat|muskatnuss|cayenne|granulat|oregano|lorbeer|kardamom|nelken|anissamen|paprikapulver|knoblauchpulver|zwiebelpulver|chilipulver|chiliflocken|senfkörner|piment|pimentón)(?:[^a-zäöüß]|$)/i;
+
+  const isSmallSpiceAmount =
+    u === "tl" ||
+    u === "el" ||
+    u === "prise" ||
+    u === "msp." ||
+    u === "msp" ||
+    u === "messerspitze" ||
+    (u === "g" && numAmount > 0 && numAmount < 60);
+
+  const isSpiceByCategory =
+    (cat.includes("gewürz") || cat.includes("saucen")) && isSmallSpiceAmount;
+
+  if (hasSpiceKeywords || spiceRegex.test(norm) || isSpiceByCategory) {
+    return "spice";
+  }
+
+  // 2. Fresh Herbs
+  const herbRegex =
+    /\b(?:frische[s]?\s+kräuter|petersilie|schnittlauch|dill|basilikum|rosmarin|thymian|koriandergrün|minze|salbei)\b/i;
+  if (herbRegex.test(norm)) {
+    return "herb";
+  }
+
+  // 3. Fresh Vegetables
+  const vegCategory =
+    cat.includes("gemüse") ||
+    cat.includes("obst & gemüse") ||
+    cat.includes("frisch") ||
+    cat.includes("kühl");
+
+  const vegUnits =
+    ["stk.", "stk", "knolle", "zehe", "zehen", "bund", "kopf", "köpfe", "schote", "schoten", "stange", "stangen"].includes(u) ||
+    (u === "g" && numAmount >= 80);
+
+  const vegAdditions =
+    /\b(?:gemüse|frisch|frische[s|r]?|schote[n]?|rot|gelb|grün|spitzpaprika|rispe[n]?|staudensellerie)\b/i.test(norm);
+
+  const vegNames =
+    /\b(?:paprika|tomate|tomaten|gurke|gurken|zucchini|aubergine|karotte|karotten|möhre|möhren|kartoffel|kartoffeln|zwiebel|zwiebeln|frühlingszwiebel|frühlingszwiebeln|schalotte|schalotten|knoblauch|knoblauchzehe|knoblauchzehen|lauch|porree|chili|chilischote|brokkoli|blumenkohl|spinat|blattspinat|pilze|champignons|kürbis|sellerie|radieschen|rote bete|spargel|fenchel|kohlrabi|chinakohl|weißkohl|rotkohl|wirsing|erbsen|zuckerschoten)\b/i.test(norm);
+
+  if (vegNames && (vegUnits || vegCategory || vegAdditions || (!cat.includes("gewürz") && !hasSpiceKeywords))) {
+    return "vegetable";
+  }
+
+  if (cat.includes("gemüse")) {
+    return "vegetable";
+  }
+
+  return "other";
+}
+
+/**
+ * Detects whether an ingredient is a pantry spice or basic kitchen staple:
+ * (category "Gewürze", getIngredientKind === "spice", or staple spices/powders).
+ * These items are treated as "Immer da / Vorrats-Glas", never warn about partial grams,
+ * and are never deducted when cooking.
+ */
+export function isSpiceOrKitchenBasic(name: string, category?: string): boolean {
+  if (!name) return false;
+  const c = (category || "").toLowerCase();
+  if (c.includes("gewürz") || c.includes("gewuerz")) return true;
+  const kind = getIngredientKind(name, undefined, category);
+  if (kind === "spice") return true;
+
+  const norm = name.toLowerCase().trim();
+  const basicKeywords = [
+    "salz",
+    "pfeffer",
+    "oregano",
+    "paprikapulver",
+    "knoblauch granuliert",
+    "knoblauchpulver",
+    "zwiebelpulver",
+    "zimt",
+    "curry",
+    "kurkuma",
+    "speisestärke",
+    "backpulver",
+    "essig",
+    "kreuzkümmel",
+    "cumin",
+    "kumin",
+    "thymian getrocknet",
+    "rosmarin getrocknet",
+    "muskat",
+    "muskatnuss",
+    "chili flocken",
+    "chiliflocken",
+    "chilipulver",
+    "cayenne",
+    "lorbeer",
+    "vanilleextrakt",
+    "kardamom",
+    "senfkörner",
+    "piment",
+  ];
+  return basicKeywords.some((b) => norm.includes(b));
+}
+
+/**
+ * Checks compatibility between recipe requirement and pantry item.
+ * Strictly prevents fresh vegetables from ever matching powdered spices or vice versa.
+ */
+export function isCategoryCompatible(
+  recipeIng: { name: string; amount?: string; unit?: string; category?: string },
+  pantryItem: { name: string; amount?: number; unit?: string; category?: string }
+): boolean {
+  const recKind = getIngredientKind(recipeIng.name, recipeIng.unit, recipeIng.category, recipeIng.amount);
+  const pKind = getIngredientKind(pantryItem.name, pantryItem.unit, pantryItem.category, pantryItem.amount);
+
+  // 1. NEVER match vegetable with spice
+  if (recKind === "vegetable" && pKind === "spice") return false;
+  if (recKind === "spice" && pKind === "vegetable") return false;
+
+  const rLower = recipeIng.name.toLowerCase();
+  const pLower = pantryItem.name.toLowerCase();
+
+  // 2. Critical Doppelgänger Rules
+  // Paprika (Vegetable vs Spice)
+  const rIsPaprikaVeg = rLower.includes("paprika") && recKind === "vegetable";
+  const pIsPaprikaSpice =
+    pLower.includes("paprika") &&
+    (pKind === "spice" ||
+      pLower.includes("pulver") ||
+      pLower.includes("edelsüß") ||
+      pLower.includes("rosenscharf") ||
+      pLower.includes("scharf") ||
+      pLower.includes("geräuchert"));
+  if (rIsPaprikaVeg && pIsPaprikaSpice) return false;
+
+  const rIsPaprikaSpice =
+    rLower.includes("paprika") &&
+    (recKind === "spice" ||
+      rLower.includes("pulver") ||
+      rLower.includes("edelsüß") ||
+      rLower.includes("rosenscharf") ||
+      rLower.includes("scharf"));
+  const pIsPaprikaVeg = pLower.includes("paprika") && pKind === "vegetable";
+  if (rIsPaprikaSpice && pIsPaprikaVeg) return false;
+
+  // Garlic (Fresh vs Powder/Granulate)
+  const rIsGarlicFresh = rLower.includes("knoblauch") && !rLower.includes("pulver") && !rLower.includes("granulat");
+  const pIsGarlicSpice =
+    pLower.includes("knoblauch") &&
+    (pLower.includes("pulver") || pLower.includes("granulat") || pKind === "spice");
+  if (rIsGarlicFresh && pIsGarlicSpice) return false;
+  if (!rIsGarlicFresh && pIsGarlicSpice && pKind === "vegetable") return false;
+
+  // Onion (Fresh vs Powder/Granulate/Fried)
+  const rIsOnionFresh =
+    (rLower.includes("zwiebel") || rLower.includes("schalotte") || rLower.includes("lauch")) &&
+    !rLower.includes("pulver") &&
+    !rLower.includes("granulat") &&
+    !rLower.includes("röst");
+  const pIsOnionSpice =
+    pLower.includes("zwiebel") &&
+    (pLower.includes("pulver") || pLower.includes("granulat") || pLower.includes("röst") || pKind === "spice");
+  if (rIsOnionFresh && pIsOnionSpice) return false;
+
+  // Chili (Fresh vs Powder/Flakes/Cayenne)
+  const rIsChiliFresh =
+    (rLower.includes("chili") || rLower.includes("peperoni")) &&
+    !rLower.includes("pulver") &&
+    !rLower.includes("flocken") &&
+    !rLower.includes("cayenne");
+  const pIsChiliSpice =
+    (pLower.includes("chili") || pLower.includes("cayenne")) &&
+    (pLower.includes("pulver") || pLower.includes("flocken") || pLower.includes("cayenne") || pKind === "spice");
+  if (rIsChiliFresh && pIsChiliSpice) return false;
+
+  // Tomato (Fresh vs Paste/Dried)
+  const rIsTomatoFresh =
+    rLower.includes("tomate") && !rLower.includes("mark") && !rLower.includes("getrocknet") && !rLower.includes("paste");
+  const pIsTomatoPasteOrDried =
+    pLower.includes("tomate") && (pLower.includes("mark") || pLower.includes("getrocknet") || pLower.includes("paste"));
+  if (rIsTomatoFresh && pIsTomatoPasteOrDried) return false;
+
+  return true;
+}
+
+/**
+ * Returns a visible badge label "Gemüse" or "Gewürz" for ambiguous foods that could be confused.
+ */
+export function getAmbiguousIngredientTag(
+  name: string,
+  unit?: string,
+  category?: string
+): "Gemüse" | "Gewürz" | null {
+  if (!name) return null;
+  const lower = name.toLowerCase().trim();
+  const kind = getIngredientKind(name, unit, category);
+
+  const isAmbiguous =
+    lower.includes("paprika") ||
+    lower.includes("knoblauch") ||
+    lower.includes("zwiebel") ||
+    lower.includes("chili") ||
+    lower.includes("ingwer") ||
+    lower.includes("tomate") ||
+    lower.includes("curry") ||
+    lower.includes("kümmel");
+
+  if (!isAmbiguous) return null;
+  if (kind === "vegetable") return "Gemüse";
+  if (kind === "spice") return "Gewürz";
+  return null;
+}
+
+// Culinary equivalence groups: Items in the same array can substitute for one another
+const EQUIVALENCE_GROUPS: string[][] = [
+  // Fresh tomatoes (Vegetables)
+  ["kirschtomate", "kirschtomaten", "cherrytomate", "cherrytomaten", "cocktailtomate", "cocktailtomaten", "rispentomate", "rispentomaten", "strauchtomate", "strauchtomaten", "tomate", "tomaten", "cherry-kirschtomaten"],
+  // Canned / Processed tomatoes
+  ["gehackte tomaten", "passierte tomaten", "dosentomaten", "stückige tomaten", "polpa", "tomatensauce", "tomatenmark", "pelati"],
+  // Cooking oils
+  ["öl", "speiseöl", "pflanzenöl", "bratöl", "frittieröl", "olivenöl", "sonnenblumenöl", "rapsöl", "keimöl", "sesamöl", "distelöl", "kokosöl", "erdnussöl"],
+  // Butter & Margarine
+  ["butter", "margarine", "pflanzenbutter", "butterreinfett", "markenbutter", "süßrahmbutter", "sauerrahmbutter"],
+  // Mayonnaise & Remoulade
+  ["mayo", "mayonnaise", "salatmayo", "salatmayonnaise", "remoulade", "aioli", "miracel whip", "pommes-sauce", "pommessauce", "trüffelmayo"],
+  // Fresh Onions & Alliums (Vegetables)
+  ["zwiebel", "zwiebeln", "rote zwiebel", "rote zwiebeln", "gemüsezwiebel", "gemüsezwiebeln", "schalotte", "schalotten", "frühlingszwiebel", "frühlingszwiebeln", "lauch", "porree"],
+  // Onion Spices & Processed
+  ["zwiebelpulver", "zwiebelgranulat", "getrocknete zwiebeln"],
+  // Milk & Plant milk
+  ["milch", "hafermilch", "sojamilch", "mandelmilch", "kuhmilch", "vollmilch", "fettarme milch", "pflanzendrink"],
+  // Cream / Sahne / Frischkäse
+  ["sahne", "schlagsahne", "kochcreme", "hafersahne", "sojasahne", "creme fraiche", "crème fraîche", "schmand", "sauerrahm", "frischkäse"],
+  // Hard cheese / Parmesan
+  ["parmesan", "grana padano", "pecorino", "hartkäse"],
+  // Grated / Melting cheese
+  ["geriebener käse", "streukäse", "gouda", "mozzarella", "pizzakäse", "emmentaler", "cheddar"],
+  // Rice varieties
+  ["basmatireis", "jasminreis", "langkornreis", "reis", "parboiled reis", "naturreis", "sushi-reis", "basmati reis"],
+  // Pasta varieties
+  ["pasta", "nudeln", "spaghetti", "penne", "fusilli", "tagliatelle", "macaroni", "rigatoni", "calamarata", "paccheri"],
+  // Minced meat
+  ["hackfleisch", "rinderhack", "gemischtes hack", "tatar", "hackfleisch gemischt", "schweinehack"],
+  // Poultry
+  ["hähnchen", "hähnchenbrust", "hähnchenbrustfilet", "huhn", "geflügel", "putenbrust", "pute", "hähnchenschnitzel", "minuten-schnitzel"],
+  // Sweetener / Sugar
+  ["zucker", "rohrzucker", "brauner zucker", "puderzucker", "agavendicksaft", "ahornsirup", "honig"],
+  // Flour
+  ["mehl", "weizenmehl", "dinkelmehl"],
+  // Vinegar
+  ["essig", "balsamico", "aceto balsamico", "weißweinessig", "apfelessig", "rotweinessig"],
+  // Soy sauce
+  ["sojasauce", "sojasoße", "shoyu", "tamari", "kikkoman"],
+  // Eggs
+  ["ei", "eier", "bio eier", "hühnerei", "hühnereier"],
+  // Peas
+  ["erbsen", "erbse", "tk-erbsen", "junge erbsen", "tiefkühlerbsen"],
+  // Salt
+  ["salz", "meersalz", "speisesalz", "jodsalz", "steinsalz", "grobes salz", "fleur de sel"],
+  // Pepper
+  ["pfeffer", "schwarzer pfeffer", "bunter pfeffer", "pfefferkörner", "gemahlener pfeffer", "weißer pfeffer"],
+  // Fresh Paprika (Vegetable)
+  ["paprika", "rote paprika", "gelbe paprika", "grüne paprika", "spitzpaprika", "paprikaschote", "paprikaschoten", "gemüsepaprika", "paprika rot", "paprika gelb", "paprika grün"],
+  // Paprika Spices (Spice/Powder)
+  ["paprikapulver", "paprika edelsüß", "paprika rosenscharf", "paprikapulver edelsüß", "paprika geräuchert", "pimentón", "paprikapulver scharf", "paprika scharf"],
+  // Fresh Garlic (Vegetable)
+  ["knoblauch", "knoblauchzehe", "knoblauchzehen", "frischer knoblauch", "knoblauchknolle"],
+  // Garlic Spices (Spice/Powder)
+  ["knoblauchpulver", "knoblauchgranulat"],
+  // Fresh Chili (Vegetable)
+  ["chili", "chilischote", "chilischoten", "rote chili", "grüne chili", "peperoni", "frische chili"],
+  // Chili Spices
+  ["chiliflocken", "chilipulver", "cayennepfeffer"],
+  // Herbs / Oregano
+  ["oregano", "italienische kräuter", "kräuter der provence", "thymian", "basilikum", "rosmarin"],
+  // Cumin
+  ["kreuzkümmel", "cumin", "kumin"],
+];
 
 /**
  * Cleans alternative strings removing any debug artefacts, arrows (↳, →),
@@ -122,65 +455,7 @@ export function setAlternativeOverride(
   }
 }
 
-// Culinary equivalence groups: Items in the same array can substitute for one another
-const EQUIVALENCE_GROUPS: string[][] = [
-  // Fresh tomatoes
-  ["kirschtomate", "kirschtomaten", "cherrytomate", "cherrytomaten", "cocktailtomate", "cocktailtomaten", "rispentomate", "rispentomaten", "strauchtomate", "strauchtomaten", "tomate", "tomaten", "cherry-kirschtomaten"],
-  // Canned / Processed tomatoes
-  ["gehackte tomaten", "passierte tomaten", "dosentomaten", "stückige tomaten", "polpa", "tomatensauce", "tomatenmark", "pelati"],
-  // Cooking oils
-  ["öl", "speiseöl", "pflanzenöl", "bratöl", "frittieröl", "olivenöl", "sonnenblumenöl", "rapsöl", "keimöl", "sesamöl", "distelöl", "kokosöl", "erdnussöl"],
-  // Butter & Margarine
-  ["butter", "margarine", "pflanzenbutter", "butterreinfett", "markenbutter", "süßrahmbutter", "sauerrahmbutter"],
-  // Mayonnaise & Remoulade
-  ["mayo", "mayonnaise", "salatmayo", "salatmayonnaise", "remoulade", "aioli", "miracel whip", "pommes-sauce", "pommessauce", "trüffelmayo"],
-  // Onions & Alliums
-  ["zwiebel", "zwiebeln", "schalotte", "schalotten", "frühlingszwiebel", "frühlingszwiebeln", "lauch", "porree", "gemüsezwiebel", "rote zwiebel"],
-  // Milk & Plant milk
-  ["milch", "hafermilch", "sojamilch", "mandelmilch", "kuhmilch", "vollmilch", "fettarme milch", "pflanzendrink"],
-  // Cream / Sahne / Frischkäse
-  ["sahne", "schlagsahne", "kochcreme", "hafersahne", "sojasahne", "creme fraiche", "crème fraîche", "schmand", "sauerrahm", "frischkäse"],
-  // Hard cheese / Parmesan
-  ["parmesan", "grana padano", "pecorino", "hartkäse"],
-  // Grated / Melting cheese
-  ["geriebener käse", "streukäse", "gouda", "mozzarella", "pizzakäse", "emmentaler", "cheddar"],
-  // Rice varieties
-  ["basmatireis", "jasminreis", "langkornreis", "reis", "parboiled reis", "naturreis", "sushi-reis", "basmati reis"],
-  // Pasta varieties
-  ["pasta", "nudeln", "spaghetti", "penne", "fusilli", "tagliatelle", "macaroni", "rigatoni", "calamarata", "paccheri"],
-  // Minced meat
-  ["hackfleisch", "rinderhack", "gemischtes hack", "tatar", "hackfleisch gemischt", "schweinehack"],
-  // Poultry
-  ["hähnchen", "hähnchenbrust", "hähnchenbrustfilet", "huhn", "geflügel", "putenbrust", "pute", "hähnchenschnitzel", "minuten-schnitzel"],
-  // Sweetener / Sugar
-  ["zucker", "rohrzucker", "brauner zucker", "puderzucker", "agavendicksaft", "ahornsirup", "honig"],
-  // Flour
-  ["mehl", "weizenmehl", "dinkelmehl"],
-  // Vinegar
-  ["essig", "balsamico", "aceto balsamico", "weißweinessig", "apfelessig", "rotweinessig"],
-  // Soy sauce
-  ["sojasauce", "sojasoße", "shoyu", "tamari", "kikkoman"],
-  // Eggs
-  ["ei", "eier", "bio eier", "hühnerei", "hühnereier"],
-  // Peas
-  ["erbsen", "erbse", "tk-erbsen", "junge erbsen", "tiefkühlerbsen"],
-  // Salt
-  ["salz", "meersalz", "speisesalz", "jodsalz", "steinsalz", "grobes salz", "fleur de sel"],
-  // Pepper
-  ["pfeffer", "schwarzer pfeffer", "bunter pfeffer", "pfefferkörner", "gemahlener pfeffer", "weißer pfeffer"],
-  // Paprika
-  ["paprika", "paprikapulver", "paprika edelsüß", "paprika rosenscharf", "paprikapulver edelsüß", "paprika geräuchert", "pimentón"],
-  // Garlic
-  ["knoblauch", "knoblauchzehe", "knoblauchzehen", "knoblauchpulver", "knoblauchgranulat"],
-  // Onion powder / Onions
-  ["zwiebelpulver", "zwiebelgranulat", "getrocknete zwiebeln"],
-  // Chili
-  ["chili", "chiliflocken", "chilipulver", "cayennepfeffer", "chilisauce"],
-  // Herbs / Oregano
-  ["oregano", "italienische kräuter", "kräuter der provence", "thymian", "basilikum", "rosmarin"],
-  // Cumin
-  ["kreuzkümmel", "cumin", "kumin"],
-];
+
 
 export function areCulinaryEquivalents(ingA: string, ingB: string): boolean {
   if (!ingA || !ingB) return false;
@@ -312,16 +587,43 @@ export interface MatchedPantryResult {
  * Finds the matching pantry item for any recipe ingredient,
  * intelligently supporting alternatives (e.g. "Butter oder Öl", "Milch oder Wasser"),
  * culinary equivalents (e.g. Sonnenblumenöl <-> Öl, Kirschtomaten <-> Cherrytomaten),
+ * strict vegetable vs spice compatibility checks,
  * and user-configured alternative overrides.
  */
 export function findMatchingPantryItem(
   ingredientName: string,
-  pantry: Array<{ name: string; amount?: number; unit?: string; isUnlimited?: boolean }>,
-  recipeId?: string
+  pantry: Array<{ name: string; amount?: number; unit?: string; category?: string; isUnlimited?: boolean }>,
+  recipeId?: string,
+  recipeIngAmount?: string,
+  recipe?: CatalogRecipe
 ): MatchedPantryResult | null {
   if (!ingredientName || !pantry || pantry.length === 0) return null;
 
-  // Check user-configured override for this specific recipe ingredient
+  // 1. Check recipe.alternativeOverrides first (highest priority)
+  const normIngName = normalizeIngredientName(ingredientName);
+  const directOverride =
+    (recipe as any)?.alternativeOverrides?.[ingredientName] ||
+    (recipe as any)?.alternativeOverrides?.[normIngName];
+
+  if (directOverride) {
+    if (directOverride === "NONE" || directOverride === "missing") {
+      return null;
+    }
+    const target = pantry.find(
+      (p) =>
+        normalizeIngredientName(p.name) === normalizeIngredientName(directOverride) ||
+        p.name.toLowerCase().trim() === directOverride.toLowerCase().trim()
+    );
+    if (target) {
+      return {
+        pantryItem: target,
+        matchedByAlternative: cleanAlternativeText(target.name),
+        isAlternative: true,
+      };
+    }
+  }
+
+  // 2. Check user-configured override stored in localStorage / memory
   const override = getAlternativeOverride(recipeId, ingredientName);
   if (override) {
     if (override.mode === "missing") {
@@ -350,7 +652,7 @@ export function findMatchingPantryItem(
     }
   }
 
-  // Water is always unlimited only if it is actually plain drinking/tap water
+  // 3. Water is always unlimited only if it is actually plain drinking/tap water
   if (isDrinkingWater(ingredientName)) {
     return {
       pantryItem: { name: "Leitungswasser", amount: 999999, unit: "ml", isUnlimited: true },
@@ -359,7 +661,7 @@ export function findMatchingPantryItem(
     };
   }
 
-  // 1. Split ingredient into alternatives if phrased with " oder ", " / ", " bzw. "
+  // 4. Split ingredient into alternatives if phrased with " oder ", " / ", " bzw. "
   // e.g. "Butter oder Öl" -> ["Butter", "Öl"]
   // e.g. "Milch oder Wasser (für Cremigkeit)" -> ["Milch", "Wasser"]
   const rawParts = ingredientName
@@ -383,7 +685,7 @@ export function findMatchingPantryItem(
       };
     }
 
-    // Generic spices or seasoning fallback: matches if user has any basic spice in pantry
+    // Generic spices or seasoning fallback: matches ONLY basic spices, NEVER fresh vegetables!
     if (
       candNorm === "gewürze" ||
       candNorm === "gewürz" ||
@@ -393,13 +695,16 @@ export function findMatchingPantryItem(
       candNorm === "trockengewürze"
     ) {
       const spiceItem = pantry.find((p) => {
+        const pKind = getIngredientKind(p.name, p.unit, p.category);
+        if (pKind === "vegetable") return false; // Strictly refuse fresh vegetables for "gewürze"
         const pNorm = normalizeIngredientName(p.name);
         return (
+          pKind === "spice" ||
           pNorm.includes("salz") ||
           pNorm.includes("pfeffer") ||
-          pNorm.includes("paprika") ||
+          pNorm.includes("paprikapulver") ||
           pNorm.includes("gewürz") ||
-          pNorm.includes("kräuter") ||
+          pNorm.includes("curry") ||
           (p as any).category?.toLowerCase().includes("gewürz")
         );
       });
@@ -412,8 +717,13 @@ export function findMatchingPantryItem(
       }
     }
 
-    // Direct / whole-word / compound match
+    // Direct / whole-word / compound match with strict category compatibility
     let matched = pantry.find((p) => {
+      // Hard check: vegetable vs spice barrier
+      if (!isCategoryCompatible({ name: candidate, amount: recipeIngAmount }, p)) {
+        return false;
+      }
+
       const pNorm = normalizeIngredientName(p.name);
       if (!pNorm) return false;
       if (pNorm === candNorm) return true;
@@ -436,6 +746,9 @@ export function findMatchingPantryItem(
     // Smart culinary equivalence matching (e.g. Sonnenblumenöl <-> Öl/Olivenöl, Kirschtomaten <-> Cherrytomaten)
     if (!matched) {
       matched = pantry.find((p) => {
+        if (!isCategoryCompatible({ name: candidate, amount: recipeIngAmount }, p)) {
+          return false;
+        }
         const pNorm = normalizeIngredientName(p.name);
         return areCulinaryEquivalents(candNorm, pNorm);
       });
@@ -457,7 +770,7 @@ export function findMatchingPantryItem(
 
 export function getRecipePantryBreakdown(
   recipe: CatalogRecipe,
-  pantry: Array<{ name: string; amount?: number; unit?: string; isUnlimited?: boolean }>,
+  pantry: Array<{ name: string; amount?: number; unit?: string; category?: string; isUnlimited?: boolean }>,
   servings: number
 ): RecipePantryBreakdown {
   const allIngredients = typeof recipe?.ingredientsList === "function"
@@ -468,7 +781,11 @@ export function getRecipePantryBreakdown(
   const missing: IngredientMatch[] = [];
 
   for (const ing of allIngredients) {
-    const match = findMatchingPantryItem(ing.name, pantry, recipe?.id);
+    const match = findMatchingPantryItem(ing.name, pantry, recipe?.id, ing.amount, recipe);
+    const ingKind = getIngredientKind(ing.name, undefined, undefined, ing.amount);
+    const ambTag = getAmbiguousIngredientTag(ing.name, undefined, undefined);
+
+    const isSpice = isSpiceOrKitchenBasic(ing.name) || (match ? isSpiceOrKitchenBasic(match.pantryItem.name, (match.pantryItem as any).category) : false);
 
     if (match) {
       const isAlt = Boolean(
@@ -480,9 +797,17 @@ export function getRecipePantryBreakdown(
         matchedByAlternative: isAlt ? cleanAlternativeText(match.matchedByAlternative || match.pantryItem.name) : undefined,
         isAlternative: isAlt,
         matchedPantryItemName: match.pantryItem.name,
+        kind: ingKind,
+        ambiguousTag: ambTag,
+        isSpice,
       });
     } else {
-      missing.push(ing);
+      missing.push({
+        ...ing,
+        kind: ingKind,
+        ambiguousTag: ambTag,
+        isSpice,
+      });
     }
   }
 
@@ -491,4 +816,5 @@ export function getRecipePantryBreakdown(
 
   return { inStock, missing, all: allIngredients, matchPercentage };
 }
+
 

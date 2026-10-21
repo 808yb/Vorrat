@@ -176,10 +176,12 @@ export function EditPantryItemModal({
             <label className="edit-field-label">Kategorie</label>
             <div className="edit-category-pills" style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
               {[
+                { id: "Gemüse", label: "Gemüse & Obst" },
+                { id: "Gewürze", label: "Gewürze" },
                 { id: "Kühl", label: "Kühlschrank" },
                 { id: "Tiefkühl", label: "Tiefkühl" },
                 { id: "Trocken", label: "Trockenvorrat" },
-                { id: "Saucen", label: "Gewürze & Saucen" },
+                { id: "Saucen", label: "Saucen & Essig/Öl" },
                 { id: "Getränke", label: "Getränke" },
                 { id: "Sonstiges", label: "Sonstiges" },
               ].map((cat) => (

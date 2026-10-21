@@ -1379,6 +1379,8 @@ export function UnifiedAddModal({
                                   color: "#475569",
                                 }}
                               >
+                                <option value="Gemüse">Gemüse & Obst</option>
+                                <option value="Gewürze">Gewürze</option>
                                 <option value="Kühl">Kühlschrank</option>
                                 <option value="Tiefkühl">Tiefkühl</option>
                                 <option value="Trocken">Trockenvorrat</option>
@@ -1614,6 +1616,8 @@ export function UnifiedAddModal({
                             className="search-field"
                             style={{ width: "100%", height: "34px", fontSize: "11.5px", padding: "0 6px", background: "#ffffff" }}
                           >
+                            <option value="Gemüse">Gemüse & Obst</option>
+                            <option value="Gewürze">Gewürze</option>
                             <option value="Kühl">Kühlschrank</option>
                             <option value="Tiefkühl">Tiefkühl</option>
                             <option value="Trocken">Trockenvorrat</option>
@@ -2197,6 +2201,8 @@ export function UnifiedAddModal({
                                       padding: "0 4px",
                                     }}
                                   >
+                                    <option value="Gemüse">Gemüse</option>
+                                    <option value="Gewürze">Gewürze</option>
                                     <option value="Kühl">Kühl</option>
                                     <option value="Tiefkühl">Tiefkühl</option>
                                     <option value="Trocken">Trocken</option>
@@ -2496,6 +2502,8 @@ export function UnifiedAddModal({
                     className="search-field"
                     style={{ width: "100%", marginTop: "4px" }}
                   >
+                    <option value="Gemüse">Gemüse & Obst</option>
+                    <option value="Gewürze">Gewürze</option>
                     <option value="Kühl">Kühlschrank</option>
                     <option value="Tiefkühl">Tiefkühl</option>
                     <option value="Trocken">Trockenvorrat</option>

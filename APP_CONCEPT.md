@@ -162,4 +162,25 @@ Niemand möchte 30 Lebensmittel von Hand abtippen. *Vorrat* bietet 4 Wege:
 
 ---
 
+## 6. Verbindliche System-Architektur & UI/UX-Regeln (Core Standards)
+
+> *Ausführliche Spezifikation siehe [ARCHITECTURE_RULES.md](ARCHITECTURE_RULES.md).*
+
+### 1. Design System & Semantische Ruhe (Calm Nordic Culinary)
+- **Farbpalette:** Waldgrün (`#2d5a3e` / `#059669`), Soft-Mint (`#ebf3ee` / `#ecfdf5`), Neutrals (`#f8fafc`, `#ffffff`, `#e2e8f0`).
+- **Semantische Warnungen:** Amber (`#d97706`) für bald fällig, Rot (`#dc2626`) **nur** für abgelaufen, fehlende Pflichtzutaten oder Löschen. Keine unnötigen roten Badges auf neutralen Tabs (Planer, Kochbuch).
+- **Layout-Disziplin:** Maximal 2 Badge-Farben pro Header; gleiche Button-Höhen (`32px`/`36px`) und Radien; kein Quetschen von Statustexten in überladene Flexzeilen (sekundäre Infos immer in eine ruhige 2. Zeile).
+
+### 2. Komponenten-Architektur (Single Source of Truth)
+- **Vorratsabgleich & Synonyme:** Ausschliesslich über `src/utils/pantryMatching.ts` (`findMatchingPantryItem`, `getRecipePantryBreakdown`).
+- **Ablauf- & Dringlichkeitszählung:** Ausschliesslich über `isItemExpiringSoonOrCritical(item)`. Gewürze, Saucen und unbegrenzte Artikel dürfen niemals als Alarm gewertet werden.
+- **Modals:** Jedes Modal schliesst zuverlässig via Backdrop-Klick, `✕`-Button und `Escape`-Taste. Niemals automatische `true`-Initialisierung bei App-Start.
+
+### 3. KI-, API- & Daten-Integrität
+- **Strikter Verzicht auf Fake-/Mock-Daten:** Keine erfundenen Fallback-Rezepte bei API-Fehlern; keine halluzinierten Video- oder Web-Links.
+- **Gemini Proxy Kaskade:** Ausschließlich aktuelle Modelle (`gemini-3.5-flash-lite`, `gemini-3.8-flash`, `gemini-flash-latest`, `gemini-flash-lite-latest`) über `callGeminiProxy`.
+- **Domänen-Präzision:** Niemals frisches Gemüse mit getrockneten Gewürzen matchen (Paprika vs. Paprikapulver, Knoblauchzehe vs. Knoblauchpulver).
+
+---
+
 *Erstellt mit Hingabe für nachhaltigen Genuss, weniger Food Waste und Freude am Kochen.*

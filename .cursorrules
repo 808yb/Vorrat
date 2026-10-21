@@ -1,0 +1,41 @@
+# VORRAT – SYSTEM ARCHITECTURE & UI/UX RULES
+
+You are an expert full-stack developer working on the Vorrat pantry and cooking assistant app.
+You must adhere strictly to these architecture and design rules for every single modification:
+
+## 1. Design System & Styling
+- Palette: Calm Nordic Culinary.
+  - Primary: Forest green (`#2d5a3e` / `#059669`), soft mint background (`#ebf3ee` / `#ecfdf5`), border (`#c6dcce`).
+  - Neutrals: Background `#f8fafc`, Cards `#ffffff`, Borders `#e2e8f0` / `#cbd5e1`, Primary text `#0f172a`, Secondary text `#64748b`.
+  - Semantic warnings (SPARINGLY!): Amber (`#d97706` / `#fef3c7`) for soon expiring / partial stock. Red (`#dc2626` / `#fee2e2`) ONLY for expired, missing mandatory ingredient, or destructive delete actions.
+- No visual experiments:
+  - Max 2 badge colors per card header.
+  - Same-row buttons MUST share identical height (32px or 36px), border-radius (8px or 10px), and flex centering.
+  - Never squeeze status boxes into single-line flexboxes causing text truncation like `Hähnc...`. Secondary info must be placed on a tranquil second line.
+
+## 2. Component Architecture & Code Organization
+- Single Source of Truth:
+  - Pantry Matching & Synonyms: ONLY via `src/utils/pantryMatching.ts` (`findMatchingPantryItem`, `getRecipePantryBreakdown`). No ad-hoc string comparisons in UI components.
+  - Expiration & Warnings: ONLY via `isItemExpiringSoonOrCritical(item)`. Never count spices, sauces, or low piece counts without MHD.
+  - Recipe helpers & categories: ONLY via `src/utils/recipeHelpers.ts`.
+  - Storage keys: ONLY via `src/constants/storage.ts` (`STORAGE_KEYS`).
+- Modals (`*Modal.tsx`):
+  - Must close immediately on backdrop click, `✕` button (min 36x36px), and `Escape` key.
+  - Never initialize modals to open (`true`) on initial app load.
+
+## 3. Strict AI, API & Domain Rules
+- FORBIDDEN: Fake or mock data.
+  - NEVER generate or inject static dummy recipes ("Cremige One-Pot Pasta...") when an API call or scraper fails. Show clean, honest error UI.
+  - NEVER invent hallucinated video or web URLs (`example.com`, fake YouTube IDs).
+- Gemini API & Proxy:
+  - All AI calls route through `callGeminiProxy`.
+  - Allowed model cascade: `["gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-flash-latest", "gemini-flash-lite-latest"]`. Never use deprecated `gemini-2.0-flash` or `gemini-2.5-flash`.
+- Ingredient Domain Logic:
+  - Fresh vegetables (`Gemüse`, `Stk.`, `g >= 80`, `Bund`) must NEVER match spices (`Gewürz`, `Pulver`, `TL`, `Prise`).
+  - Spices in recipes must always be individual items, never combined strings like "Salz & Pfeffer".
+
+## 4. Definition of Done
+Every task MUST pass before completion:
+1. `npx tsc --noEmit` (0 errors)
+2. `npm test` (All tests green)
+3. Zero temporary test/debug scripts left behind.

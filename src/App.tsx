@@ -5,7 +5,7 @@ import { FULL_RECIPE_CATALOG, type CatalogRecipe } from "./data/recipeCatalog";
 import { getStoredCustomRecipes, generateRecipeWithGemini, rehydrateCustomRecipe, resolveRecipeFoodImage } from "./utils/geminiRecipes";
 import { getSafeIngredientsList, getSafeAvailable, getCurrentMealTimeSlot, decomposeCompositeIngredients, isEggIngredientName, getRecipeCategory, type RecipeCategory } from "./utils/recipeHelpers";
 import { RecipeSwipeDeck } from "./components/RecipeSwipeDeck";
-import { getRecipePantryBreakdown, findMatchingPantryItem } from "./utils/pantryMatching";
+import { getRecipePantryBreakdown, findMatchingPantryItem, getAmbiguousIngredientTag, isSpiceOrKitchenBasic } from "./utils/pantryMatching";
 import { EditPantryItemModal } from "./components/EditPantryItemModal";
 import { SavedMealsScreen } from "./components/SavedMealsScreen";
 import { findFoodNutrition } from "./data/foodNutritionDatabase";
@@ -43,7 +43,7 @@ const AccountResetModal = lazy(() =>
 );
 
 // Re-export consolidated pantry matching function for backward compatibility
-export { findMatchingPantryItem } from "./utils/pantryMatching";
+export { findMatchingPantryItem, isSpiceOrKitchenBasic } from "./utils/pantryMatching";
 
 type Tab = "pantry" | "discover" | "planner" | "cook" | "shop";
 type IconName =
@@ -435,6 +435,33 @@ export function getMhdStatus(mhd?: string): "ok" | "soon" | "expired" | "missing
   }
 }
 
+export function isItemExpiringSoonOrCritical(item: PantryItem): boolean {
+  if (!item || !item.name) return false;
+  if (item.isUnlimited || item.name.toLowerCase().includes("wasser") || (item.amount ?? 0) >= 99999) {
+    return false;
+  }
+  const cat = (item.category || "").toLowerCase();
+  if (
+    cat.includes("gewürz") ||
+    cat.includes("gewuerz") ||
+    cat.includes("saucen") ||
+    cat === "gewürze" ||
+    isSpiceOrKitchenBasic(item.name, item.category)
+  ) {
+    return false;
+  }
+  if ((item.amount ?? 0) <= 0) return false;
+
+  // Check explicit daysLeft property if present (<= 3 days)
+  if (typeof (item as any).daysLeft === "number") {
+    return (item as any).daysLeft <= 3;
+  }
+
+  // Check MHD status ("soon" <= 3 days or "expired" < 0 days)
+  const mhdStatus = getMhdStatus(item.mhd);
+  return mhdStatus === "soon" || mhdStatus === "expired";
+}
+
 const defaultPantry: PantryItem[] = [
   {
     id: 1,
@@ -712,6 +739,7 @@ function PantryScreen({
   onCookFromExpiring,
   onResetDemo,
   savedWasteStats,
+  onAddToGroceries,
 }: {
   pantry: PantryItem[];
   updateAmount: (id: number | string, delta: number) => void;
@@ -723,6 +751,7 @@ function PantryScreen({
   onCookFromExpiring?: (urgentItemNames: string[]) => void;
   onResetDemo?: () => void;
   savedWasteStats?: { count: number; money: number };
+  onAddToGroceries?: (name: string, amount?: string) => void;
 }) {
   const [filter, setFilter] = useState("Alle");
   const [search, setSearch] = useState("");
@@ -736,12 +765,7 @@ function PantryScreen({
   };
 
   const urgentItems = useMemo(() => {
-    return pantry.filter(
-      (item) =>
-        !item.isUnlimited &&
-        item.amount > 0 &&
-        (getMhdStatus(item.mhd) === "soon" || getMhdStatus(item.mhd) === "expired")
-    );
+    return pantry.filter((item) => isItemExpiringSoonOrCritical(item));
   }, [pantry]);
 
   const wasteStats = savedWasteStats ?? { count: 0, money: 0 };
@@ -757,10 +781,7 @@ function PantryScreen({
   ];
 
   const visible = pantry.filter((item) => {
-    const isUrgent =
-      !item.isUnlimited &&
-      item.amount > 0 &&
-      (getMhdStatus(item.mhd) === "soon" || getMhdStatus(item.mhd) === "expired");
+    const isUrgent = isItemExpiringSoonOrCritical(item);
 
     const catKey = getCategoryGroupKey(item.category);
 
@@ -792,8 +813,28 @@ function PantryScreen({
         <ProductMark tone={item.tone} name={item.name} category={item.category} />
         <div className="product-content">
           <div className="product-heading">
-            <div className="product-title-row">
+            <div className="product-title-row" style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
               <h3>{item.name}</h3>
+              {(() => {
+                const tag = getAmbiguousIngredientTag(item.name, item.unit, item.category);
+                if (!tag) return null;
+                return (
+                  <span
+                    style={{
+                      fontSize: "9px",
+                      fontWeight: 750,
+                      padding: "1px 5px",
+                      borderRadius: "4px",
+                      background: tag === "Gemüse" ? "#ecfdf5" : "#fef3c7",
+                      color: tag === "Gemüse" ? "#065f46" : "#92400e",
+                      border: `1px solid ${tag === "Gemüse" ? "#a7f3d0" : "#fde68a"}`,
+                      display: "inline-block",
+                    }}
+                  >
+                    {tag}
+                  </span>
+                );
+              })()}
             </div>
             <span className={`status ${status.toLowerCase()}`}>
               {isUnlimited ? "Unbegrenzt" : status}
@@ -821,7 +862,54 @@ function PantryScreen({
             })()}
           </div>
           <div className="stock-row">
-            {isUnlimited ? (
+            {isSpiceOrKitchenBasic(item.name, item.category) ? (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", gap: "8px" }}>
+                <span
+                  style={{
+                    fontSize: "11px",
+                    fontWeight: 700,
+                    color: "#065f46",
+                    background: "#ecfdf5",
+                    border: "1px solid #a7f3d0",
+                    padding: "3px 8px",
+                    borderRadius: "6px",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "4px",
+                  }}
+                >
+                  <span>🧂</span>
+                  <span>Gewürzglas · Vorhanden</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (onAddToGroceries) {
+                      onAddToGroceries(item.name, "1 Glas");
+                    }
+                  }}
+                  style={{
+                    background: "#f8fafc",
+                    border: "1px solid #cbd5e1",
+                    color: "#334155",
+                    borderRadius: "6px",
+                    padding: "3px 8px",
+                    fontSize: "10.5px",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "4px",
+                    flexShrink: 0,
+                  }}
+                  title="Gewürz auf Einkaufsliste setzen"
+                >
+                  <span>🛒</span>
+                  <span>Nachkaufen</span>
+                </button>
+              </div>
+            ) : isUnlimited ? (
               <span className="unlimited-stock-badge" style={{ color: "#2d5a3e", fontWeight: 700, fontSize: "12px" }}>
                 ∞ Immer vorrätig
               </span>
@@ -830,7 +918,7 @@ function PantryScreen({
                 {item.amount}{item.unit} <small>/ {item.total}{item.unit}</small>
               </span>
             )}
-            {!isUnlimited && (
+            {!isUnlimited && !isSpiceOrKitchenBasic(item.name, item.category) && (
               <div className="stepper" onClick={(e) => e.stopPropagation()}>
                 <Button
                   className="stepper-button"
@@ -847,19 +935,21 @@ function PantryScreen({
               </div>
             )}
           </div>
-          <div className="progress-track">
-            <motion.div
-              className={`progress-bar-fill ${isUnlimited ? "vorhanden" : status.toLowerCase()}`}
-              initial={false}
-              animate={{ width: `${percent}%` }}
-              transition={{
-                type: "spring",
-                stiffness: 280,
-                damping: 24,
-                mass: 0.6,
-              }}
-            />
-          </div>
+          {!isSpiceOrKitchenBasic(item.name, item.category) && (
+            <div className="progress-track">
+              <motion.div
+                className={`progress-bar-fill ${isUnlimited ? "vorhanden" : status.toLowerCase()}`}
+                initial={false}
+                animate={{ width: `${percent}%` }}
+                transition={{
+                  type: "spring",
+                  stiffness: 280,
+                  damping: 24,
+                  mass: 0.6,
+                }}
+              />
+            </div>
+          )}
         </div>
       </article>
     );
@@ -2300,23 +2390,33 @@ function BottomNav({
   active,
   pantryBadge = 0,
   shoppingCount = 0,
-  savedCount,
-  plannedCount = 0,
   onChange,
 }: {
   active: Tab;
   pantryBadge?: number;
   shoppingCount?: number;
-  savedCount: number;
+  savedCount?: number;
   plannedCount?: number;
   onChange: (tab: Tab) => void;
 }) {
-  const items: { id: Tab; label: string; icon: IconName; count?: number }[] = [
-    { id: "pantry", label: "Vorrat", icon: "archive", count: pantryBadge > 0 ? pantryBadge : undefined },
+  const items: { id: Tab; label: string; icon: IconName; count?: number; badgeStyle?: "warning" | "shop" }[] = [
+    {
+      id: "pantry",
+      label: "Vorrat",
+      icon: "archive",
+      count: pantryBadge > 0 ? pantryBadge : undefined,
+      badgeStyle: "warning",
+    },
     { id: "discover", label: "Entdecken", icon: "sparkles" },
-    { id: "planner", label: "Planer", icon: "calendar", count: plannedCount > 0 ? plannedCount : undefined },
-    { id: "cook", label: "Kochbuch", icon: "book", count: savedCount > 0 ? savedCount : undefined },
-    { id: "shop", label: "Einkauf", icon: "cart", count: shoppingCount > 0 ? shoppingCount : undefined },
+    { id: "planner", label: "Planer", icon: "calendar" },
+    { id: "cook", label: "Kochbuch", icon: "book" },
+    {
+      id: "shop",
+      label: "Einkauf",
+      icon: "cart",
+      count: shoppingCount > 0 ? shoppingCount : undefined,
+      badgeStyle: "shop",
+    },
   ];
 
   return (
@@ -2331,7 +2431,11 @@ function BottomNav({
         >
           <span className="nav-icon">
             <Icon name={item.icon} size={20} strokeWidth={active === item.id ? 2.2 : 1.8} />
-            {item.count !== undefined && item.count > 0 && <b>{item.count}</b>}
+            {item.count !== undefined && item.count > 0 && (
+              <b className={item.badgeStyle === "shop" ? "badge-shop" : "badge-warning"}>
+                {item.count}
+              </b>
+            )}
           </span>
           <span className="nav-label">{item.label}</span>
         </button>
@@ -2719,8 +2823,8 @@ export default function App() {
     notify("Einkaufsliste geleert");
   };
 
-  const lowStockCount = useMemo(
-    () => pantry.filter((item) => !item.isUnlimited && !item.name.toLowerCase().includes("wasser") && item.amount / item.total <= 0.25).length,
+  const expiringPantryCount = useMemo(
+    () => pantry.filter((item) => isItemExpiringSoonOrCritical(item)).length,
     [pantry]
   );
 
@@ -2742,7 +2846,7 @@ export default function App() {
 
     setPantry((items) =>
       items.map((item) => {
-        if (item.isUnlimited || item.name.toLowerCase().includes("wasser")) {
+        if (item.isUnlimited || item.name.toLowerCase().includes("wasser") || isSpiceOrKitchenBasic(item.name, item.category)) {
           return item;
         }
 
@@ -2750,33 +2854,25 @@ export default function App() {
         const itemNameLower = item.name.toLowerCase();
 
         if (recipe) {
-          const ingList = typeof recipe.ingredientsList === "function"
-            ? recipe.ingredientsList(servings)
-            : getSafeIngredientsList(recipe, servings);
-          const matchingIng = ingList.find((ing) => {
-            const ingLower = ing.name.toLowerCase();
-            return (
-              ingLower.includes(itemNameLower) ||
-              itemNameLower.includes(ingLower) ||
-              (itemNameLower.includes("reis") && ingLower.includes("reis")) ||
-              (itemNameLower.includes("eier") && ingLower.includes("eier")) ||
-              (itemNameLower.includes("soja") && ingLower.includes("soja")) ||
-              (itemNameLower.includes("erbsen") && ingLower.includes("erbsen")) ||
-              (itemNameLower.includes("zwiebel") && ingLower.includes("zwiebel")) ||
-              (itemNameLower.includes("hähnchen") && ingLower.includes("hähnchen"))
-            );
-          });
+          const breakdown = getRecipePantryBreakdown(recipe, items, servings);
+          const matchingInStock = breakdown.inStock.filter(
+            (ing) =>
+              ing.matchedPantryItemName?.toLowerCase().trim() === itemNameLower ||
+              (item.id && (ing as any).matchedPantryItemId === item.id)
+          );
 
-          if (matchingIng) {
-            const match = matchingIng.amount.match(/^(\d+)/);
-            if (match) {
-              deductAmount = parseInt(match[1], 10);
+          if (matchingInStock.length > 0) {
+            for (const matchIng of matchingInStock) {
+              const numMatch = matchIng.amount.match(/^(\d+(?:[.,]\d+)?)/);
+              if (numMatch) {
+                deductAmount += parseFloat(numMatch[1].replace(",", "."));
+              }
             }
           }
         }
 
         // Fallback default deductions if not dynamically matched
-        if (deductAmount === 0) {
+        if (deductAmount === 0 && !isSpiceOrKitchenBasic(item.name, item.category)) {
           if (itemNameLower.includes("reis") && (recipeTitle.toLowerCase().includes("reis") || recipeTitle.toLowerCase().includes("fried") || recipeTitle.toLowerCase().includes("rice"))) {
             deductAmount = 90 * servings;
           } else if (isEggIngredientName(itemNameLower) && (isEggIngredientName(recipeTitle) || recipeTitle.toLowerCase().includes("omelett") || recipeTitle.toLowerCase().includes("rührei") || recipeTitle.toLowerCase().includes("shakshuka"))) {
@@ -3141,6 +3237,7 @@ export default function App() {
           onCookFromExpiring={handleCookFromExpiring}
           onResetDemo={handleResetDemo}
           savedWasteStats={foodWasteSaved}
+          onAddToGroceries={(name, amount) => handleAddMissingToGroceries([{ name, amount: amount || "1 Glas" }])}
         />
       )}
 
@@ -3223,7 +3320,7 @@ export default function App() {
 
       <BottomNav
         active={activeTab}
-        pantryBadge={lowStockCount}
+        pantryBadge={expiringPantryCount}
         shoppingCount={groceries.length}
         savedCount={favorites.length}
         plannedCount={plannedMeals.length}

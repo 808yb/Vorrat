@@ -1787,14 +1787,24 @@ h2 {
   padding: 0 4px;
   place-items: center;
   color: white;
-  background: #c2593f;
+  background: #dc2626;
   border: 2px solid white;
   border-radius: 99px;
   font-size: 10.5px;
   font-weight: 800;
   line-height: 1;
   font-variant-numeric: tabular-nums;
-  box-shadow: 0 1px 3px rgba(194, 89, 63, 0.35);
+  box-shadow: 0 1px 3px rgba(220, 38, 38, 0.35);
+}
+
+.nav-icon b.badge-shop {
+  background: #059669;
+  box-shadow: 0 1px 3px rgba(5, 150, 105, 0.35);
+}
+
+.nav-icon b.badge-warning {
+  background: #dc2626;
+  box-shadow: 0 1px 3px rgba(220, 38, 38, 0.35);
 }
 
 .nav-label {
