@@ -636,209 +636,53 @@ export function RecipeLibraryScreen({
         {/* Sources Management Expanded Panel */}
         {isManagingSources && (
           <div style={{ marginTop: "14px", paddingTop: "14px", borderTop: "1px solid #f1f5f9" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-              <span style={{ fontSize: "11.5px", fontWeight: 700, color: "#334155" }}>
-                Aktive Webseiten & Rezept-Links:
-              </span>
-              <button
-                type="button"
-                onClick={handleResetSources}
-                style={{
-                  fontSize: "10.5px",
-                  color: "#64748b",
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  textDecoration: "underline",
-                }}
-              >
-                Standard wiederherstellen
-              </button>
-            </div>
-
             {/* Scanning Progress Banner */}
             {Boolean(isScanningSourceId) && (
-              <div style={{ marginBottom: "12px" }}>
+              <div style={{ marginBottom: "14px" }}>
                 <div
-            style={{
-              marginTop: "12px",
-              padding: "10px 14px",
-              borderRadius: "10px",
-              background: "#eff6ff",
-              border: "1px solid #bfdbfe",
-              color: "#1e40af",
-              fontSize: "12px",
-              fontWeight: 650,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: "8px",
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span style={{ fontSize: "14px" }}>🔄</span>
-              <span>{scanProgressMessage || "Scanne Webseite & extrahiere Rezepte..."}</span>
-            </div>
-            <button
-              type="button"
-              onClick={handleStopScan}
-              style={{
-                background: "#fee2e2",
-                border: "1px solid #fca5a5",
-                color: "#dc2626",
-                borderRadius: "6px",
-                padding: "4px 10px",
-                fontSize: "11px",
-                fontWeight: 700,
-                cursor: "pointer",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "4px",
-                flexShrink: 0,
-              }}
-            >
-              ⏹ Scan stoppen
-            </button>
-          </div>
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: "10px",
+                    background: "#eff6ff",
+                    border: "1px solid #bfdbfe",
+                    color: "#1e40af",
+                    fontSize: "12px",
+                    fontWeight: 650,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: "8px",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span style={{ fontSize: "14px" }}>🔄</span>
+                    <span>{scanProgressMessage || "Scanne Webseite & extrahiere Rezepte..."}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleStopScan}
+                    style={{
+                      background: "#fee2e2",
+                      border: "1px solid #fca5a5",
+                      color: "#dc2626",
+                      borderRadius: "6px",
+                      padding: "4px 10px",
+                      fontSize: "11px",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      flexShrink: 0,
+                    }}
+                  >
+                    ⏹ Scan stoppen
+                  </button>
+                </div>
               </div>
             )}
 
-            {/* Source items list */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "10px", marginBottom: "14px" }}>
-              {sources
-                .filter((src) => {
-                  if (src.isCustom) return true;
-                  const count = allLibraryRecipes.filter((r) =>
-                    (r.source || "").toLowerCase().includes(src.name.toLowerCase())
-                  ).length;
-                  return count > 0;
-                })
-                .map((src) => {
-                  const count = allLibraryRecipes.filter((r) =>
-                    (r.source || "").toLowerCase().includes(src.name.toLowerCase())
-                  ).length;
-                  const isScanningThis = isScanningSourceId === src.id;
-                  const nextScanPage = (src.lastScrapedPage || 1) + 1;
-
-                  return (
-                    <div
-                      key={src.id}
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: "6px",
-                        padding: "10px 12px",
-                        background: "#f8fafc",
-                        border: "1px solid #e2e8f0",
-                        borderRadius: "10px",
-                        fontSize: "11px",
-                      }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
-                        <div style={{ minWidth: 0, paddingRight: "6px" }}>
-                          <strong style={{ color: "#0f172a", display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                            {src.name} {count > 0 && <span style={{ fontWeight: 600, color: "#059669" }}>({count} Rezepte)</span>}
-                          </strong>
-                          <a
-                            href={src.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            style={{
-                              color: "#059669",
-                              textDecoration: "none",
-                              fontSize: "10px",
-                              whiteSpace: "nowrap",
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              display: "block",
-                            }}
-                          >
-                            {src.url.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")} ↗
-                          </a>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveSource(src.id, src.name)}
-                          title={`Quelle «${src.name}» entfernen`}
-                          disabled={Boolean(isScanningSourceId)}
-                          style={{
-                            width: "24px",
-                            height: "24px",
-                            borderRadius: "6px",
-                            background: "#fee2e2",
-                            border: "1px solid #fecaca",
-                            color: "#dc2626",
-                            cursor: isScanningSourceId ? "not-allowed" : "pointer",
-                            display: "inline-flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            flexShrink: 0,
-                            transition: "all 0.15s ease",
-                          }}
-                        >
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                            <line x1="18" y1="6" x2="6" y2="18" />
-                            <line x1="6" y1="6" x2="18" y2="18" />
-                          </svg>
-                        </button>
-                      </div>
-
-                      {/* Multi-Page Scrape Button */}
-                      {isScanningThis ? (
-                        <button
-                          type="button"
-                          onClick={handleStopScan}
-                          style={{
-                            marginTop: "2px",
-                            width: "100%",
-                            padding: "6px 8px",
-                            borderRadius: "6px",
-                            border: "1px solid #fca5a5",
-                            background: "#fee2e2",
-                            color: "#dc2626",
-                            fontSize: "10.5px",
-                            fontWeight: 700,
-                            cursor: "pointer",
-                            display: "inline-flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            gap: "5px",
-                          }}
-                        >
-                          <span>⏹ Scan stoppen</span>
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          disabled={Boolean(isScanningSourceId)}
-                          onClick={() => handleScanNextPages(src)}
-                          style={{
-                            marginTop: "2px",
-                            width: "100%",
-                            padding: "6px 8px",
-                            borderRadius: "6px",
-                            border: "1px solid #cbd5e1",
-                            background: "#ffffff",
-                            color: "#1e293b",
-                            fontSize: "10.5px",
-                            fontWeight: 650,
-                            cursor: isScanningSourceId ? "not-allowed" : "pointer",
-                            display: "inline-flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            gap: "5px",
-                            transition: "all 0.15s ease",
-                          }}
-                        >
-                          <span>🔄 Komplett scannen (ab S. {nextScanPage})</span>
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
-            </div>
-
-            {/* Add new Source Form */}
+            {/* Add new Source Form (Placed at TOP for quick access) */}
             <form
               onSubmit={handleAddSource}
               style={{
@@ -851,6 +695,7 @@ export function RecipeLibraryScreen({
                 gap: "10px",
                 width: "100%",
                 boxSizing: "border-box",
+                marginBottom: "16px",
               }}
             >
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px", flexWrap: "wrap" }}>
@@ -1017,6 +862,161 @@ export function RecipeLibraryScreen({
                 )}
               </button>
             </form>
+
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
+              <span style={{ fontSize: "11.5px", fontWeight: 700, color: "#334155" }}>
+                Aktive Webseiten & Rezept-Links:
+              </span>
+              <button
+                type="button"
+                onClick={handleResetSources}
+                style={{
+                  fontSize: "10.5px",
+                  color: "#64748b",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  textDecoration: "underline",
+                }}
+              >
+                Standard wiederherstellen
+              </button>
+            </div>
+
+            {/* Source items list */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "10px", marginBottom: "6px" }}>
+              {sources
+                .filter((src) => {
+                  if (src.isCustom) return true;
+                  const count = allLibraryRecipes.filter((r) =>
+                    (r.source || "").toLowerCase().includes(src.name.toLowerCase())
+                  ).length;
+                  return count > 0;
+                })
+                .map((src) => {
+                  const count = allLibraryRecipes.filter((r) =>
+                    (r.source || "").toLowerCase().includes(src.name.toLowerCase())
+                  ).length;
+                  const isScanningThis = isScanningSourceId === src.id;
+                  const nextScanPage = (src.lastScrapedPage || 1) + 1;
+
+                  return (
+                    <div
+                      key={src.id}
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "6px",
+                        padding: "10px 12px",
+                        background: "#f8fafc",
+                        border: "1px solid #e2e8f0",
+                        borderRadius: "10px",
+                        fontSize: "11px",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+                        <div style={{ minWidth: 0, paddingRight: "6px" }}>
+                          <strong style={{ color: "#0f172a", display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            {src.name} {count > 0 && <span style={{ fontWeight: 600, color: "#059669" }}>({count} Rezepte)</span>}
+                          </strong>
+                          <a
+                            href={src.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              color: "#059669",
+                              textDecoration: "none",
+                              fontSize: "10px",
+                              whiteSpace: "nowrap",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              display: "block",
+                            }}
+                          >
+                            {src.url.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")} ↗
+                          </a>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveSource(src.id, src.name)}
+                          title={`Quelle «${src.name}» entfernen`}
+                          disabled={Boolean(isScanningSourceId)}
+                          style={{
+                            width: "24px",
+                            height: "24px",
+                            borderRadius: "6px",
+                            background: "#fee2e2",
+                            border: "1px solid #fecaca",
+                            color: "#dc2626",
+                            cursor: isScanningSourceId ? "not-allowed" : "pointer",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            flexShrink: 0,
+                            transition: "all 0.15s ease",
+                          }}
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
+                          </svg>
+                        </button>
+                      </div>
+
+                      {/* Multi-Page Scrape Button */}
+                      {isScanningThis ? (
+                        <button
+                          type="button"
+                          onClick={handleStopScan}
+                          style={{
+                            marginTop: "2px",
+                            width: "100%",
+                            padding: "6px 8px",
+                            borderRadius: "6px",
+                            border: "1px solid #fca5a5",
+                            background: "#fee2e2",
+                            color: "#dc2626",
+                            fontSize: "10.5px",
+                            fontWeight: 700,
+                            cursor: "pointer",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: "5px",
+                          }}
+                        >
+                          <span>⏹ Scan stoppen</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={Boolean(isScanningSourceId)}
+                          onClick={() => handleScanNextPages(src)}
+                          style={{
+                            marginTop: "2px",
+                            width: "100%",
+                            padding: "6px 8px",
+                            borderRadius: "6px",
+                            border: "1px solid #cbd5e1",
+                            background: "#ffffff",
+                            color: "#1e293b",
+                            fontSize: "10.5px",
+                            fontWeight: 650,
+                            cursor: isScanningSourceId ? "not-allowed" : "pointer",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: "5px",
+                            transition: "all 0.15s ease",
+                          }}
+                        >
+                          <span>🔄 Komplett scannen (ab S. {nextScanPage})</span>
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
           </div>
         )}
 
