@@ -26,6 +26,7 @@ import { STORAGE_KEYS, wipeAllAppData } from "./constants/storage";
 
 import { UnifiedAddModal } from "./components/UnifiedAddModal";
 import { RecipeLibraryScreen } from "./components/RecipeLibraryScreen";
+import { deleteStoredCustomRecipe, markRecipeAsDeleted } from "./utils/geminiRecipes";
 
 // Code-splitting heavy modals for faster initial page load
 const CookingModal = lazy(() =>
@@ -1060,6 +1061,7 @@ function CookScreen({
   onSetIsSurpriseModalOpen: setExternalSurpriseOpen,
   expiringSearchIngredients = [],
   onClearExpiringFilter,
+  onDeleteRecipe,
 }: {
   pantry: PantryItem[];
   customRecipes?: CatalogRecipe[];
@@ -1077,6 +1079,7 @@ function CookScreen({
   onSetIsSurpriseModalOpen?: (open: boolean) => void;
   expiringSearchIngredients?: string[];
   onClearExpiringFilter?: () => void;
+  onDeleteRecipe?: (recipe: CatalogRecipe) => void;
 }) {
   const [servings, setServings] = useState(3);
   const [intent, setIntent] = useState("");
@@ -1436,6 +1439,7 @@ function CookScreen({
           onSelectRecipe={(rec) => setActiveModalRecipe(rec)}
           onBack={() => setIsLibraryViewOpen(false)}
           onNotify={onNotify}
+          onDeleteRecipe={onDeleteRecipe}
         />
         {Boolean(activeModalRecipe) && (
           <Suspense fallback={null}>
@@ -1448,6 +1452,7 @@ function CookScreen({
               isFavorite={activeModalRecipe ? favorites.includes(activeModalRecipe.id) : false}
               onToggleFavorite={onToggleFavorite}
               onAddMissingToGroceries={onAddMissingToGroceries}
+              onDeleteRecipe={onDeleteRecipe}
             />
           </Suspense>
         )}
@@ -3067,6 +3072,14 @@ export default function App() {
     });
   };
 
+  const handleDeleteRecipe = (recipe: CatalogRecipe) => {
+    deleteStoredCustomRecipe(recipe.id);
+    markRecipeAsDeleted(recipe.id);
+    setCustomRecipes((prev) => prev.filter((r) => r.id !== recipe.id));
+    setFavorites((prev) => prev.filter((id) => id !== recipe.id));
+    notify(`🗑️ «${recipe.title}» wurde gelöscht.`);
+  };
+
   const bookmarkRecipe = (recipeId: string, recipeTitle: string) => {
     setFavorites((prev) => {
       if (prev.includes(recipeId)) {
@@ -3147,6 +3160,7 @@ export default function App() {
           onSetIsSurpriseModalOpen={setIsSurpriseModalOpen}
           expiringSearchIngredients={expiringSearchIngredients}
           onClearExpiringFilter={handleClearExpiringFilter}
+          onDeleteRecipe={handleDeleteRecipe}
           onMicTrigger={() => {
             notify("Sprachnotiz: 'Reis & Eier schnell'");
           }}

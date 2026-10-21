@@ -3887,6 +3887,30 @@ h2 {
   transform: scale(1.1);
 }
 
+.saved-grid-delete-btn {
+  position: absolute;
+  top: 6px;
+  right: 36px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid #fee2e2;
+  border-radius: 50%;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  color: #ef4444;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  transition: transform 120ms ease, background 120ms ease;
+  z-index: 2;
+}
+
+.saved-grid-delete-btn:hover {
+  background: #fee2e2;
+  color: #dc2626;
+  transform: scale(1.1);
+}
+
 .saved-grid-info {
   padding: 9px 10px 10px;
   display: flex;

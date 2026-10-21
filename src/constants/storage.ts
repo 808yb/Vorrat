@@ -7,6 +7,7 @@ export const STORAGE_KEYS = {
   GROCERIES: "vorrat_groceries",
   FAVORITES: "vorrat_favorites",
   CUSTOM_RECIPES: "vorrat_custom_recipes",
+  DELETED_RECIPES: "vorrat_deleted_recipes",
   WEEKLY_PLAN: "vorrat_weekly_plan",
   FOOD_WASTE: "vorrat_food_waste_saved",
   HOUSEHOLD_NAME: "vorrat_household_name",

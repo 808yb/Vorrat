@@ -7,6 +7,9 @@ import {
   scrapeRecipesFromWebsiteWithGemini,
   scrapeSinglePageFromWebsiteWithGemini,
   isTitleSimilar,
+  deleteStoredCustomRecipe,
+  getDeletedRecipeIds,
+  markRecipeAsDeleted,
 } from "../utils/geminiRecipes";
 import { getRecipeCategory, type RecipeCategory } from "../utils/recipeHelpers";
 import { getRecipePantryBreakdown } from "../utils/pantryMatching";
@@ -134,6 +137,7 @@ interface RecipeLibraryScreenProps {
   onSelectRecipe: (recipe: CatalogRecipe) => void;
   onBack: () => void;
   onNotify?: (message: string) => void;
+  onDeleteRecipe?: (recipe: CatalogRecipe) => void;
 }
 
 export function RecipeLibraryScreen({
@@ -144,6 +148,7 @@ export function RecipeLibraryScreen({
   onSelectRecipe,
   onBack,
   onNotify,
+  onDeleteRecipe,
 }: RecipeLibraryScreenProps) {
   // Sources management state
   const [sources, setSources] = useState<RecipeSourceItem[]>(() => getStoredRecipeSources());
@@ -163,8 +168,29 @@ export function RecipeLibraryScreen({
     setScanProgressMessage("⏹ Scan wird angehalten...");
   };
 
-  // Custom recipes state
+  // Custom recipes state & deleted IDs tracking
   const [customRecipes, setCustomRecipes] = useState<CatalogRecipe[]>(() => getStoredCustomRecipes());
+  const [deletedIds, setDeletedIds] = useState<string[]>(() => getDeletedRecipeIds());
+  const [recipeToDelete, setRecipeToDelete] = useState<CatalogRecipe | null>(null);
+
+  const handleConfirmDelete = () => {
+    if (!recipeToDelete) return;
+    const id = recipeToDelete.id;
+    const title = recipeToDelete.title;
+
+    setCustomRecipes((prev) => prev.filter((r) => r.id !== id));
+    deleteStoredCustomRecipe(id);
+    markRecipeAsDeleted(id);
+    setDeletedIds((prev) => Array.from(new Set([...prev, id])));
+
+    if (onDeleteRecipe) {
+      onDeleteRecipe(recipeToDelete);
+    }
+    setRecipeToDelete(null);
+    if (onNotify) {
+      onNotify(`🗑️ «${title}» wurde gelöscht.`);
+    }
+  };
 
   // Filters state
   const [selectedSource, setSelectedSource] = useState<string>("Alle");
@@ -180,11 +206,13 @@ export function RecipeLibraryScreen({
     } catch {}
   }, [sources]);
 
-  // Combine full recipe catalog + user custom recipes
+  // Combine full recipe catalog + user custom recipes minus deleted recipes
   const allLibraryRecipes = useMemo(() => {
+    const deletedSet = new Set(deletedIds);
     const customIds = new Set(customRecipes.map((r) => r.id));
-    return [...customRecipes, ...FULL_RECIPE_CATALOG.filter((r) => !customIds.has(r.id))];
-  }, [customRecipes]);
+    const combined = [...customRecipes, ...FULL_RECIPE_CATALOG.filter((r) => !customIds.has(r.id))];
+    return combined.filter((r) => !deletedSet.has(r.id));
+  }, [customRecipes, deletedIds]);
 
   // Filtered recipes
   const filteredRecipes = useMemo(() => {
@@ -1238,6 +1266,20 @@ export function RecipeLibraryScreen({
                     )}
                     <button
                       type="button"
+                      className="saved-grid-delete-btn"
+                      title="Rezept löschen"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setRecipeToDelete(recipe);
+                      }}
+                    >
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
                       className="saved-grid-unbookmark-btn"
                       title={isFav ? "Aus Gemerkt entfernen" : "Zu Gemerkt hinzufügen"}
                       onClick={(e) => {
@@ -1382,6 +1424,86 @@ export function RecipeLibraryScreen({
             </div>
           )}
         </>
+      )}
+
+      {/* Mobile-Friendly Delete Confirmation Modal */}
+      {recipeToDelete && (
+        <div
+          className="modal-overlay"
+          onClick={() => setRecipeToDelete(null)}
+          style={{ zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: "16px" }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "#ffffff",
+              borderRadius: "18px",
+              padding: "20px",
+              maxWidth: "360px",
+              width: "100%",
+              boxShadow: "0 20px 40px rgba(15, 23, 42, 0.2)",
+              border: "1px solid #e2e8f0",
+              textAlign: "center",
+            }}
+          >
+            <div
+              style={{
+                width: "48px",
+                height: "48px",
+                borderRadius: "50%",
+                background: "#fee2e2",
+                color: "#dc2626",
+                display: "grid",
+                placeItems: "center",
+                margin: "0 auto 12px",
+                fontSize: "22px",
+              }}
+            >
+              🗑️
+            </div>
+            <h3 style={{ margin: "0 0 6px", fontSize: "16px", fontWeight: 750, color: "#0f172a" }}>
+              Rezept löschen?
+            </h3>
+            <p style={{ margin: "0 0 18px", fontSize: "12.5px", color: "#64748b", lineHeight: 1.4 }}>
+              Möchtest du <strong>«{recipeToDelete.title}»</strong> wirklich dauerhaft aus deiner Rezept-Bibliothek löschen?
+            </p>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+              <button
+                type="button"
+                onClick={() => setRecipeToDelete(null)}
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: "10px",
+                  background: "#f1f5f9",
+                  color: "#475569",
+                  border: "1px solid #cbd5e1",
+                  fontSize: "13px",
+                  fontWeight: 650,
+                  cursor: "pointer",
+                }}
+              >
+                Abbrechen
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: "10px",
+                  background: "#dc2626",
+                  color: "#ffffff",
+                  border: "none",
+                  fontSize: "13px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  boxShadow: "0 2px 6px rgba(220, 38, 38, 0.3)",
+                }}
+              >
+                Löschen
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </main>
   );

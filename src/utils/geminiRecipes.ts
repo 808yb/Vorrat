@@ -368,6 +368,49 @@ export function saveCustomRecipe(recipe: CatalogRecipe, rawIngredients: RawGemin
 }
 
 /**
+ * Löscht ein benutzerdefiniertes / gescraptes Rezept permanent aus dem localStorage.
+ */
+export function deleteStoredCustomRecipe(recipeId: string): CatalogRecipe[] {
+  try {
+    const existing = getStoredCustomRecipes();
+    const next = existing.filter((r) => r.id !== recipeId);
+    localStorage.setItem(STORAGE_KEYS.CUSTOM_RECIPES, JSON.stringify(next));
+    markRecipeAsDeleted(recipeId);
+    return next;
+  } catch (err) {
+    console.error("Fehler beim Löschen des Rezepts im localStorage:", err);
+    return [];
+  }
+}
+
+/**
+ * Gibt alle IDs von Rezepten zurück, die vom Nutzer manuell gelöscht wurden.
+ */
+export function getDeletedRecipeIds(): string[] {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS.DELETED_RECIPES);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Merkt sich die ID eines gelöschten Rezepts dauerhaft im localStorage.
+ */
+export function markRecipeAsDeleted(recipeId: string): void {
+  try {
+    const current = getDeletedRecipeIds();
+    if (!current.includes(recipeId)) {
+      const next = [...current, recipeId];
+      localStorage.setItem(STORAGE_KEYS.DELETED_RECIPES, JSON.stringify(next));
+    }
+  } catch {}
+}
+
+/**
  * Returns the local dev API key (VITE_GEMINI_API_KEY) for guard checks.
  * In production the key lives on the server – this returns "" there.
  * Real API calls must go through callGeminiProxy().
@@ -1111,11 +1154,32 @@ export function extractRecipeCardsFromListing(content: string, _baseUrl: string)
       u.includes("/cookbook") ||
       u.includes("/wp-content/") ||
       u.includes("/cart") ||
-      u.includes("/checkout")
+      u.includes("/checkout") ||
+      u.includes("/lifestyle/") ||
+      u.includes("what-i-eat") ||
+      u.includes("what-i-ate") ||
+      u.includes("grocery-haul") ||
+      u.includes("vlog")
     ) {
       return true;
     }
     if (u.endsWith("#wp--skip-link--target") || u.endsWith("#content")) return true;
+    if (
+      t.includes("what i eat") ||
+      t.includes("what i ate") ||
+      t.includes("was ich esse") ||
+      t.includes("was ich gegessen") ||
+      t.includes("grocery haul") ||
+      t.includes("food haul") ||
+      t.includes("day in the life") ||
+      t.includes("morning routine") ||
+      t.includes("weekly vlog") ||
+      t.includes("q&a") ||
+      t.includes("favorites of the month") ||
+      t.includes("roundup")
+    ) {
+      return true;
+    }
     if (
       [
         "appetizer",
