@@ -6,6 +6,9 @@ export interface RecipeStep {
   tag?: string;
 }
 
+export type RecipeCategory = "Frühstück" | "Hauptgericht" | "Snack" | "Dessert" | "Backen";
+export const RECIPE_CATEGORIES: RecipeCategory[] = ["Hauptgericht", "Frühstück", "Snack", "Dessert", "Backen"];
+
 export interface CatalogRecipe {
   id: string;
   title: string;
@@ -35,6 +38,10 @@ export interface CatalogRecipe {
     | "Essen & Trinken"
     | "Sallys Welt"
     | string;
+  sourceUrl?: string;
+  videoUrl?: string;
+  category?: RecipeCategory;
+  alternativeOverrides?: Record<string, any>;
   mealType?: "dinner" | "breakfast" | "dessert" | "baking" | "snack";
   equipment?: Array<"pan" | "airfryer" | "oven" | "microwave" | "blender">;
   rawIngredients?: Array<{ name: string; baseAmountPerPortion: number; unit: string; optional?: boolean }>;

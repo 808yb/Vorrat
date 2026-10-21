@@ -1,11 +1,20 @@
 import { type CatalogRecipe } from "../data/recipeCatalog";
 import { getSafeIngredientsList } from "./recipeHelpers";
+import { STORAGE_KEYS } from "../constants/storage";
+
+export interface AlternativeOverride {
+  mode: "missing" | "pantry" | "custom";
+  pantryItemName?: string;
+  customName?: string;
+}
 
 export interface IngredientMatch {
   name: string;
   amount: string;
   optional?: boolean;
   matchedByAlternative?: string;
+  isAlternative?: boolean;
+  matchedPantryItemName?: string;
 }
 
 export interface RecipePantryBreakdown {
@@ -13,6 +22,104 @@ export interface RecipePantryBreakdown {
   missing: IngredientMatch[];
   all: IngredientMatch[];
   matchPercentage: number;
+}
+
+let inMemoryOverrides: Record<string, AlternativeOverride> = {};
+
+/**
+ * Cleans alternative strings removing any debug artefacts, arrows (↳, →),
+ * raw slashes, double parentheses, or cut-off texts.
+ */
+export function cleanAlternativeText(text: string): string {
+  if (!text) return "";
+  return text
+    .replace(/[↳→]/g, "")
+    .replace(/\b(?:debug|undefined|null)\b/gi, "")
+    .replace(/[\/\\|]+/g, " ")
+    .replace(/\(\(+/g, "(")
+    .replace(/\)\)+/g, ")")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Formats a clean, calm alternative hint for display: e.g. "Vorhanden (Rapsöl)"
+ * Guarantees no double brackets or broken layout strings.
+ */
+export function formatAlternativeHint(matchedPantryName: string): string {
+  const cleanName = cleanAlternativeText(matchedPantryName).replace(/^\(+|\)+$/g, "").trim();
+  if (!cleanName) return "Vorhanden";
+  return `Vorhanden (${cleanName})`;
+}
+
+/**
+ * Retrieves all stored alternative overrides from localStorage (or in-memory in test environments).
+ */
+export function getAlternativeOverrides(): Record<string, AlternativeOverride> {
+  try {
+    if (typeof localStorage !== "undefined") {
+      const raw = localStorage.getItem(STORAGE_KEYS.ALTERNATIVE_OVERRIDES);
+      if (!raw) return {};
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? parsed : {};
+    }
+    return inMemoryOverrides;
+  } catch {
+    return inMemoryOverrides;
+  }
+}
+
+/**
+ * Generates the lookup key for a recipe ingredient override.
+ */
+export function getAlternativeOverrideKey(recipeId: string | undefined, ingredientName: string): string {
+  const rId = (recipeId || "global").trim().toLowerCase();
+  const ingNorm = normalizeIngredientName(ingredientName);
+  return `${rId}:::${ingNorm}`;
+}
+
+/**
+ * Gets a specific override for a recipe ingredient if set by the user.
+ */
+export function getAlternativeOverride(recipeId: string | undefined, ingredientName: string): AlternativeOverride | null {
+  const all = getAlternativeOverrides();
+  const key = getAlternativeOverrideKey(recipeId, ingredientName);
+  if (all[key]) return all[key];
+  const globalKey = getAlternativeOverrideKey("global", ingredientName);
+  return all[globalKey] || null;
+}
+
+/**
+ * Saves or deletes a user override for a recipe ingredient alternative.
+ */
+export function setAlternativeOverride(
+  recipeId: string | undefined,
+  ingredientName: string,
+  override: AlternativeOverride | null
+): void {
+  try {
+    const all = getAlternativeOverrides();
+    const key = getAlternativeOverrideKey(recipeId, ingredientName);
+    if (override === null) {
+      delete all[key];
+      delete inMemoryOverrides[key];
+    } else {
+      all[key] = override;
+      inMemoryOverrides[key] = override;
+    }
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(STORAGE_KEYS.ALTERNATIVE_OVERRIDES, JSON.stringify(all));
+    }
+    if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") {
+      window.dispatchEvent(
+        new CustomEvent("vorrat_alternative_override_changed", {
+          detail: { recipeId, ingredientName, override },
+        })
+      );
+    }
+  } catch (err) {
+    console.error("Fehler beim Speichern des Alternativen-Overrides:", err);
+  }
 }
 
 // Culinary equivalence groups: Items in the same array can substitute for one another
@@ -132,6 +239,40 @@ export const normalizeIngredientName = (str: string): string =>
     .trim();
 
 /**
+ * Determines whether a secondary "Aus Vorrat: {matchedPantryName}" hint line should be shown.
+ * Suppresses the hint if the pantry name already obviously contains or matches the recipe ingredient name
+ * (e.g. "Salz" vs "Speisesalz", "Schwarzer Pfeffer" vs "Pfeffer", "Zitrone" vs "Zitrone Bio", "Mehl" vs "Weizenmehl").
+ */
+export function shouldShowAlternativeHint(recipeIngName?: string, matchedPantryName?: string): boolean {
+  if (!recipeIngName || !matchedPantryName) return false;
+  const r = recipeIngName.toLowerCase().trim();
+  const p = matchedPantryName.toLowerCase().trim();
+  if (r === p) return false;
+
+  const normR = normalizeIngredientName(r);
+  const normP = normalizeIngredientName(p);
+  if (normR === normP) return false;
+
+  const rClean = r.replace(/[^a-zäöüß0-9]/gi, "");
+  const pClean = p.replace(/[^a-zäöüß0-9]/gi, "");
+  if (rClean === pClean) return false;
+
+  // Direct substring / prefix / suffix matches
+  if (pClean.includes(rClean) || rClean.includes(pClean)) {
+    return false;
+  }
+
+  // Also check if normalized strings contain each other
+  const normRClean = normR.replace(/[^a-zäöüß0-9]/gi, "");
+  const normPClean = normP.replace(/[^a-zäöüß0-9]/gi, "");
+  if (normPClean.includes(normRClean) || normRClean.includes(normPClean)) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
  * Checks if a string specifically refers to drinking or tap water.
  * Excludes culinary liquids like Gurkenwasser, Rosenwasser, Kirschwasser, Kokoswasser, etc.
  */
@@ -164,24 +305,57 @@ export function isDrinkingWater(name: string): boolean {
 export interface MatchedPantryResult {
   pantryItem: { name: string; amount?: number; unit?: string; isUnlimited?: boolean };
   matchedByAlternative?: string;
+  isAlternative?: boolean;
 }
 
 /**
  * Finds the matching pantry item for any recipe ingredient,
- * intelligently supporting alternatives (e.g. "Butter oder Öl", "Milch oder Wasser")
- * and culinary equivalents (e.g. Sonnenblumenöl <-> Öl, Kirschtomaten <-> Cherrytomaten).
+ * intelligently supporting alternatives (e.g. "Butter oder Öl", "Milch oder Wasser"),
+ * culinary equivalents (e.g. Sonnenblumenöl <-> Öl, Kirschtomaten <-> Cherrytomaten),
+ * and user-configured alternative overrides.
  */
 export function findMatchingPantryItem(
   ingredientName: string,
-  pantry: Array<{ name: string; amount?: number; unit?: string; isUnlimited?: boolean }>
+  pantry: Array<{ name: string; amount?: number; unit?: string; isUnlimited?: boolean }>,
+  recipeId?: string
 ): MatchedPantryResult | null {
   if (!ingredientName || !pantry || pantry.length === 0) return null;
+
+  // Check user-configured override for this specific recipe ingredient
+  const override = getAlternativeOverride(recipeId, ingredientName);
+  if (override) {
+    if (override.mode === "missing") {
+      return null;
+    }
+    if (override.mode === "pantry" && override.pantryItemName) {
+      const targetPantry = pantry.find(
+        (p) =>
+          normalizeIngredientName(p.name) === normalizeIngredientName(override.pantryItemName!) ||
+          p.name.toLowerCase() === override.pantryItemName!.toLowerCase()
+      );
+      if (targetPantry) {
+        return {
+          pantryItem: targetPantry,
+          matchedByAlternative: cleanAlternativeText(targetPantry.name),
+          isAlternative: true,
+        };
+      }
+    }
+    if (override.mode === "custom" && override.customName) {
+      return {
+        pantryItem: { name: override.customName, amount: 9999, unit: "g", isUnlimited: true },
+        matchedByAlternative: cleanAlternativeText(override.customName),
+        isAlternative: true,
+      };
+    }
+  }
 
   // Water is always unlimited only if it is actually plain drinking/tap water
   if (isDrinkingWater(ingredientName)) {
     return {
       pantryItem: { name: "Leitungswasser", amount: 999999, unit: "ml", isUnlimited: true },
       matchedByAlternative: undefined,
+      isAlternative: false,
     };
   }
 
@@ -205,6 +379,7 @@ export function findMatchingPantryItem(
       return {
         pantryItem: { name: "Leitungswasser", amount: 999999, unit: "ml", isUnlimited: true },
         matchedByAlternative: undefined,
+        isAlternative: false,
       };
     }
 
@@ -231,7 +406,8 @@ export function findMatchingPantryItem(
       if (spiceItem) {
         return {
           pantryItem: spiceItem,
-          matchedByAlternative: spiceItem.name,
+          matchedByAlternative: cleanAlternativeText(spiceItem.name),
+          isAlternative: true,
         };
       }
     }
@@ -267,9 +443,11 @@ export function findMatchingPantryItem(
 
     if (matched) {
       const isExact = normalizeIngredientName(matched.name) === normalizeIngredientName(ingredientName);
+      const cleanAlt = !isExact ? cleanAlternativeText(matched.name) : undefined;
       return {
         pantryItem: matched,
-        matchedByAlternative: !isExact ? matched.name : undefined,
+        matchedByAlternative: cleanAlt,
+        isAlternative: !isExact,
       };
     }
   }
@@ -290,12 +468,18 @@ export function getRecipePantryBreakdown(
   const missing: IngredientMatch[] = [];
 
   for (const ing of allIngredients) {
-    const match = findMatchingPantryItem(ing.name, pantry);
+    const match = findMatchingPantryItem(ing.name, pantry, recipe?.id);
 
     if (match) {
+      const isAlt = Boolean(
+        match.isAlternative ||
+        (match.matchedByAlternative && normalizeIngredientName(match.matchedByAlternative) !== normalizeIngredientName(ing.name))
+      );
       inStock.push({
         ...ing,
-        matchedByAlternative: match.matchedByAlternative,
+        matchedByAlternative: isAlt ? cleanAlternativeText(match.matchedByAlternative || match.pantryItem.name) : undefined,
+        isAlternative: isAlt,
+        matchedPantryItemName: match.pantryItem.name,
       });
     } else {
       missing.push(ing);
@@ -307,3 +491,4 @@ export function getRecipePantryBreakdown(
 
   return { inStock, missing, all: allIngredients, matchPercentage };
 }
+

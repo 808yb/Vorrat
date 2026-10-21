@@ -1,8 +1,9 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence, useMotionValue, useTransform } from "motion/react";
 import type { CatalogRecipe } from "../data/recipeCatalog";
 import { RecipeStepsAccordion } from "./CookingModal";
 import { getRecipePantryBreakdown } from "../utils/pantryMatching";
+import { AlternativeManageModal } from "./AlternativeManageModal";
 
 interface RecipeSwipeDeckProps {
   recipes: Array<
@@ -40,6 +41,7 @@ function SwipeCardContent({
   onOpenDetails,
   onBookmark,
   onAddMissingToGroceries,
+  onOpenAlternativeModal,
 }: {
   recipe: CatalogRecipe & {
     calories: string;
@@ -59,6 +61,7 @@ function SwipeCardContent({
   onOpenDetails: (recipe: CatalogRecipe) => void;
   onBookmark?: (id: string, title: string) => void;
   onAddMissingToGroceries?: (items: Array<{ name: string; amount?: string }>) => void;
+  onOpenAlternativeModal?: (name: string, amount?: string, currentMatch?: string) => void;
 }) {
   const breakdown = useMemo(() => {
     return getRecipePantryBreakdown(recipe, pantry || [], servings);
@@ -164,36 +167,6 @@ function SwipeCardContent({
           </svg>
         </button>
 
-        {recipe.source && (
-          <span
-            className="swipe-card-source-badge"
-            style={{
-              position: "absolute",
-              top: "12px",
-              left: "12px",
-              background: "rgba(15, 23, 42, 0.78)",
-              backdropFilter: "blur(6px)",
-              color: "#ffffff",
-              fontSize: "10.5px",
-              fontWeight: 750,
-              padding: "4px 9px",
-              borderRadius: "8px",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "4px",
-              zIndex: 3,
-              boxShadow: "0 2px 6px rgba(0,0,0,0.25)",
-            }}
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
-              <circle cx="12" cy="12" r="10" />
-              <line x1="2" y1="12" x2="22" y2="12" />
-              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z" />
-            </svg>
-            <span>{recipe.source}</span>
-          </span>
-        )}
-
         {recipe.imageUrl ? (
           <img
             src={recipe.imageUrl}
@@ -296,22 +269,49 @@ function SwipeCardContent({
                     </div>
                   </div>
                   <div className="pantry-chips-wrap">
-                    {breakdown.inStock.map((item, idx) => (
-                      <span key={idx} className="pantry-chip instock">
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ marginRight: "3px", flexShrink: 0 }}>
-                          <polyline points="20 6 9 17 4 12" />
-                        </svg>
-                        <span className="chip-name">
-                          {item.name}
-                          {item.matchedByAlternative && (
-                            <small style={{ opacity: 0.85, marginLeft: "4px", fontSize: "9px", color: "#047857" }}>
-                              (Vorrat: {item.matchedByAlternative})
-                            </small>
+                    {breakdown.inStock.map((item, idx) => {
+                      const isAlt = Boolean(item.isAlternative || item.matchedByAlternative);
+                      return (
+                        <span
+                          key={idx}
+                          className={`pantry-chip ${isAlt ? "alternative-chip" : "instock"}`}
+                          onClick={(e) => {
+                            if (isAlt && onOpenAlternativeModal) {
+                              e.stopPropagation();
+                              onOpenAlternativeModal(item.name, item.amount, item.matchedByAlternative);
+                            }
+                          }}
+                          style={
+                            isAlt
+                              ? {
+                                  background: "#f0fdfa",
+                                  border: "1px solid #99f6e4",
+                                  color: "#0f766e",
+                                  cursor: "pointer",
+                                }
+                              : undefined
+                          }
+                          title={isAlt ? "Alternative anpassen / ändern" : undefined}
+                        >
+                          {isAlt ? (
+                            <span style={{ marginRight: "3px", fontWeight: 700, fontSize: "11px" }}>⇄</span>
+                          ) : (
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ marginRight: "3px", flexShrink: 0 }}>
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
                           )}
+                          <span className="chip-name">
+                            {item.name}
+                            {isAlt && item.matchedByAlternative && (
+                              <small style={{ opacity: 0.9, marginLeft: "4px", fontSize: "9.5px", color: "#0f766e", fontWeight: 600 }}>
+                                ({item.matchedByAlternative})
+                              </small>
+                            )}
+                          </span>
+                          <span className="chip-amount">{item.amount}</span>
                         </span>
-                        <span className="chip-amount">{item.amount}</span>
-                      </span>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -328,22 +328,49 @@ function SwipeCardContent({
                 </div>
               </div>
               <div className="pantry-chips-wrap">
-                {breakdown.all.map((item, idx) => (
-                  <span key={idx} className="pantry-chip instock">
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ marginRight: "3px", flexShrink: 0 }}>
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                    <span className="chip-name">
-                      {item.name}
-                      {item.matchedByAlternative && (
-                        <small style={{ opacity: 0.85, marginLeft: "4px", fontSize: "9px", color: "#047857" }}>
-                          (Vorrat: {item.matchedByAlternative})
-                        </small>
+                {breakdown.all.map((item, idx) => {
+                  const isAlt = Boolean(item.isAlternative || item.matchedByAlternative);
+                  return (
+                    <span
+                      key={idx}
+                      className={`pantry-chip ${isAlt ? "alternative-chip" : "instock"}`}
+                      onClick={(e) => {
+                        if (isAlt && onOpenAlternativeModal) {
+                          e.stopPropagation();
+                          onOpenAlternativeModal(item.name, item.amount, item.matchedByAlternative);
+                        }
+                      }}
+                      style={
+                        isAlt
+                          ? {
+                              background: "#f0fdfa",
+                              border: "1px solid #99f6e4",
+                              color: "#0f766e",
+                              cursor: "pointer",
+                            }
+                          : undefined
+                      }
+                      title={isAlt ? "Alternative anpassen / ändern" : undefined}
+                    >
+                      {isAlt ? (
+                        <span style={{ marginRight: "3px", fontWeight: 700, fontSize: "11px" }}>⇄</span>
+                      ) : (
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ marginRight: "3px", flexShrink: 0 }}>
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
                       )}
+                      <span className="chip-name">
+                        {item.name}
+                        {isAlt && item.matchedByAlternative && (
+                          <small style={{ opacity: 0.9, marginLeft: "4px", fontSize: "9.5px", color: "#0f766e", fontWeight: 600 }}>
+                            ({item.matchedByAlternative})
+                          </small>
+                        )}
+                      </span>
+                      <span className="chip-amount">{item.amount}</span>
                     </span>
-                    <span className="chip-amount">{item.amount}</span>
-                  </span>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -388,6 +415,20 @@ export function RecipeSwipeDeck({
   const [isAnimating, setIsAnimating] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [expandedInCard, setExpandedInCard] = useState<string | null>(null);
+  const [selectedAltIng, setSelectedAltIng] = useState<{
+    recipeId?: string;
+    recipeTitle?: string;
+    name: string;
+    amount?: string;
+    currentMatch?: string;
+  } | null>(null);
+  const [, setAltRefreshKey] = useState(0);
+
+  useEffect(() => {
+    const handler = () => setAltRefreshKey((k) => k + 1);
+    window.addEventListener("vorrat_alternative_override_changed", handler);
+    return () => window.removeEventListener("vorrat_alternative_override_changed", handler);
+  }, []);
 
   const currentRecipe = recipes[currentIndex];
   const nextRecipe = recipes[currentIndex + 1];
@@ -569,6 +610,15 @@ export function RecipeSwipeDeck({
                   onOpenDetails={onOpenDetails}
                   onBookmark={onBookmark}
                   onAddMissingToGroceries={onAddMissingToGroceries}
+                  onOpenAlternativeModal={(name, amount, currentMatch) =>
+                    setSelectedAltIng({
+                      recipeId: thirdRecipe.id,
+                      recipeTitle: thirdRecipe.title,
+                      name,
+                      amount,
+                      currentMatch,
+                    })
+                  }
                 />
               </motion.div>
             )}
@@ -616,6 +666,15 @@ export function RecipeSwipeDeck({
                   onOpenDetails={onOpenDetails}
                   onBookmark={onBookmark}
                   onAddMissingToGroceries={onAddMissingToGroceries}
+                  onOpenAlternativeModal={(name, amount, currentMatch) =>
+                    setSelectedAltIng({
+                      recipeId: nextRecipe.id,
+                      recipeTitle: nextRecipe.title,
+                      name,
+                      amount,
+                      currentMatch,
+                    })
+                  }
                 />
               </motion.div>
             )}
@@ -705,6 +764,15 @@ export function RecipeSwipeDeck({
                 onOpenDetails={onOpenDetails}
                 onBookmark={onBookmark}
                 onAddMissingToGroceries={onAddMissingToGroceries}
+                onOpenAlternativeModal={(name, amount, currentMatch) =>
+                  setSelectedAltIng({
+                    recipeId: currentRecipe.id,
+                    recipeTitle: currentRecipe.title,
+                    name,
+                    amount,
+                    currentMatch,
+                  })
+                }
               />
             </motion.div>
           </div>
@@ -803,6 +871,23 @@ export function RecipeSwipeDeck({
           <span>Wische links: Überspringen</span> · <span>Wische rechts: Zu Gemerkte Rezepte (Kochen)</span>
         </p>
       )}
+
+      {/* Alternative Ingredient Manager Modal */}
+      <AlternativeManageModal
+        isOpen={Boolean(selectedAltIng)}
+        onClose={() => setSelectedAltIng(null)}
+        recipeId={selectedAltIng?.recipeId}
+        recipeTitle={selectedAltIng?.recipeTitle}
+        ingredientName={selectedAltIng?.name || ""}
+        amount={selectedAltIng?.amount}
+        currentMatchedPantryName={selectedAltIng?.currentMatch}
+        pantryItems={pantry || []}
+        onChanged={() => {
+          if (onNotify && selectedAltIng?.name) {
+            onNotify(`Alternative für «${selectedAltIng.name}» aktualisiert!`);
+          }
+        }}
+      />
     </div>
   );
 }

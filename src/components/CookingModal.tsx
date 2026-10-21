@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import type { CatalogRecipe, RecipeStep } from "../data/recipeCatalog";
-import { getRecipePantryBreakdown } from "../utils/pantryMatching";
+import { getRecipePantryBreakdown, shouldShowAlternativeHint } from "../utils/pantryMatching";
 import { getSafeSteps, getSafeIngredientsList } from "../utils/recipeHelpers";
 import { askAboutRecipeWithGemini } from "../utils/geminiRecipes";
+import { AlternativeManageModal } from "./AlternativeManageModal";
 
 interface CookingModalProps {
   recipe: CatalogRecipe | null;
@@ -36,6 +37,18 @@ export function CookingModal({
   const [checkedSteps, setCheckedSteps] = useState<Record<number, boolean>>({});
   const [checkedIngredients, setCheckedIngredients] = useState<Record<string, boolean>>({});
   const [showFocusIngredients, setShowFocusIngredients] = useState(true);
+  const [selectedAltIng, setSelectedAltIng] = useState<{
+    name: string;
+    amount?: string;
+    currentMatch?: string;
+  } | null>(null);
+  const [, setAltRefreshKey] = useState(0);
+
+  useEffect(() => {
+    const handler = () => setAltRefreshKey((k) => k + 1);
+    window.addEventListener("vorrat_alternative_override_changed", handler);
+    return () => window.removeEventListener("vorrat_alternative_override_changed", handler);
+  }, []);
 
   // Ask about recipe state
   const [isAskModalOpen, setIsAskModalOpen] = useState(false);
@@ -236,20 +249,6 @@ export function CookingModal({
               >
                 Koch-Modus
               </span>
-              {recipe.source && (
-                <span
-                  style={{
-                    fontSize: "9px",
-                    background: "rgba(255,255,255,0.25)",
-                    color: "#ffffff",
-                    padding: "2px 7px",
-                    borderRadius: "99px",
-                    fontWeight: 700,
-                  }}
-                >
-                  {recipe.source}
-                </span>
-              )}
               <span style={{ fontSize: "10px", color: "#a7f3d0" }}>
                 {recipe.time} · {recipe.difficulty}
               </span>
@@ -610,15 +609,17 @@ export function CookingModal({
                               fontSize: "10.5px",
                             }}
                           >
-                            <span style={{ color: isChecked ? "#15803d" : "#334155", textDecoration: isChecked ? "line-through" : "none", fontWeight: 500 }}>
-                              {isChecked ? "✓ " : "✓ "}{ing.name}
-                              {ing.matchedByAlternative && (
-                                <span style={{ opacity: 0.85, marginLeft: "4px", fontSize: "9px", color: "#047857" }}>
-                                  (Vorrat: {ing.matchedByAlternative})
+                            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "2px", flex: 1, minWidth: 0, paddingRight: "8px" }}>
+                              <span style={{ color: isChecked ? "#15803d" : "#334155", textDecoration: isChecked ? "line-through" : "none", fontWeight: 500, whiteSpace: "normal", wordBreak: "break-word" }}>
+                                {isChecked ? "✓ " : "✓ "}{ing.name}
+                              </span>
+                              {shouldShowAlternativeHint(ing.name, ing.matchedByAlternative) && ing.matchedByAlternative && (
+                                <span style={{ fontSize: "9.5px", color: "#64748b", display: "block", lineHeight: 1.2 }}>
+                                  Aus Vorrat: {ing.matchedByAlternative}
                                 </span>
                               )}
-                            </span>
-                            <strong style={{ fontSize: "10px", color: "#059669" }}>{ing.amount}</strong>
+                            </div>
+                            <strong style={{ fontSize: "10px", color: "#059669", flexShrink: 0 }}>{ing.amount}</strong>
                           </button>
                         );
                       })}
@@ -1061,6 +1062,25 @@ export function CookingModal({
         </div>
 
         {/* Modal Footer */}
+        {Boolean(recipe.sourceUrl) && (
+          <div style={{ padding: "0 20px 8px", textAlign: "center", background: "#ffffff" }}>
+            <a
+              href={recipe.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                fontSize: "11.5px",
+                color: "#64748b",
+                textDecoration: "none",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "4px",
+              }}
+            >
+              <span>Original-Quelle öffnen ↗</span>
+            </a>
+          </div>
+        )}
         <div
           style={{
             padding: "14px 20px",
@@ -1518,6 +1538,18 @@ export function CookingModal({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Alternative Ingredient Manager Modal */}
+      <AlternativeManageModal
+        isOpen={Boolean(selectedAltIng)}
+        onClose={() => setSelectedAltIng(null)}
+        recipeId={recipe?.id}
+        recipeTitle={recipe?.title}
+        ingredientName={selectedAltIng?.name || ""}
+        amount={selectedAltIng?.amount}
+        currentMatchedPantryName={selectedAltIng?.currentMatch}
+        pantryItems={pantry || []}
+      />
     </div>
   );
 }

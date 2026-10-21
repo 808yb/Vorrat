@@ -59,6 +59,7 @@ export function RecipeImportModal({
       id: "demo-reel-" + Date.now(),
       title: "Crispy Lime-Chicken Wraps (Viral Reel)",
       subtitle: "Knusprige Hähnchenstreifen mit Avocado-Limetten-Creme & knackigem Salat",
+      category: "Snack",
       time: "15 Min.",
       difficulty: "Einfach",
       baseCal: 520,
@@ -327,6 +328,10 @@ export function RecipeImportModal({
                   className="w-full h-44 object-cover"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-950/30 to-transparent" />
+
+                <div className="absolute top-3 left-3 bg-white/95 text-slate-800 font-bold text-xs px-2.5 py-1 rounded-full backdrop-blur-md shadow-sm border border-slate-200">
+                  {importedData.recipe.category || "Hauptgericht"}
+                </div>
 
                 <div className="absolute top-3 right-3 bg-emerald-500 text-slate-950 font-bold text-xs px-2.5 py-1 rounded-full backdrop-blur-md shadow-sm">
                   {importedData.recipe.matchScore}% im Vorrat

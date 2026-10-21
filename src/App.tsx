@@ -2,8 +2,8 @@ import { useMemo, useState, useEffect, useRef, lazy, Suspense, type ReactNode } 
 import { motion } from "motion/react";
 import { ProductMark, getFoodTone } from "./components/FoodIcons";
 import { FULL_RECIPE_CATALOG, type CatalogRecipe } from "./data/recipeCatalog";
-import { getStoredCustomRecipes, generateRecipeWithGemini, rehydrateCustomRecipe } from "./utils/geminiRecipes";
-import { getSafeIngredientsList, getSafeAvailable, getCurrentMealTimeSlot, decomposeCompositeIngredients, isEggIngredientName } from "./utils/recipeHelpers";
+import { getStoredCustomRecipes, generateRecipeWithGemini, rehydrateCustomRecipe, resolveRecipeFoodImage } from "./utils/geminiRecipes";
+import { getSafeIngredientsList, getSafeAvailable, getCurrentMealTimeSlot, decomposeCompositeIngredients, isEggIngredientName, getRecipeCategory, type RecipeCategory } from "./utils/recipeHelpers";
 import { RecipeSwipeDeck } from "./components/RecipeSwipeDeck";
 import { getRecipePantryBreakdown, findMatchingPantryItem } from "./utils/pantryMatching";
 import { EditPantryItemModal } from "./components/EditPantryItemModal";
@@ -25,6 +25,7 @@ import {
 import { STORAGE_KEYS, wipeAllAppData } from "./constants/storage";
 
 import { UnifiedAddModal } from "./components/UnifiedAddModal";
+import { RecipeLibraryScreen } from "./components/RecipeLibraryScreen";
 
 // Code-splitting heavy modals for faster initial page load
 const CookingModal = lazy(() =>
@@ -249,7 +250,7 @@ function Icon({
         <path d="m18 3 .7 2.3L21 6l-2.3.7L18 9l-.7-2.3L15 6l2.3-.7L18 3Z" />
       </>
     ),
-        trash: (
+    trash: (
       <>
         <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
       </>
@@ -587,24 +588,24 @@ export function calculateItemTotalNutrients(item: PantryItem) {
     const weightPerPiece = isEggIngredientName(lower)
       ? 55
       : lower.includes("frühlingszwiebel") || lower.includes("lauchzwiebel")
-      ? 20
-      : lower.includes("zwiebel") || lower.includes("lauch")
-      ? 100
-      : lower.includes("limette") || lower.includes("zitrone")
-      ? 60
-      : lower.includes("apfel")
-      ? 180
-      : lower.includes("banane")
-      ? 120
-      : lower.includes("paprika")
-      ? 160
-      : lower.includes("gurke")
-      ? 350
-      : lower.includes("karotte") || lower.includes("möhre")
-      ? 100
-      : lower.includes("knoblauch")
-      ? 5
-      : 60;
+        ? 20
+        : lower.includes("zwiebel") || lower.includes("lauch")
+          ? 100
+          : lower.includes("limette") || lower.includes("zitrone")
+            ? 60
+            : lower.includes("apfel")
+              ? 180
+              : lower.includes("banane")
+                ? 120
+                : lower.includes("paprika")
+                  ? 160
+                  : lower.includes("gurke")
+                    ? 350
+                    : lower.includes("karotte") || lower.includes("möhre")
+                      ? 100
+                      : lower.includes("knoblauch")
+                        ? 5
+                        : 60;
     factor = (item.amount * weightPerPiece) / 100;
   } else if (unit === "dose") {
     factor = (item.amount * 400) / 100;
@@ -975,50 +976,50 @@ function PantryScreen({
         </div>
       )}
 
-        {visible.length === 0 && (
+      {visible.length === 0 && (
+        <div
+          style={{
+            padding: "36px 20px",
+            textAlign: "center",
+            background: "#ffffff",
+            borderRadius: "18px",
+            border: "1.5px dashed #cbd5e1",
+            margin: "12px 0",
+          }}
+        >
           <div
             style={{
-              padding: "36px 20px",
-              textAlign: "center",
-              background: "#ffffff",
-              borderRadius: "18px",
-              border: "1.5px dashed #cbd5e1",
-              margin: "12px 0",
+              width: "48px",
+              height: "48px",
+              borderRadius: "50%",
+              background: "#f1f5f9",
+              color: "#64748b",
+              display: "grid",
+              placeItems: "center",
+              margin: "0 auto 12px",
             }}
           >
-            <div
-              style={{
-                width: "48px",
-                height: "48px",
-                borderRadius: "50%",
-                background: "#f1f5f9",
-                color: "#64748b",
-                display: "grid",
-                placeItems: "center",
-                margin: "0 auto 12px",
-              }}
-            >
-              <Icon name="archive" size={24} />
-            </div>
-            <h3 style={{ margin: "0 0 6px", fontSize: "15px", color: "#0f172a", fontWeight: 750 }}>
-              {pantry.length === 0 ? "Keine Lebensmittel im Vorrat" : "Keine Treffer gefunden"}
-            </h3>
-            <p style={{ margin: "0 auto 14px", fontSize: "12.5px", color: "#64748b", maxWidth: "280px" }}>
-              {pantry.length === 0
-                ? "Füge Vorräte über den grünen Plus-Button hinzu oder stelle die Standard-Demo wieder her."
-                : `Keine Vorräte für den Filter «${filter}» vorhanden.`}
-            </p>
-            {pantry.length === 0 && onResetDemo && (
-              <Button
-                className="primary-button"
-                onClick={onResetDemo}
-                style={{ padding: "8px 18px", fontSize: "12.5px", margin: "0 auto", display: "inline-flex" }}
-              >
-                Standard-Demo laden
-              </Button>
-            )}
+            <Icon name="archive" size={24} />
           </div>
-        )}
+          <h3 style={{ margin: "0 0 6px", fontSize: "15px", color: "#0f172a", fontWeight: 750 }}>
+            {pantry.length === 0 ? "Keine Lebensmittel im Vorrat" : "Keine Treffer gefunden"}
+          </h3>
+          <p style={{ margin: "0 auto 14px", fontSize: "12.5px", color: "#64748b", maxWidth: "280px" }}>
+            {pantry.length === 0
+              ? "Füge Vorräte über den grünen Plus-Button hinzu oder stelle die Standard-Demo wieder her."
+              : `Keine Vorräte für den Filter «${filter}» vorhanden.`}
+          </p>
+          {pantry.length === 0 && onResetDemo && (
+            <Button
+              className="primary-button"
+              onClick={onResetDemo}
+              style={{ padding: "8px 18px", fontSize: "12.5px", margin: "0 auto", display: "inline-flex" }}
+            >
+              Standard-Demo laden
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* Bottom Management & Reset Action */}
       {pantry.length > 0 && onOpenReset && (
@@ -1101,7 +1102,7 @@ function CookScreen({
     if (isListening) {
       try {
         recognitionRef.current?.stop();
-      } catch {}
+      } catch { }
       setIsListening(false);
       return;
     }
@@ -1342,13 +1343,26 @@ function CookScreen({
     });
   }, [activeSearchedRecipe, catalogShuffleList, servings, pantry]);
 
+  const [selectedCategory, setSelectedCategory] = useState<RecipeCategory | "Alle">("Alle");
+
+  const handleSelectCategory = (cat: RecipeCategory | "Alle") => {
+    setSelectedCategory(cat);
+    setDeckKey((k) => k + 1);
+  };
+
   const filteredDeckRecipes = useMemo(() => {
-    if (surpriseFilters?.preferences?.includes("pantry100")) {
-      const perfectOnly = allCatalogRecipesFormatted.filter((r) => r.missingCount === 0);
-      return perfectOnly.length > 0 ? perfectOnly : allCatalogRecipesFormatted;
+    let list = allCatalogRecipesFormatted;
+    if (selectedCategory !== "Alle") {
+      list = list.filter((r) => getRecipeCategory(r) === selectedCategory);
     }
-    return allCatalogRecipesFormatted;
-  }, [surpriseFilters, allCatalogRecipesFormatted]);
+    if (surpriseFilters?.preferences?.includes("pantry100")) {
+      const perfectOnly = list.filter((r) => r.missingCount === 0);
+      return perfectOnly.length > 0 ? perfectOnly : list;
+    }
+    return list;
+  }, [surpriseFilters, allCatalogRecipesFormatted, selectedCategory]);
+
+  const [isLibraryViewOpen, setIsLibraryViewOpen] = useState(false);
 
   // Überrasch mich Handler: Open interactive preference dialog
   const handleSurpriseMe = () => {
@@ -1411,6 +1425,36 @@ function CookScreen({
     }
   };
 
+  if (isLibraryViewOpen) {
+    return (
+      <>
+        <RecipeLibraryScreen
+          pantry={pantry}
+          servings={servings}
+          favorites={favorites}
+          onToggleFavorite={onToggleFavorite}
+          onSelectRecipe={(rec) => setActiveModalRecipe(rec)}
+          onBack={() => setIsLibraryViewOpen(false)}
+          onNotify={onNotify}
+        />
+        {Boolean(activeModalRecipe) && (
+          <Suspense fallback={null}>
+            <CookingModal
+              recipe={activeModalRecipe}
+              isOpen={Boolean(activeModalRecipe)}
+              onClose={() => setActiveModalRecipe(null)}
+              onCook={onCook}
+              pantry={pantry}
+              isFavorite={activeModalRecipe ? favorites.includes(activeModalRecipe.id) : false}
+              onToggleFavorite={onToggleFavorite}
+              onAddMissingToGroceries={onAddMissingToGroceries}
+            />
+          </Suspense>
+        )}
+      </>
+    );
+  }
+
   return (
     <main className="screen cook-screen">
       <section className="title-row cook-title">
@@ -1452,11 +1496,11 @@ function CookScreen({
               style={
                 isListening
                   ? {
-                      color: "#dc2626",
-                      background: "#fee2e2",
-                      borderColor: "#fca5a5",
-                      animation: "pulse 1.2s infinite",
-                    }
+                    color: "#dc2626",
+                    background: "#fee2e2",
+                    borderColor: "#fca5a5",
+                    animation: "pulse 1.2s infinite",
+                  }
                   : undefined
               }
             >
@@ -1530,11 +1574,83 @@ function CookScreen({
         </div>
       )}
 
-      {/* Daily Discover Collapsible Container (Cards & Action Buttons) */}
+      {/* 2. REZEPT-BIBLIOTHEK (Eigene Seite - Nicht aufklappen, mit kurzer Beschreibung & Button) */}
+      <div
+        className="library-teaser-card"
+        onClick={() => setIsLibraryViewOpen(true)}
+        style={{
+          background: "linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)",
+          borderRadius: "20px",
+          border: "1.5px solid #e2e8f0",
+          boxShadow: "0 4px 14px -2px rgba(15, 23, 42, 0.05)",
+          padding: "16px 18px",
+          margin: "12px 0 16px",
+          cursor: "pointer",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "14px",
+          transition: "all 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
+        }}
+        role="button"
+        tabIndex={0}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "14px", minWidth: 0 }}>
+          <div
+            style={{
+              width: "44px",
+              height: "44px",
+              borderRadius: "14px",
+              background: "#ebf3ee",
+              color: "#2d5a3e",
+              display: "grid",
+              placeItems: "center",
+              flexShrink: 0,
+              boxShadow: "0 2px 6px rgba(45, 90, 62, 0.12)",
+            }}
+          >
+            <Icon name="book" size={22} />
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginBottom: "4px" }}>
+              <span style={{ fontSize: "15px", fontWeight: 800, color: "#0f172a" }}>
+                Rezept-Bibliothek
+              </span>
+            </div>
+            <p style={{ margin: 0, fontSize: "12px", color: "#64748b", lineHeight: 1.45 }}>
+              Rezepte aus Webseiten durchstöbern.
+            </p>
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "6px",
+            background: "#2d5a3e",
+            color: "#ffffff",
+            padding: "9px 15px",
+            borderRadius: "12px",
+            fontSize: "12.5px",
+            fontWeight: 750,
+            whiteSpace: "nowrap",
+            flexShrink: 0,
+            boxShadow: "0 2px 8px rgba(45, 90, 62, 0.2)",
+          }}
+        >
+          <span>Bibliothek öffnen</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <path d="M5 12h14M12 5l7 7-7 7" />
+          </svg>
+        </div>
+      </div>
+
+      {/* 3. Daily Discover Collapsible Container (Cards & Action Buttons) */}
       <div
         className="tinderswipe-collapsible-wrapper"
         style={{
-          margin: "12px 0 16px",
+          margin: "0 0 16px",
           background: "#ffffff",
           border: "1.5px solid #e2e8f0",
           borderRadius: "16px",
@@ -1606,6 +1722,32 @@ function CookScreen({
               >
                 {currentMealSlot.badge} · {filteredDeckRecipes.length} Rezepte
               </span>
+              <select
+                value={selectedCategory}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  handleSelectCategory(e.target.value as any);
+                }}
+                style={{
+                  padding: "3px 8px",
+                  borderRadius: "6px",
+                  border: "1px solid #cbd5e1",
+                  background: "#ffffff",
+                  fontSize: "11px",
+                  fontWeight: 650,
+                  color: "#1e293b",
+                  cursor: "pointer",
+                  outline: "none",
+                }}
+              >
+                <option value="Alle">Alle Kategorien</option>
+                <option value="Hauptgericht">Hauptgericht</option>
+                <option value="Frühstück">Frühstück</option>
+                <option value="Snack">Snack</option>
+                <option value="Dessert">Dessert</option>
+                <option value="Backen">Backen</option>
+              </select>
               <button
                 type="button"
                 onClick={(e) => {
@@ -1622,7 +1764,7 @@ function CookScreen({
                   borderRadius: "6px",
                   padding: "2px 7px",
                   fontSize: "10.5px",
-                  fontWeight: 700,
+                  fontWeight: 750,
                   color: "#475569",
                   cursor: "pointer",
                   display: "inline-flex",
@@ -1721,7 +1863,7 @@ function CookScreen({
             )}
 
             <RecipeSwipeDeck
-              key={`${deckKey}-${surpriseFilters ? JSON.stringify(surpriseFilters) : "default"}`}
+              key={`${deckKey}-${selectedCategory}-${surpriseFilters ? JSON.stringify(surpriseFilters) : "default"}`}
               recipes={filteredDeckRecipes}
               servings={servings}
               pantry={pantry}
@@ -1950,8 +2092,8 @@ function ShoppingScreen({
             {groceries.length === 0
               ? "Alles erledigt"
               : activeChecked.length === groceries.length
-              ? "Vollständig"
-              : `${groceries.length - activeChecked.length} noch offen`}
+                ? "Vollständig"
+                : `${groceries.length - activeChecked.length} noch offen`}
           </strong>
         </div>
       </section>
@@ -2202,14 +2344,14 @@ export default function App() {
         localStorage.getItem("forret_favorite_recipes") ||
         localStorage.getItem("forret_favorites");
       if (saved) return JSON.parse(saved);
-    } catch {}
+    } catch { }
     return ["r1", "r2"];
   });
 
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEYS.FAVORITES, JSON.stringify(favorites));
-    } catch {}
+    } catch { }
   }, [favorites]);
 
   const [isResetModalOpen, setIsResetModalOpen] = useState(false);
@@ -2237,14 +2379,14 @@ export default function App() {
         });
         return deduplicatePantry(enhanced);
       }
-    } catch {}
+    } catch { }
     return defaultPantry;
   });
 
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEYS.PANTRY, JSON.stringify(pantry));
-    } catch {}
+    } catch { }
   }, [pantry]);
 
   const [customRecipes, setCustomRecipes] = useState<CatalogRecipe[]>(() => getStoredCustomRecipes());
@@ -2273,7 +2415,7 @@ export default function App() {
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEYS.CUSTOM_RECIPES, JSON.stringify(customRecipes));
-    } catch {}
+    } catch { }
   }, [customRecipes]);
 
   const [cookSelectedRecipeId, setCookSelectedRecipeId] = useState<string | null>(null);
@@ -2313,7 +2455,7 @@ export default function App() {
           return decomposeCompositeIngredients(parsed);
         }
       }
-    } catch {}
+    } catch { }
     return defaultGroceries;
   });
 
@@ -2323,7 +2465,7 @@ export default function App() {
         localStorage.getItem(STORAGE_KEYS.WEEKLY_PLAN) ||
         localStorage.getItem("forret_weekly_plan");
       if (saved) return JSON.parse(saved);
-    } catch {}
+    } catch { }
     return [
       { id: "p1", recipeId: "r1", recipeTitle: "Egg Fried Rice Deluxe", dayId: "mo", mealSlot: "dinner", servings: 2 },
       { id: "p2", recipeId: "r2", recipeTitle: "Grüne Reis-Bowl", dayId: "di", mealSlot: "lunch", servings: 2 },
@@ -2335,7 +2477,7 @@ export default function App() {
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEYS.WEEKLY_PLAN, JSON.stringify(plannedMeals));
-    } catch {}
+    } catch { }
   }, [plannedMeals]);
 
   const addPlannedMeal = (meal: Omit<PlannedMeal, "id">) => {
@@ -2502,7 +2644,7 @@ export default function App() {
           return parsed;
         }
       }
-    } catch {}
+    } catch { }
     return { count: 0, money: 0 };
   });
 
@@ -2510,8 +2652,7 @@ export default function App() {
     setExpiringSearchIngredients(urgentItemNames);
     setActiveTab("discover");
     notify(
-      `Reste-Modus aktiv: ${urgentItemNames.length} ablaufende ${
-        urgentItemNames.length === 1 ? "Zutat" : "Zutaten"
+      `Reste-Modus aktiv: ${urgentItemNames.length} ablaufende ${urgentItemNames.length === 1 ? "Zutat" : "Zutaten"
       } priorisiert!`
     );
   };
@@ -2537,7 +2678,7 @@ export default function App() {
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEYS.GROCERIES, JSON.stringify(groceries));
-    } catch {}
+    } catch { }
   }, [groceries]);
 
   const updateAmount = (id: number | string, delta: number) => {
@@ -2569,7 +2710,7 @@ export default function App() {
     setGroceries([]);
     try {
       localStorage.setItem(STORAGE_KEYS.GROCERIES, JSON.stringify([]));
-    } catch {}
+    } catch { }
     notify("Einkaufsliste geleert");
   };
 
@@ -2675,7 +2816,7 @@ export default function App() {
         };
         try {
           localStorage.setItem(STORAGE_KEYS.FOOD_WASTE, JSON.stringify(next));
-        } catch {}
+        } catch { }
         return next;
       });
     }
@@ -2701,8 +2842,7 @@ export default function App() {
     }
 
     notify(
-      `«${recipeTitle}» gekocht! Vorrat für ${servings} Pers. aktualisiert${
-        deductedItems.length > 0 ? ` (${deductedItems.slice(0, 2).join(", ")})` : ""
+      `«${recipeTitle}» gekocht! Vorrat für ${servings} Pers. aktualisiert${deductedItems.length > 0 ? ` (${deductedItems.slice(0, 2).join(", ")})` : ""
       }`
     );
   };
@@ -2827,8 +2967,7 @@ export default function App() {
       handleAddProduct(item);
     });
     notify(
-      `${importedItems.length} ${
-        importedItems.length === 1 ? "Position" : "Positionen"
+      `${importedItems.length} ${importedItems.length === 1 ? "Position" : "Positionen"
       } vom Kassenbon erfolgreich eingebucht!`
     );
   };
@@ -2865,7 +3004,7 @@ export default function App() {
     try {
       localStorage.setItem(STORAGE_KEYS.PANTRY, JSON.stringify(defaultPantry));
       localStorage.setItem(STORAGE_KEYS.GROCERIES, JSON.stringify(defaultGroceries));
-    } catch {}
+    } catch { }
     notify("Standard-Demo Vorrat & Einkaufsliste wiederhergestellt!");
   };
 
@@ -2873,7 +3012,7 @@ export default function App() {
     setPantry([]);
     try {
       localStorage.setItem(STORAGE_KEYS.PANTRY, JSON.stringify([]));
-    } catch {}
+    } catch { }
     notify("Vorrat komplett geleert (0 Produkte)");
   };
 
@@ -2882,7 +3021,7 @@ export default function App() {
       const cleaned = deduplicatePantry(prev);
       try {
         localStorage.setItem(STORAGE_KEYS.PANTRY, JSON.stringify(cleaned));
-      } catch {}
+      } catch { }
       return cleaned;
     });
     notify("Duplikate erfolgreich zusammengeführt & bereinigt!");
@@ -2909,7 +3048,7 @@ export default function App() {
       wipeAllAppData();
       localStorage.setItem(STORAGE_KEYS.PANTRY, JSON.stringify(defaultPantry));
       localStorage.setItem(STORAGE_KEYS.GROCERIES, JSON.stringify(defaultGroceries));
-    } catch {}
+    } catch { }
     notify("Gesamter App-Speicher zurückgesetzt!");
   };
 
@@ -3060,7 +3199,7 @@ export default function App() {
         <ShoppingScreen
           groceries={groceries}
           onComplete={completeShopping}
-          onToggleItem={() => {}}
+          onToggleItem={() => { }}
           onDeleteGrocery={(id) => setGroceries((prev) => prev.filter((g) => g.id !== id))}
           onClearGroceries={handleClearGroceries}
           onNavigateToPlanner={() => setActiveTab("planner")}

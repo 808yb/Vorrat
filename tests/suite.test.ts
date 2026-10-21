@@ -1,10 +1,10 @@
 import { deduplicatePantry, formatMhdDisplay, getMhdStatus, getItemNutrientSpecs, type PantryItem } from "../src/App";
 import { parseReceiptFallback, calculateEstimatedMhd } from "../src/utils/receiptOcr";
-import { getRecipePantryBreakdown, findMatchingPantryItem, isDrinkingWater } from "../src/utils/pantryMatching";
+import { getRecipePantryBreakdown, findMatchingPantryItem, isDrinkingWater, cleanAlternativeText, formatAlternativeHint, setAlternativeOverride, getAlternativeOverride } from "../src/utils/pantryMatching";
 import { FULL_RECIPE_CATALOG } from "../src/data/recipeCatalog";
 import { getFoodTone } from "../src/components/FoodIcons";
 import { findFoodNutrition, calculatePortionNutrition } from "../src/data/foodNutritionDatabase";
-import { getSafeIngredientsList, getSafeSteps, getSafeAvailable, rehydrateRecipe, getCurrentMealTimeSlot, decomposeCompositeIngredients, cleanSpiceName, isEggIngredientName, isRiceIngredientName } from "../src/utils/recipeHelpers";
+import { getSafeIngredientsList, getSafeSteps, getSafeAvailable, rehydrateRecipe, getCurrentMealTimeSlot, decomposeCompositeIngredients, cleanSpiceName, isEggIngredientName, isRiceIngredientName, getRecipeVideoUrl, getRecipeSourceUrl, getRecipeCategory, RECIPE_CATEGORIES } from "../src/utils/recipeHelpers";
 import { extractIngredientsFromDishText, resolveRecipeFoodImage, askAboutRecipeWithGemini } from "../src/utils/geminiRecipes";
 
 let passedCount = 0;
@@ -1048,6 +1048,178 @@ const eggEntry = aggregatedMap.get("eier__Stk.");
 const starchEntry = aggregatedMap.get("mehl & speisestärke__g");
 assert(eggEntry !== undefined && eggEntry.totalNeeded === 3 && eggEntry.unit === "Stk.", "Weekly Planner: Exactly 3 Stk. eggs aggregated (not 183)");
 assert(starchEntry !== undefined && starchEntry.totalNeeded === 180 && starchEntry.unit === "g", "Weekly Planner: Exactly 180 g flour & starch aggregated separately");
+
+// -----------------------------------------------------------------------------
+// TEST SUITE 21: GUARANTEED VIDEO/SOURCE LINKS & ALTERNATIVE OVERRIDES
+// -----------------------------------------------------------------------------
+console.log("\n🔗 21. Testing Guaranteed Video/Source Links & Alternative Management...");
+
+// 1. YouTube video URL generation
+const mockRecipeA = { title: "Spaghetti Carbonara" };
+const videoUrlA = getRecipeVideoUrl(mockRecipeA);
+assert(
+  videoUrlA === `https://www.youtube.com/results?search_query=${encodeURIComponent("Spaghetti Carbonara Rezept einfach kochen")}`,
+  "Generates guaranteed YouTube search query for Spaghetti Carbonara"
+);
+
+const mockRecipeWithRealVideo = {
+  title: "Tacos",
+  videoUrl: "https://www.tiktok.com/@chef/video/123456",
+};
+assert(
+  getRecipeVideoUrl(mockRecipeWithRealVideo) === "https://www.tiktok.com/@chef/video/123456",
+  "Preserves authentic user video URL when present"
+);
+
+// 2. Chefkoch source URL generation
+const sourceUrlA = getRecipeSourceUrl(mockRecipeA);
+assert(
+  sourceUrlA === `https://www.chefkoch.de/rs/s0/${encodeURIComponent("Spaghetti Carbonara")}/Rezepte.html`,
+  "Generates guaranteed Chefkoch search query when no real imported source URL is present"
+);
+
+const mockRecipeWithRealSource = {
+  title: "Kaiserschmarrn",
+  sourceUrl: "https://www.eatsmarter.de/rezepte/kaiserschmarrn",
+};
+assert(
+  getRecipeSourceUrl(mockRecipeWithRealSource) === "https://www.eatsmarter.de/rezepte/kaiserschmarrn",
+  "Preserves authentic imported source URL when present"
+);
+
+// 3. Clean alternative text & formatAlternativeHint
+const dirtyText1 = "↳ ((Rapsöl)) // undefined";
+assert(cleanAlternativeText(dirtyText1) === "(Rapsöl)", "cleanAlternativeText removes arrows, double brackets and debug tokens");
+
+const hint1 = formatAlternativeHint("Rapsöl");
+assert(hint1 === "Vorhanden (Rapsöl)", "formatAlternativeHint formats clean Vorhanden (Rapsöl)");
+
+const hint2 = formatAlternativeHint("((Sonnenblumenöl))");
+assert(hint2 === "Vorhanden (Sonnenblumenöl)", "formatAlternativeHint cleans nested brackets");
+
+// 4. Alternative overrides in pantry matching
+const mockPantryForOverrides = [
+  { name: "Vollmilch", amount: 1000, unit: "ml" },
+  { name: "Hafermilch", amount: 1000, unit: "ml" },
+];
+
+// Without override, Buttermilch matches Vollmilch via milk equivalence group
+const autoMatch = findMatchingPantryItem("Buttermilch", mockPantryForOverrides, "test-rec-1");
+assert(autoMatch !== null, "Auto-matches Buttermilch to pantry milk via equivalence group");
+
+// Override A: User says: mark as MISSING (do not substitute)
+setAlternativeOverride("test-rec-1", "Buttermilch", { mode: "missing" });
+const missingMatch = findMatchingPantryItem("Buttermilch", mockPantryForOverrides, "test-rec-1");
+assert(missingMatch === null, "User override 'mode: missing' marks Buttermilch as missing");
+
+// Override B: User selects specific pantry item 'Hafermilch'
+setAlternativeOverride("test-rec-1", "Buttermilch", { mode: "pantry", pantryItemName: "Hafermilch" });
+const haferMatch = findMatchingPantryItem("Buttermilch", mockPantryForOverrides, "test-rec-1");
+assert(
+  Boolean(haferMatch && haferMatch.matchedByAlternative === "Hafermilch"),
+  "User override 'mode: pantry' maps Buttermilch specifically to Hafermilch"
+);
+
+// Override C: Reset back to auto
+setAlternativeOverride("test-rec-1", "Buttermilch", null);
+const resetMatch = findMatchingPantryItem("Buttermilch", mockPantryForOverrides, "test-rec-1");
+assert(resetMatch !== null, "Resetting override restores automatic matching");
+
+// -----------------------------------------------------------------------------
+// TEST SUITE 22: RECIPE CATEGORY & FILTER SYSTEM (TAGS)
+// -----------------------------------------------------------------------------
+console.log("\n🏷️ 22. Testing Recipe Categories & Filter System...");
+
+// 1. Explicit override
+assert(
+  getRecipeCategory({ title: "Spaghetti Bolognese", category: "Dessert" }) === "Dessert",
+  "Explicit recipe.category takes top precedence (category: Dessert)"
+);
+
+// 2. Intelligent Mapping: Backen
+assert(
+  getRecipeCategory({ title: "Warmes Apfel-Zimt-Crumble", mealType: "baking" }) === "Backen",
+  "Categorizes mealType baking as 'Backen'"
+);
+assert(
+  getRecipeCategory({ title: "Saftige Schoko-Bananen-Muffins" }) === "Backen",
+  "Identifies 'Muffins' as 'Backen'"
+);
+assert(
+  getRecipeCategory({ title: "Knuspriges Sauerteig-Brot", subtitle: "Frisch gebacken" }) === "Backen",
+  "Identifies 'Brot' in title as 'Backen'"
+);
+assert(
+  getRecipeCategory({ title: "Mediterrane Pizza Margherita" }) === "Backen",
+  "Identifies 'Pizza' as 'Backen'"
+);
+
+// 3. Intelligent Mapping: Dessert
+assert(
+  getRecipeCategory({ title: "Fluffiger Pfannen-Kaiserschmarrn", mealType: "dessert" }) === "Dessert",
+  "Categorizes mealType dessert as 'Dessert'"
+);
+assert(
+  getRecipeCategory({ title: "Klassisches Tiramisu", subtitle: "Mit Espresso & Mascarpone" }) === "Dessert",
+  "Identifies 'Tiramisu' as 'Dessert'"
+);
+assert(
+  getRecipeCategory({ title: "Cremiges Schokomousse" }) === "Dessert",
+  "Identifies 'Mousse' as 'Dessert'"
+);
+
+// 4. Intelligent Mapping: Frühstück
+assert(
+  getRecipeCategory({ title: "Fluffige Protein-Pancakes mit Beeren", mealType: "breakfast" }) === "Frühstück",
+  "Categorizes mealType breakfast as 'Frühstück'"
+);
+assert(
+  getRecipeCategory({ title: "Cremiges Beeren-Porridge", subtitle: "Warm serviert" }) === "Frühstück",
+  "Identifies 'Porridge' as 'Frühstück'"
+);
+assert(
+  getRecipeCategory({ title: "Klassisches Rührei mit Schnittlauch" }) === "Frühstück",
+  "Identifies 'Rührei' as 'Frühstück'"
+);
+
+// 5. Intelligent Mapping: Snack
+assert(
+  getRecipeCategory({ title: "Knusprige Airfryer Kartoffel-Wedges", mealType: "snack" }) === "Snack",
+  "Categorizes mealType snack as 'Snack'"
+);
+assert(
+  getRecipeCategory({ title: "Griechischer Bauernsalat", subtitle: "Mit Feta & Oliven" }) === "Snack",
+  "Identifies 'Salat' as 'Snack'"
+);
+assert(
+  getRecipeCategory({ title: "Crispy Chicken Wraps", subtitle: "Mit Limetten-Dip" }) === "Snack",
+  "Identifies 'Wrap' as 'Snack'"
+);
+
+// 6. Intelligent Mapping: Hauptgericht (Default)
+assert(
+  getRecipeCategory({ title: "Egg Fried Rice Deluxe", mealType: "dinner" }) === "Hauptgericht",
+  "Categorizes dinner Egg Fried Rice as 'Hauptgericht'"
+);
+assert(
+  getRecipeCategory({ title: "Cremiges Süßkartoffel-Kichererbsen-Curry" }) === "Hauptgericht",
+  "Categorizes Curry as 'Hauptgericht'"
+);
+assert(
+  getRecipeCategory({ title: "Lachsfilet auf cremigem Blattspinat" }) === "Hauptgericht",
+  "Categorizes Fish & Spinach as 'Hauptgericht'"
+);
+
+// 7. RECIPE_CATEGORIES array completeness
+assert(
+  RECIPE_CATEGORIES.length === 5 &&
+  RECIPE_CATEGORIES.includes("Hauptgericht") &&
+  RECIPE_CATEGORIES.includes("Frühstück") &&
+  RECIPE_CATEGORIES.includes("Snack") &&
+  RECIPE_CATEGORIES.includes("Dessert") &&
+  RECIPE_CATEGORIES.includes("Backen"),
+  "RECIPE_CATEGORIES array contains all 5 required tags"
+);
 
 // -----------------------------------------------------------------------------
 // SUMMARY

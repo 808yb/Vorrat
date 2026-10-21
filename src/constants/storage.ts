@@ -12,6 +12,8 @@ export const STORAGE_KEYS = {
   HOUSEHOLD_NAME: "vorrat_household_name",
   HOUSEHOLD_CODE: "vorrat_household_code",
   PWA_DISMISSED: "vorrat_pwa_dismissed",
+  ALTERNATIVE_OVERRIDES: "vorrat_alternative_overrides",
+  RECIPE_SOURCES: "vorrat_recipe_sources",
 } as const;
 
 /**

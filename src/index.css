@@ -4006,6 +4006,54 @@ h2 {
 .saved-card-hero.sage { background: linear-gradient(145deg, #dcfce7, #f0fdf4); }
 .saved-card-hero.amber { background: linear-gradient(145deg, #fef3c7, #fffbeb); }
 
+/* Der Haupt-Container für die oberen Badges/Buttons */
+.recipe-header-row {
+  display: flex;
+  align-items: center;        /* Vertikal perfekt zentriert */
+  justify-content: space-between; /* Links das Info-Badge, rechts die Aktionen */
+  width: 100%;
+  margin-bottom: 12px;
+}
+
+/* Die linke Seite (z.B. Match-Prozent & Kategorie) */
+.recipe-header-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;                   /* Gleichmäßiger Abstand zwischen den Badges */
+}
+
+/* Die rechte Seite (Die Aktions-Buttons "Anpassen" & "Gemerkt") */
+.recipe-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Einheitliche Klasse für die Aktions-Buttons */
+.action-btn {
+  height: 32px;               /* Exakt gleiche Höhe für beide Buttons! */
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;                   /* Abstand zwischen Icon und Text */
+  border-radius: 8px;         /* Gleicher Radius */
+  font-size: 11.5px;
+  font-weight: 650;
+  cursor: pointer;
+  border: 1px solid #cbd5e1;  /* Einheitlicher Rahmen */
+  background: #ffffff;
+  color: #334155;
+  transition: all 140ms ease;
+  box-sizing: border-box;
+}
+
+/* Hover-Effekt für die Buttons */
+.action-btn:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+
 .saved-hero-meta-top {
   display: flex;
   align-items: center;

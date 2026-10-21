@@ -73,8 +73,15 @@ export default async function handler(
   }
 
   // ── Parse request body ────────────────────────────────────────────────────
+  const CANDIDATE_MODELS = [
+    "gemini-3.5-flash-lite",
+    "gemini-3.8-flash",
+    "gemini-flash-latest",
+    "gemini-flash-lite-latest",
+  ];
+
   const {
-    model = "gemini-3.8-flash",
+    model: requestedModel,
     contents,
     config = {},
     inlineData,
@@ -85,40 +92,63 @@ export default async function handler(
     inlineData?: { data: string; mimeType: string };
   };
 
+  const primaryModel = requestedModel && CANDIDATE_MODELS.includes(requestedModel)
+    ? requestedModel
+    : CANDIDATE_MODELS[0];
+
+  const modelsToTry = [
+    primaryModel,
+    ...CANDIDATE_MODELS.filter((m) => m !== primaryModel),
+  ];
+
   if (!contents && !inlineData) {
     return res
       .status(400)
       .json({ error: "Request body must include 'contents' or 'inlineData'." });
   }
 
-  // ── Forward to Gemini REST API ────────────────────────────────────────────
-  const endpoint = `${GEMINI_BASE}/${model}:generateContent?key=${apiKey}`;
-
   const geminiBody = {
     contents: buildContents(contents, inlineData),
     generationConfig: config,
   };
 
-  try {
-    const upstream = await fetch(endpoint, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(geminiBody),
-    });
+  // ── Forward to Gemini REST API with model fallback ─────────────────────────
+  let lastError: { status: number; body: unknown } | null = null;
 
-    const upstreamBody = await upstream.json();
+  for (const currentModel of modelsToTry) {
+    const endpoint = `${GEMINI_BASE}/${currentModel}:generateContent?key=${apiKey}`;
 
-    if (!upstream.ok) {
-      console.error(
-        `[/api/gemini] Upstream error ${upstream.status}:`,
+    try {
+      const upstream = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(geminiBody),
+      });
+
+      const upstreamBody = await upstream.json();
+
+      if (upstream.ok) {
+        return res.status(200).json(upstreamBody);
+      }
+
+      console.warn(
+        `[/api/gemini] Model '${currentModel}' returned status ${upstream.status}. Trying next fallback if available...`,
         upstreamBody
       );
-      return res.status(upstream.status).json(upstreamBody);
-    }
+      lastError = { status: upstream.status, body: upstreamBody };
 
-    return res.status(200).json(upstreamBody);
-  } catch (err) {
-    console.error("[/api/gemini] Fetch error:", err);
-    return res.status(502).json({ error: "Bad Gateway: Gemini API unreachable." });
+      // If error is not a model availability error (404 / 400), don't keep cycling
+      if (upstream.status !== 404 && upstream.status !== 400) {
+        break;
+      }
+    } catch (err) {
+      console.warn(`[/api/gemini] Fetch error for model '${currentModel}':`, err);
+    }
   }
+
+  if (lastError) {
+    return res.status(lastError.status).json(lastError.body);
+  }
+
+  return res.status(502).json({ error: "Bad Gateway: Gemini API unreachable." });
 }

@@ -49,6 +49,10 @@ export function extractTextFromGeminiResponse(
 /**
  * Sends a POST request to the /api/gemini proxy endpoint.
  */
+// Session-level flag: if local /api/gemini proxy is unreachable (e.g. Vite without vercel dev),
+// bypass proxy directly for all subsequent calls to prevent console 502/404 spam.
+let localProxyUnavailable = false;
+
 async function fetchProxy(request: GeminiProxyRequest): Promise<GeminiProxyResponse> {
   const res = await fetch(PROXY_ENDPOINT, {
     method: "POST",
@@ -57,6 +61,9 @@ async function fetchProxy(request: GeminiProxyRequest): Promise<GeminiProxyRespo
   });
 
   if (!res.ok) {
+    if (res.status === 502 || res.status === 404) {
+      localProxyUnavailable = true;
+    }
     const err = await res.json().catch(() => ({ error: { message: `HTTP ${res.status}` } }));
     throw new Error(
       `[Gemini Proxy] ${res.status}: ${err?.error?.message || res.statusText}`
@@ -78,21 +85,25 @@ export async function callGeminiProxy(
   request: GeminiProxyRequest
 ): Promise<GeminiProxyResponse> {
   // ── Production path: always use the server-side proxy ────────────────────
-  // import.meta.env?.DEV is statically replaced by Vite at build time,
-  // so the entire else-branch is tree-shaken in production bundles.
   if (!import.meta.env?.DEV) {
     return fetchProxy(request);
   }
 
-  // ── Dev path: prefer local proxy, fall back to direct REST call ───────────
-  try {
-    return await fetchProxy(request);
-  } catch (proxyErr) {
-    console.warn("[Gemini Proxy] Local proxy not reachable, trying direct REST call:", proxyErr);
+  // ── Dev path: prefer local proxy only if not previously marked unavailable ─
+  if (!localProxyUnavailable) {
+    try {
+      return await fetchProxy(request);
+    } catch {
+      localProxyUnavailable = true;
+    }
   }
 
   // ── Dev fallback: direct REST call with VITE_GEMINI_API_KEY ──────────────
-  const devKey = (import.meta.env?.VITE_GEMINI_API_KEY || "").trim();
+  const devKey = (
+    import.meta.env?.VITE_GEMINI_API_KEY ||
+    (import.meta.env as any)?.GEMINI_API_KEY ||
+    ""
+  ).trim();
   if (!devKey) {
     throw new Error(
       "Kein Gemini API-Schlüssel gefunden. " +
@@ -101,7 +112,23 @@ export async function callGeminiProxy(
     );
   }
 
-  const { model, contents, config = {}, inlineData } = request;
+  const CANDIDATE_MODELS = [
+    "gemini-3.5-flash-lite",
+    "gemini-3.8-flash",
+    "gemini-flash-latest",
+    "gemini-flash-lite-latest",
+  ];
+
+  const primaryModel = CANDIDATE_MODELS.includes(request.model)
+    ? request.model
+    : "gemini-3.5-flash-lite";
+
+  const modelsToTry = [
+    primaryModel,
+    ...CANDIDATE_MODELS.filter((m) => m !== primaryModel),
+  ];
+
+  const { contents, config = {}, inlineData } = request;
 
   // Build contents array for the REST API
   const parts: unknown[] = [];
@@ -116,23 +143,36 @@ export async function callGeminiProxy(
       : [{ parts }];
 
   const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
-  const endpoint = `${GEMINI_BASE}/${model}:generateContent?key=${devKey}`;
 
-  const res = await fetch(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      contents: restContents,
-      generationConfig: config,
-    }),
-  });
+  let lastErr: Error | null = null;
+  for (const m of modelsToTry) {
+    const endpoint = `${GEMINI_BASE}/${m}:generateContent?key=${devKey}`;
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: { message: `HTTP ${res.status}` } }));
-    throw new Error(
-      `[Gemini Direct] ${res.status}: ${err?.error?.message || res.statusText}`
-    );
+    try {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: restContents,
+          generationConfig: config,
+        }),
+      });
+
+      if (res.ok) {
+        return await res.json();
+      }
+
+      const errJson = await res.json().catch(() => ({ error: { message: `HTTP ${res.status}` } }));
+      lastErr = new Error(`[Gemini Direct (${m})] ${res.status}: ${errJson?.error?.message || res.statusText}`);
+
+      // If not a model availability error (404/400), don't keep cycling
+      if (res.status !== 404 && res.status !== 400) {
+        break;
+      }
+    } catch (e: any) {
+      lastErr = e;
+    }
   }
 
-  return res.json();
+  throw lastErr || new Error("[Gemini Direct] API call failed.");
 }

@@ -2,12 +2,13 @@ import React, { useState, useEffect, lazy, Suspense } from "react";
 import { FULL_RECIPE_CATALOG, type CatalogRecipe } from "../data/recipeCatalog";
 import { type PantryItem } from "../App";
 import { EditRecipeModal } from "./EditRecipeModal";
+import { AlternativeManageModal } from "./AlternativeManageModal";
 
 const CookingModal = lazy(() =>
   import("./CookingModal").then((m) => ({ default: m.CookingModal }))
 );
-import { getRecipePantryBreakdown, findMatchingPantryItem } from "../utils/pantryMatching";
-import { getSafeIngredientsList, getSafeSteps } from "../utils/recipeHelpers";
+import { getRecipePantryBreakdown, findMatchingPantryItem, cleanAlternativeText, normalizeIngredientName, shouldShowAlternativeHint } from "../utils/pantryMatching";
+import { getSafeIngredientsList, getSafeSteps, getRecipeCategory, type RecipeCategory } from "../utils/recipeHelpers";
 import { resolveRecipeFoodImage } from "../utils/geminiRecipes";
 import { compressImageFile } from "../utils/imageUtils";
 import { type WeekdayId } from "./WeeklyMealPlannerScreen";
@@ -50,6 +51,18 @@ export function SavedMealsScreen({
   const [cookedRecipeTitles, setCookedRecipeTitles] = useState<Record<string, number>>({});
   const [isDetailsCollapsed, setIsDetailsCollapsed] = useState<boolean>(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
+  const [selectedAltIng, setSelectedAltIng] = useState<{
+    name: string;
+    amount?: string;
+    currentMatch?: string;
+  } | null>(null);
+  const [, setRefreshKey] = useState<number>(0);
+
+  useEffect(() => {
+    const handleOverrideChanged = () => setRefreshKey((k) => k + 1);
+    window.addEventListener("vorrat_alternative_override_changed", handleOverrideChanged);
+    return () => window.removeEventListener("vorrat_alternative_override_changed", handleOverrideChanged);
+  }, []);
 
   // Sync when coming from planner with specific recipe and portions
   useEffect(() => {
@@ -68,6 +81,22 @@ export function SavedMealsScreen({
   const savedRecipes = catalog.filter((recipe) =>
     favorites.includes(recipe.id)
   );
+
+  const [selectedCategory, setSelectedCategory] = useState<RecipeCategory | "Alle">("Alle");
+
+  const categoryCounts = React.useMemo(() => {
+    const counts: Record<string, number> = { Alle: savedRecipes.length };
+    savedRecipes.forEach((recipe) => {
+      const cat = getRecipeCategory(recipe);
+      counts[cat] = (counts[cat] || 0) + 1;
+    });
+    return counts;
+  }, [savedRecipes]);
+
+  const displayedSavedRecipes = React.useMemo(() => {
+    if (selectedCategory === "Alle") return savedRecipes;
+    return savedRecipes.filter((r) => getRecipeCategory(r) === selectedCategory);
+  }, [savedRecipes, selectedCategory]);
 
   // Active recipe when selected
   const activeRecipe = selectedRecipeId
@@ -142,29 +171,39 @@ export function SavedMealsScreen({
         return {
           ...ing,
           inStock: true,
-          pantryText: "∞ Immer vorrätig (Leitung)",
+          isAlternative: false,
+          matchedPantryName: undefined,
+          pantryText: "Vorhanden",
           statusColor: "#059669",
         };
       }
 
-      const match = findMatchingPantryItem(ing.name, pantry);
+      const match = findMatchingPantryItem(ing.name, pantry, recipe?.id);
       if (!match) {
         return {
           ...ing,
           inStock: !ing.optional ? false : true,
-          pantryText: ing.optional ? "Optional" : "Nicht im Vorrat",
+          isAlternative: false,
+          matchedPantryName: undefined as string | undefined,
+          pantryText: ing.optional ? "Optional" : "Fehlt",
           statusColor: ing.optional ? "#64748b" : "#e11d48",
         };
       }
 
       const matchedPantry = match.pantryItem;
-      const isAlt = Boolean(match.matchedByAlternative && match.matchedByAlternative.toLowerCase() !== ing.name.toLowerCase());
+      const isAlt = Boolean(
+        match.isAlternative ||
+        (match.matchedByAlternative && normalizeIngredientName(match.matchedByAlternative) !== normalizeIngredientName(ing.name))
+      );
+      const cleanAltName = isAlt ? cleanAlternativeText(match.matchedByAlternative || matchedPantry.name) : undefined;
 
       if (matchedPantry.isUnlimited || (matchedPantry.amount ?? 0) >= 9999) {
         return {
           ...ing,
           inStock: true,
-          pantryText: isAlt ? `${matchedPantry.name} vorrätig` : "Vorrätig",
+          isAlternative: isAlt,
+          matchedPantryName: cleanAltName,
+          pantryText: "Vorhanden",
           statusColor: "#059669",
         };
       }
@@ -176,15 +215,18 @@ export function SavedMealsScreen({
       const isSufficient = currentStock >= reqAmount || reqAmount === 0;
 
       const displayAmount = `${currentStock}${matchedPantry.unit || ""}`;
-      const altNote = isAlt ? ` (${matchedPantry.name})` : "";
 
       return {
         ...ing,
         inStock: isSufficient,
+        isAlternative: isAlt,
+        matchedPantryName: cleanAltName,
         pantryText: isSufficient
-          ? `${displayAmount} vorhanden${altNote}`
-          : `Nur ${displayAmount} (${reqAmount - currentStock} fehlt)`,
-        statusColor: isSufficient ? "#059669" : "#d97706",
+          ? "Vorhanden"
+          : currentStock > 0
+            ? `${displayAmount} da`
+            : "Fehlt",
+        statusColor: isSufficient ? "#059669" : currentStock > 0 ? "#d97706" : "#e11d48",
       };
     });
   };
@@ -268,73 +310,63 @@ export function SavedMealsScreen({
           <article className="saved-recipe-card">
             {/* Card Header & Visual */}
             <div className={`saved-card-hero ${activeRecipe.tone}`}>
-              <div className="saved-hero-meta-top">
-                {(() => {
-                  const activeBreakdown = getRecipePantryBreakdown(activeRecipe, pantry || [], servings);
-                  return (
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                      <span className="saved-match-pill">
-                        {activeBreakdown.matchPercentage === 100
-                          ? "100% Vorrat da"
-                          : `${activeBreakdown.matchPercentage}% Vorrats-Match`}
+              <div className="recipe-header-row saved-hero-meta-top">
+                <div className="recipe-header-left">
+                  {(() => {
+                    const activeBreakdown = getRecipePantryBreakdown(activeRecipe, pantry || [], servings);
+                    const category = getRecipeCategory(activeRecipe);
+                    const matchText = activeBreakdown.matchPercentage === 100
+                      ? "100% Vorrat da"
+                      : `${activeBreakdown.matchPercentage}% Match`;
+                    return (
+                      <span
+                        className="saved-match-pill"
+                        style={{
+                          fontSize: "11.5px",
+                          fontWeight: 700,
+                          background: "#ebf3ee",
+                          color: "#2d5a3e",
+                          border: "1px solid #c6dcce",
+                          padding: "5px 11px",
+                          borderRadius: "8px",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "5px",
+                        }}
+                      >
+                        {category} {matchText}
                       </span>
-                      {activeRecipe.source && (
-                        <span
-                          style={{
-                            fontSize: "11px",
-                            fontWeight: 750,
-                            background: "rgba(15, 23, 42, 0.75)",
-                            backdropFilter: "blur(4px)",
-                            color: "#ffffff",
-                            padding: "3px 8px",
-                            borderRadius: "6px",
-                          }}
-                        >
-                          {activeRecipe.source}
-                        </span>
-                      )}
-                    </div>
-                  );
-                })()}
-                <button
-                  type="button"
-                  className="saved-edit-btn"
-                  title="Rezept & Zutaten anpassen"
-                  onClick={() => setIsEditModalOpen(true)}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "5px",
-                    padding: "6px 11px",
-                    borderRadius: "10px",
-                    border: "1px solid #cbd5e1",
-                    background: "#ffffff",
-                    fontSize: "12px",
-                    fontWeight: 600,
-                    color: "#334155",
-                    cursor: "pointer",
-                  }}
-                >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 20h9" />
-                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-                  </svg>
-                  <span>Anpassen</span>
-                </button>
-                <button
-                  type="button"
-                  className="saved-unbookmark-btn"
-                  title="Aus gemerkten Mahlzeiten entfernen"
-                  onClick={() => {
-                    onToggleFavorite(activeRecipe.id, activeRecipe.title);
-                    setSelectedRecipeId(null);
-                  }}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="#059669" stroke="#059669" strokeWidth="2">
-                    <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z" />
-                  </svg>
-                  <span>Gemerkt</span>
-                </button>
+                    );
+                  })()}
+                </div>
+                <div className="recipe-header-right">
+                  <button
+                    type="button"
+                    className="action-btn saved-edit-btn"
+                    title="Rezept & Zutaten anpassen"
+                    onClick={() => setIsEditModalOpen(true)}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M12 20h9" />
+                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                    </svg>
+                    <span>Anpassen</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="action-btn saved-unbookmark-btn"
+                    title="Aus gemerkten Mahlzeiten entfernen"
+                    onClick={() => {
+                      onToggleFavorite(activeRecipe.id, activeRecipe.title);
+                      setSelectedRecipeId(null);
+                    }}
+                  >
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="#059669" stroke="#059669" strokeWidth="2">
+                      <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z" />
+                    </svg>
+                    <span>Gemerkt</span>
+                  </button>
+                </div>
               </div>
 
               <div style={{ width: "100%", height: "185px", borderRadius: "16px", overflow: "hidden", margin: "14px 0 8px", background: "#f1f5f9", position: "relative" }}>
@@ -548,24 +580,44 @@ export function SavedMealsScreen({
                     </div>
 
                     <div className="ingredients-check-grid">
-                      {checkIngredientStock(activeRecipe, servings).map((ing, idx) => (
-                        <div key={idx} className="ing-check-row">
-                          <div className="ing-name-wrap">
-                            <span
-                              className="status-dot"
-                              style={{ backgroundColor: ing.statusColor }}
-                            />
-                            <span className="ing-name" title={ing.name}>{ing.name}</span>
-                            {ing.optional && <span className="optional-badge">opt.</span>}
+                      {checkIngredientStock(activeRecipe, servings).map((ing, idx) => {
+                        const showAltSubline = shouldShowAlternativeHint(ing.name, ing.matchedPantryName);
+                        return (
+                          <div key={idx} className="ing-check-row">
+                            <div className="ing-name-wrap" style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "2px", flex: 1, minWidth: 0 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "6px", width: "100%", flexWrap: "wrap" }}>
+                                <span
+                                  className="status-dot"
+                                  style={{ backgroundColor: ing.statusColor, flexShrink: 0 }}
+                                />
+                                <span className="ing-name" style={{ whiteSpace: "normal", wordBreak: "break-word" }} title={ing.name}>
+                                  {ing.name}
+                                </span>
+                                {ing.optional && <span className="optional-badge">opt.</span>}
+                              </div>
+                              {showAltSubline && ing.matchedPantryName && (
+                                <span
+                                  style={{
+                                    fontSize: "11px",
+                                    color: "#64748b",
+                                    display: "block",
+                                    paddingLeft: "14px",
+                                    lineHeight: 1.2,
+                                  }}
+                                >
+                                  Aus Vorrat: {ing.matchedPantryName}
+                                </span>
+                              )}
+                            </div>
+                            <div className="ing-amounts" style={{ flexShrink: 0, textAlign: "right" }}>
+                              <strong className="needed-amount">{ing.amount}</strong>
+                              <span className="stock-info" style={{ color: ing.statusColor }}>
+                                {ing.pantryText}
+                              </span>
+                            </div>
                           </div>
-                          <div className="ing-amounts">
-                            <strong className="needed-amount">{ing.amount}</strong>
-                            <span className="stock-info" style={{ color: ing.statusColor }}>
-                              ({ing.pantryText})
-                            </span>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </section>
 
@@ -650,6 +702,26 @@ export function SavedMealsScreen({
                             </svg>
                             <span>Interaktiver Koch-Modus starten</span>
                           </button>
+                          {Boolean(activeRecipe.sourceUrl) && (
+                            <div style={{ marginTop: "14px", textAlign: "center" }}>
+                              <a
+                                href={activeRecipe.sourceUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                  fontSize: "12px",
+                                  color: "#64748b",
+                                  textDecoration: "none",
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "4px",
+                                  padding: "4px 8px",
+                                }}
+                              >
+                                <span>Original-Quelle öffnen ↗</span>
+                              </a>
+                            </div>
+                          )}
                         </div>
                       </section>
                     );
@@ -676,73 +748,171 @@ export function SavedMealsScreen({
             </div>
           </div>
 
-          <div className="saved-meals-grid">
-            {savedRecipes.map((recipe) => {
-              const timesCooked = cookedRecipeTitles[recipe.id] || 0;
-              const imgUrl = recipe.imageUrl || resolveRecipeFoodImage(recipe.title, recipe.subtitle);
-              return (
-                <div
-                  key={recipe.id}
-                  className="saved-grid-card"
-                  onClick={() => setSelectedRecipeId(recipe.id)}
-                >
-                  <div className="saved-grid-thumb-wrap">
-                    <img
-                      src={imgUrl}
-                      alt={recipe.title}
-                      className="saved-grid-thumb-img"
-                      onError={(e) => {
-                        (e.currentTarget as HTMLImageElement).src = resolveRecipeFoodImage(recipe.title);
-                      }}
-                    />
-                    <span className="saved-grid-match-badge">
-                      {(() => {
-                        const cardBreakdown = getRecipePantryBreakdown(recipe, pantry || [], servings);
-                        return cardBreakdown.matchPercentage === 100
-                          ? "100% Vorrat"
-                          : `${cardBreakdown.matchPercentage}% Match`;
-                      })()}
-                    </span>
-                    {timesCooked > 0 && (
-                      <span className="saved-grid-cooked-badge">Gekocht ✓</span>
-                    )}
-                    <button
-                      type="button"
-                      className="saved-grid-unbookmark-btn"
-                      title="Aus Kochbuch entfernen"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onToggleFavorite(recipe.id, recipe.title);
-                      }}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="#059669" stroke="#059669" strokeWidth="2">
-                        <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z" />
-                      </svg>
-                    </button>
-                  </div>
-                  <div className="saved-grid-info">
-                    <h3 className="saved-grid-title">{recipe.title}</h3>
-                    <p className="saved-grid-sub">{recipe.subtitle}</p>
-                    <div className="saved-grid-meta-row">
-                      <span className="saved-grid-meta-item">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                          <circle cx="12" cy="12" r="10" />
-                          <polyline points="12 6 12 12 16 14" />
-                        </svg>
-                        {recipe.time}
+          {/* Category Filter Dropdown */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "14px",
+              gap: "10px",
+              flexWrap: "wrap",
+            }}
+          >
+            <span style={{ fontSize: "13px", color: "#64748b", fontWeight: 600 }}>
+              {displayedSavedRecipes.length} von {savedRecipes.length} Rezepten
+            </span>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <label htmlFor="saved-category-select" style={{ fontSize: "12px", color: "#64748b", fontWeight: 600 }}>
+                Kategorie:
+              </label>
+              <select
+                id="saved-category-select"
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value as any)}
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: "8px",
+                  border: "1px solid #cbd5e1",
+                  background: "#ffffff",
+                  fontSize: "13px",
+                  fontWeight: 600,
+                  color: "#1e293b",
+                  cursor: "pointer",
+                  outline: "none",
+                }}
+              >
+                <option value="Alle">Alle Kategorien</option>
+                <option value="Hauptgericht">Hauptgericht</option>
+                <option value="Frühstück">Frühstück</option>
+                <option value="Snack">Snack</option>
+                <option value="Dessert">Dessert</option>
+                <option value="Backen">Backen</option>
+              </select>
+            </div>
+          </div>
+
+          {displayedSavedRecipes.length === 0 ? (
+            <div
+              style={{
+                textAlign: "center",
+                padding: "36px 20px",
+                background: "#f8fafc",
+                borderRadius: "16px",
+                border: "1.5px dashed #cbd5e1",
+                margin: "8px 0 24px",
+              }}
+            >
+              <p style={{ fontSize: "14px", fontWeight: 650, color: "#334155", marginBottom: "6px" }}>
+                Keine Rezepte in der Kategorie «{selectedCategory}» gefunden
+              </p>
+              <p style={{ fontSize: "12px", color: "#64748b", marginBottom: "14px" }}>
+                Wähle eine andere Kategorie oder setze den Filter zurück.
+              </p>
+              <button
+                type="button"
+                onClick={() => setSelectedCategory("Alle")}
+                style={{
+                  padding: "8px 18px",
+                  borderRadius: "10px",
+                  border: "1px solid #059669",
+                  background: "#ecfdf5",
+                  color: "#059669",
+                  fontSize: "12px",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                Filter zurücksetzen
+              </button>
+            </div>
+          ) : (
+            <div className="saved-meals-grid">
+              {displayedSavedRecipes.map((recipe) => {
+                const timesCooked = cookedRecipeTitles[recipe.id] || 0;
+                const imgUrl = recipe.imageUrl || resolveRecipeFoodImage(recipe.title, recipe.subtitle);
+                const recipeCategory = getRecipeCategory(recipe);
+                return (
+                  <div
+                    key={recipe.id}
+                    className="saved-grid-card"
+                    onClick={() => setSelectedRecipeId(recipe.id)}
+                  >
+                    <div className="saved-grid-thumb-wrap">
+                      <img
+                        src={imgUrl}
+                        alt={recipe.title}
+                        className="saved-grid-thumb-img"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).src = resolveRecipeFoodImage(recipe.title);
+                        }}
+                      />
+                      <span className="saved-grid-match-badge">
+                        {(() => {
+                          const cardBreakdown = getRecipePantryBreakdown(recipe, pantry || [], servings);
+                          return cardBreakdown.matchPercentage === 100
+                            ? "100% Vorrat"
+                            : `${cardBreakdown.matchPercentage}% Match`;
+                        })()}
                       </span>
-                      <span className="saved-grid-meta-item">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                          <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
+                      {timesCooked > 0 && (
+                        <span className="saved-grid-cooked-badge">Gekocht ✓</span>
+                      )}
+                      <button
+                        type="button"
+                        className="saved-grid-unbookmark-btn"
+                        title="Aus Kochbuch entfernen"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onToggleFavorite(recipe.id, recipe.title);
+                        }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="#059669" stroke="#059669" strokeWidth="2">
+                          <path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z" />
                         </svg>
-                        {Math.round(recipe.baseCal)} kcal
-                      </span>
+                      </button>
+                    </div>
+                    <div className="saved-grid-info">
+                      <div style={{ marginBottom: "4px" }}>
+                        <span
+                          className="saved-grid-cat-pill"
+                          style={{
+                            fontSize: "10px",
+                            fontWeight: 700,
+                            color: "#047857",
+                            background: "#ecfdf5",
+                            border: "1px solid #a7f3d0",
+                            padding: "2px 7px",
+                            borderRadius: "6px",
+                            display: "inline-block",
+                          }}
+                        >
+                          {recipeCategory}
+                        </span>
+                      </div>
+                      <h3 className="saved-grid-title">{recipe.title}</h3>
+                      <p className="saved-grid-sub">{recipe.subtitle}</p>
+                      <div className="saved-grid-meta-row">
+                        <span className="saved-grid-meta-item">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                            <circle cx="12" cy="12" r="10" />
+                            <polyline points="12 6 12 12 16 14" />
+                          </svg>
+                          {recipe.time}
+                        </span>
+                        <span className="saved-grid-meta-item">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                            <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
+                          </svg>
+                          {Math.round(recipe.baseCal)} kcal
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </>
       )}
 
@@ -775,6 +945,23 @@ export function SavedMealsScreen({
           }
           if (onNotify) {
             onNotify(`«${updated.title}» erfolgreich aktualisiert!`);
+          }
+        }}
+      />
+
+      {/* Alternative Ingredient Manager Modal */}
+      <AlternativeManageModal
+        isOpen={Boolean(selectedAltIng)}
+        onClose={() => setSelectedAltIng(null)}
+        recipeId={activeRecipe?.id}
+        recipeTitle={activeRecipe?.title}
+        ingredientName={selectedAltIng?.name || ""}
+        amount={selectedAltIng?.amount}
+        currentMatchedPantryName={selectedAltIng?.currentMatch}
+        pantryItems={pantry || []}
+        onChanged={() => {
+          if (onNotify && selectedAltIng?.name) {
+            onNotify(`Alternative für «${selectedAltIng.name}» aktualisiert!`);
           }
         }}
       />

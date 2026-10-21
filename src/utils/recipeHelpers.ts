@@ -1,4 +1,6 @@
-import type { CatalogRecipe, RecipeStep } from "../data/recipeCatalog";
+import type { CatalogRecipe, RecipeStep, RecipeCategory } from "../data/recipeCatalog";
+export type { RecipeCategory } from "../data/recipeCatalog";
+export { RECIPE_CATEGORIES } from "../data/recipeCatalog";
 import { resolveRecipeFoodImage } from "./geminiRecipes";
 
 export interface SafeIngredientItem {
@@ -480,3 +482,75 @@ export function getCurrentMealTimeSlot(): MealTimeSlot {
     };
   }
 }
+
+/**
+ * Returns a guaranteed working YouTube cooking tutorial search URL for a recipe.
+ * Uses an authentic user-provided videoUrl if available, otherwise generates a reliable YouTube query.
+ */
+export function getRecipeVideoUrl(recipe?: { title?: string; videoUrl?: string }): string {
+  const custom = recipe?.videoUrl?.trim();
+  if (custom && /^https?:\/\//i.test(custom) && !custom.includes("example.com")) {
+    return custom;
+  }
+  const title = (recipe?.title || "Leckeres Gericht").trim();
+  return `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " Rezept einfach kochen")}`;
+}
+
+/**
+ * Returns a guaranteed working recipe source link.
+ * If user imported an authentic URL, returns that URL.
+ * Otherwise returns a reliable Chefkoch recipe search URL.
+ */
+export function getRecipeSourceUrl(recipe?: { title?: string; sourceUrl?: string; source?: string }): string {
+  const custom = recipe?.sourceUrl?.trim();
+  if (custom && /^https?:\/\//i.test(custom) && !custom.includes("example.com")) {
+    return custom;
+  }
+  const title = (recipe?.title || "Rezept").trim();
+  return `https://www.chefkoch.de/rs/s0/${encodeURIComponent(title)}/Rezepte.html`;
+}
+
+const BAKING_KEYWORD_REGEX = /\b\w*(?:kuchen|brötchen|brot|muffins?|teig|ofen-gebäck|pizza|quiche|tartes?|croissants?|zimtschnecken?|strudel|blätterteig|gebäck|kekse?|cookies|torten?)\b/i;
+const DESSERT_KEYWORD_REGEX = /(?:\b\w*desserts?\b|\b\w*nachtisch\b|\btiramisu\b|\b\w*mousse\b|\b\w*pudding\b|\b(?:speise)?eis\b|\bsüß(?:es|speise|igkeiten)?\b(?!kartoffel)|\b\w*pfannkuchen\b|\bkaiserschmarrn\b|\bschoko\w*|\b\w*brownies?\b|\bpancakes?\b|\bcheesecake\b|\bsorbet\b)/i;
+const BREAKFAST_KEYWORD_REGEX = /\b\w*(?:frühstück|oats|porridge|müsli|omelett|rührei|shakshuka|smoothie|toast|spiegelei)\b/i;
+const SNACK_KEYWORD_REGEX = /\b\w*(?:snacks?|dips?|salate?|salaten?|stullen?|wraps?|fingerfood|kleinigkeit|vorspeisen?|bruschetta|chips|wings|wedges)\b/i;
+
+/**
+ * Returns the standardized category for a recipe.
+ * 1. Returns recipe.category if explicitly set.
+ * 2. Otherwise intelligently classifies based on mealType, title, and subtitle:
+ *    - "Backen": mealType === "baking" or baking keywords
+ *    - "Dessert": mealType === "dessert" or dessert keywords
+ *    - "Frühstück": mealType === "breakfast" or breakfast keywords
+ *    - "Snack": mealType === "snack" or snack keywords
+ *    - "Hauptgericht": default fallback for warm dinner / lunch dishes.
+ */
+export function getRecipeCategory(recipe?: Partial<CatalogRecipe> | null): RecipeCategory {
+  if (!recipe) return "Hauptgericht";
+
+  if (recipe.category && ["Frühstück", "Hauptgericht", "Snack", "Dessert", "Backen"].includes(recipe.category)) {
+    return recipe.category;
+  }
+
+  const text = `${recipe.title || ""} ${recipe.subtitle || ""}`.toLowerCase();
+  const mealType = recipe.mealType;
+
+  if (mealType === "baking" || BAKING_KEYWORD_REGEX.test(text)) {
+    return "Backen";
+  }
+
+  if (mealType === "dessert" || (mealType !== "breakfast" && DESSERT_KEYWORD_REGEX.test(text))) {
+    return "Dessert";
+  }
+
+  if (mealType === "breakfast" || BREAKFAST_KEYWORD_REGEX.test(text)) {
+    return "Frühstück";
+  }
+
+  if (mealType === "snack" || SNACK_KEYWORD_REGEX.test(text)) {
+    return "Snack";
+  }
+
+  return "Hauptgericht";
+}
+

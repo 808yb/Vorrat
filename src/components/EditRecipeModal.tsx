@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { X, Plus, Trash2, Check, ChefHat, Clock, AlertCircle, Camera, RotateCcw } from "lucide-react";
 import type { CatalogRecipe, RecipeStep } from "../data/recipeCatalog";
-import { getSafeIngredientsList, getSafeSteps } from "../utils/recipeHelpers";
+import { getSafeIngredientsList, getSafeSteps, getRecipeCategory, RECIPE_CATEGORIES, type RecipeCategory } from "../utils/recipeHelpers";
 import { compressImageFile } from "../utils/imageUtils";
 import { resolveRecipeFoodImage } from "../utils/geminiRecipes";
 
@@ -32,12 +32,14 @@ export function EditRecipeModal({
 
   const [title, setTitle] = useState(recipe.title || "");
   const [subtitle, setSubtitle] = useState(recipe.subtitle || "");
+  const [category, setCategory] = useState<RecipeCategory>(() => getRecipeCategory(recipe));
   const [imageUrl, setImageUrl] = useState(recipe.imageUrl || "");
   const [time, setTime] = useState(recipe.time || "25 Min.");
   const [difficulty, setDifficulty] = useState<"Einfach" | "Mittel" | "Super Einfach">(
     recipe.difficulty || "Einfach"
   );
   const [chefTip, setChefTip] = useState(recipe.chefTip || "");
+  const [sourceUrl, setSourceUrl] = useState(recipe.sourceUrl || "");
 
   // Initialize editable ingredients
   const [ingredients, setIngredients] = useState<EditableIngredient[]>(() => {
@@ -88,10 +90,12 @@ export function EditRecipeModal({
     if (recipe) {
       setTitle(recipe.title || "");
       setSubtitle(recipe.subtitle || "");
+      setCategory(getRecipeCategory(recipe));
       setImageUrl(recipe.imageUrl || "");
       setTime(recipe.time || "25 Min.");
       setDifficulty(recipe.difficulty || "Einfach");
       setChefTip(recipe.chefTip || "");
+      setSourceUrl(recipe.sourceUrl || "");
 
       let sourceIngs: Array<{ name: string; baseAmountPerPortion?: number; amount?: string; unit?: string; optional?: boolean }> = [];
       if (Array.isArray(recipe.rawIngredients) && recipe.rawIngredients.length > 0) {
@@ -179,12 +183,14 @@ export function EditRecipeModal({
 
     const updatedRecipe: CatalogRecipe = {
       ...recipe,
+      category,
       title: title.trim(),
       subtitle: subtitle.trim(),
       imageUrl: imageUrl.trim() || undefined,
       time: time.trim() || "20 Min.",
       difficulty,
       chefTip: chefTip.trim(),
+      sourceUrl: sourceUrl.trim() || undefined,
       rawIngredients: validIngredients,
       ingredients: validIngredients,
       steps,
@@ -318,6 +324,32 @@ export function EditRecipeModal({
             </div>
           </div>
 
+          {/* Recipe Category Selection */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+              Kategorie / Tag
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {RECIPE_CATEGORIES.map((cat) => {
+                const isSelected = category === cat;
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setCategory(cat)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border ${
+                      isSelected
+                        ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
+                        : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Time & Difficulty */}
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -437,6 +469,20 @@ export function EditRecipeModal({
               value={chefTip}
               onChange={(e) => setChefTip(e.target.value)}
               placeholder="z.B. Die Pilze erst am Ende salzen, damit sie schön bräunen."
+              className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-slate-700"
+            />
+          </div>
+
+          {/* Eigener Link / Video-URL */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Eigener Link / Video-URL (optional)
+            </label>
+            <input
+              type="url"
+              value={sourceUrl}
+              onChange={(e) => setSourceUrl(e.target.value)}
+              placeholder="https://... (z. B. eigenes Rezept oder YouTube-Link)"
               className="w-full px-3.5 py-2 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-slate-700"
             />
           </div>

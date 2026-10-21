@@ -1,7 +1,7 @@
 import { callGeminiProxy, extractTextFromGeminiResponse } from './geminiProxy';
-import { type CatalogRecipe, type RecipeStep } from '../data/recipeCatalog';
+import { type CatalogRecipe, type RecipeStep, type RecipeCategory } from '../data/recipeCatalog';
 import { findMatchingPantryItem } from './pantryMatching';
-import { decomposeCompositeIngredients } from './recipeHelpers';
+import { decomposeCompositeIngredients, getRecipeCategory } from './recipeHelpers';
 import { STORAGE_KEYS } from '../constants/storage';
 
 // High-resolution food images from Unsplash (matching common dishes)
@@ -87,6 +87,7 @@ export interface RawGeminiIngredient {
 interface RawGeminiRecipe {
   title: string;
   subtitle: string;
+  category?: RecipeCategory;
   time: string;
   difficulty: "Einfach" | "Mittel" | "Super Einfach";
   baseCal: number;
@@ -252,6 +253,10 @@ export function rehydrateCustomRecipe(item: any): CatalogRecipe {
     id: item.id || `custom-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
     title,
     subtitle: item.subtitle || "Frisch kreiert mit deiner AI",
+    category: item.category || getRecipeCategory({ title, subtitle: item.subtitle, mealType: item.mealType }),
+    source: item.source || (item.sourceUrl ? "Importiert" : "KI-Rezept"),
+    sourceUrl: item.sourceUrl && /^https?:\/\//i.test(item.sourceUrl) && !item.sourceUrl.includes("example.com") ? item.sourceUrl : undefined,
+    videoUrl: item.videoUrl && /^https?:\/\//i.test(item.videoUrl) && !item.videoUrl.includes("example.com") ? item.videoUrl : undefined,
     time: item.time || "20 Min.",
     difficulty: item.difficulty || "Einfach",
     baseCal: Math.round(Number(item.baseCal) || 400),
@@ -293,6 +298,39 @@ export function rehydrateCustomRecipe(item: any): CatalogRecipe {
   };
 }
 
+export function isFakeGeneratedRecipe(item: any): boolean {
+  const t = String(item?.title || "").trim();
+  return (
+    t.startsWith("Cremige One-Pot Pasta nach ") ||
+    t.startsWith("Knusprige Vital-Bowl nach ") ||
+    t.startsWith("Warmer Apfel-Zimt-Crumble nach ")
+  );
+}
+
+export function isTitleSimilar(a: string, b: string): boolean {
+  const normA = a.toLowerCase().replace(/[^a-z0-9äöüß]/gi, " ").replace(/\s+/g, " ").trim();
+  const normB = b.toLowerCase().replace(/[^a-z0-9äöüß]/gi, " ").replace(/\s+/g, " ").trim();
+  if (!normA || !normB) return false;
+  if (normA === normB) return true;
+
+  if (normA.includes(normB) || normB.includes(normA)) {
+    const minLen = Math.min(normA.length, normB.length);
+    const maxLen = Math.max(normA.length, normB.length);
+    if (minLen / maxLen >= 0.8) return true;
+  }
+
+  const wordsA = new Set(normA.split(" ").filter((w) => w.length > 2));
+  const wordsB = new Set(normB.split(" ").filter((w) => w.length > 2));
+  if (wordsA.size === 0 || wordsB.size === 0) return false;
+
+  let common = 0;
+  for (const w of wordsA) {
+    if (wordsB.has(w)) common++;
+  }
+  const similarity = (2 * common) / (wordsA.size + wordsB.size);
+  return similarity >= 0.85;
+}
+
 export function getStoredCustomRecipes(): CatalogRecipe[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.CUSTOM_RECIPES) || localStorage.getItem("forret_custom_recipes");
@@ -300,7 +338,15 @@ export function getStoredCustomRecipes(): CatalogRecipe[] {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
 
-    return parsed.map(rehydrateCustomRecipe);
+    // Automatically purge old fake fallback recipes
+    const cleaned = parsed.filter((item) => !isFakeGeneratedRecipe(item));
+    if (cleaned.length !== parsed.length) {
+      try {
+        localStorage.setItem(STORAGE_KEYS.CUSTOM_RECIPES, JSON.stringify(cleaned));
+      } catch {}
+    }
+
+    return cleaned.map(rehydrateCustomRecipe);
   } catch {
     return [];
   }
@@ -328,7 +374,11 @@ export function saveCustomRecipe(recipe: CatalogRecipe, rawIngredients: RawGemin
  */
 export function getGeminiApiKey(): string {
   if (!import.meta.env?.DEV) return "proxy";
-  const raw = (import.meta.env?.VITE_GEMINI_API_KEY || "").trim();
+  const raw = (
+    import.meta.env?.VITE_GEMINI_API_KEY ||
+    (import.meta.env as any)?.GEMINI_API_KEY ||
+    ""
+  ).trim();
   if ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'"))) {
     return raw.slice(1, -1).trim();
   }
@@ -370,11 +420,13 @@ Regeln:
 6. Gib für jede Zutat die Basismenge pro 1 Portion als Zahl ('baseAmountPerPortion') und Einheit ('unit') an.
 7. Gib 'imageKeywords' auf Englisch an (z. B. "tiramisu dessert mascarpone" oder "ramen noodles egg").
 8. GEWÜRZE NIEMALS ZUSAMMENFASSEN: Jedes Gewürz muss ein einzelner Zutateneintrag im "ingredients"-Array sein (z. B. "Paprikapulver edelsüß", "Knoblauchpulver", "Salz", "Schwarzer Pfeffer"). NIEMALS "Gewürze (A, B, C)" oder "Salz & Pfeffer" als einen einzigen Eintrag ausgeben.
+9. ERFINDE NIEMALS LINKS ODER URLS: Gib KEINE erfundenen Video-Links, Web-URLs, Quellen-Links oder Dummy-URLs im JSON aus. Alle Medien- und Video-Suchen werden von der App verlässlich und garantiert selbst generiert.
 
 Antworte STRIKT als valides JSON nach diesem Schema (OHNE Markdown, kein \`\`\`json):
 {
   "title": "Gerichtsname",
   "subtitle": "Knackige Kurzbeschreibung",
+  "category": "Hauptgericht",
   "time": "z.B. 18 Min.",
   "difficulty": "Einfach",
   "baseCal": 450,
@@ -676,10 +728,10 @@ function buildSmartFallbackRecipe(
  */
 async function callGeminiCascade(_apiKey: string, prompt: string): Promise<RawGeminiRecipe | null> {
   const models = [
-    "gemini-3.8-flash",
-    "gemini-flash-lite-latest",
     "gemini-3.5-flash-lite",
-    "gemini-2.5-flash-lite",
+    "gemini-3.8-flash",
+    "gemini-flash-latest",
+    "gemini-flash-lite-latest",
   ];
 
   for (const model of models) {
@@ -731,6 +783,7 @@ async function callGeminiCascade(_apiKey: string, prompt: string): Promise<RawGe
     id: recipeId,
     title: parsed.title,
     subtitle: parsed.subtitle || "Frisch kreiert mit deiner AI",
+    category: parsed.category || getRecipeCategory({ title: parsed.title, subtitle: parsed.subtitle }),
     time: parsed.time || "20 Min.",
     difficulty: parsed.difficulty || "Einfach",
     baseCal: Math.round(Number(parsed.baseCal) || 400),
@@ -784,27 +837,1044 @@ async function callGeminiCascade(_apiKey: string, prompt: string): Promise<RawGe
   return newRecipe;
 }
 
+function extractMeaningfulTextFromHtml(html: string, baseUrl: string): string {
+  const parts: string[] = [];
+
+  // 1. JSON-LD scripts (often contain Recipe metadata schema.org/Recipe)
+  const jsonLdRegex = /<script\s+[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = jsonLdRegex.exec(html)) !== null) {
+    try {
+      const parsed = JSON.parse(match[1]);
+      parts.push("JSON-LD: " + JSON.stringify(parsed));
+    } catch {
+      parts.push("JSON-LD (raw): " + match[1].slice(0, 3000));
+    }
+  }
+
+  // 2. Structured Recipe Cards / Articles / Grid-Items
+  const cardRegex = /<(?:article|div|li)[^>]*class=["'][^"']*(?:recipe|card|entry|post|grid-item|item)[^"']*["'][^>]*>([\s\S]*?)<\/(?:article|div|li)>/gi;
+  let cardCount = 0;
+  while ((match = cardRegex.exec(html)) !== null && cardCount < 30) {
+    const cardHtml = match[1];
+
+    // Find title in h1-h4 or link
+    const titleMatch = cardHtml.match(/<(?:h[1-4]|a)[^>]*>([\s\S]*?)<\/(?:h[1-4]|a)>/i);
+    const title = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() : "";
+
+    // Find link
+    const linkMatch = cardHtml.match(/<a\s+[^>]*href=["']([^"']+)["']/i);
+    let linkUrl = "";
+    if (linkMatch && linkMatch[1] && !linkMatch[1].startsWith("#") && !linkMatch[1].startsWith("javascript:")) {
+      try {
+        linkUrl = new URL(linkMatch[1], baseUrl).href;
+      } catch {}
+    }
+
+    // Find image (src, data-src, data-lazy-src, srcset)
+    let imageUrl = "";
+    const imgMatch = cardHtml.match(/<img\s+[^>]*?(?:src|data-src|data-lazy-src|srcset)=["']([^"']+)["']/i);
+    if (imgMatch && imgMatch[1]) {
+      const rawImg = imgMatch[1].split(",")[0].trim().split(" ")[0].trim();
+      if (rawImg && !rawImg.startsWith("data:") && !rawImg.endsWith(".svg")) {
+        try {
+          imageUrl = new URL(rawImg, baseUrl).href;
+        } catch {}
+      }
+    }
+
+    if (title && (linkUrl || imageUrl)) {
+      parts.push(`REZEPT-KARTE:\n- Titel: ${title}\n- Link: ${linkUrl || baseUrl}\n- Bild: ${imageUrl || "kein Bild"}`);
+      cardCount++;
+    }
+  }
+
+  // 3. Standalone Headings
+  if (cardCount === 0) {
+    const headingRegex = /<(h[1-3])[^>]*>([\s\S]*?)<\/\1>/gi;
+    while ((match = headingRegex.exec(html)) !== null) {
+      const text = match[2].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      if (text.length > 3 && text.length < 150) {
+        parts.push(`TITEL: ${text}`);
+      }
+    }
+  }
+
+  // 4. Links & Images list
+  const linkRegex = /<a\s+[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let linkCount = 0;
+  while ((match = linkRegex.exec(html)) !== null && linkCount < 50) {
+    const href = match[1];
+    const text = match[2].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    if (text.length > 5 && text.length < 100 && !href.startsWith("#") && !href.startsWith("javascript:")) {
+      try {
+        const fullUrl = new URL(href, baseUrl).toString();
+        parts.push(`LINK: [${text}](${fullUrl})`);
+        linkCount++;
+      } catch {}
+    }
+  }
+
+  return parts.join("\n\n");
+}
+
+/**
+ * 1. ECHTES WEB-FETCHING & PAGINIERUNGS-ERKENNUNG
+ * Ruft den Inhalt einer Rezept-Webseite mit Paginierung ab.
+ * Primär: r.jina.ai (CORS-frei, sauberes Markdown mit Bildern & Links)
+ * Fallback 1: api.allorigins.win/raw
+ * Fallback 2: api.allorigins.win/get
+ */
+export async function fetchWebsiteContent(
+  url: string,
+  page: number = 1
+): Promise<{ content: string; nextPageUrl?: string }> {
+  let targetUrl = url.trim();
+  if (!/^https?:\/\//i.test(targetUrl)) {
+    targetUrl = `https://${targetUrl}`;
+  }
+
+  // Intelligenter Aufbau der Paginierungs-URL wenn page > 1
+  if (page > 1) {
+    if (/\/page\/\d+/i.test(targetUrl)) {
+      targetUrl = targetUrl.replace(/\/page\/\d+/i, `/page/${page}`);
+    } else if (/[?&](page|p|seite)=\d+/i.test(targetUrl)) {
+      targetUrl = targetUrl.replace(/([?&](page|p|seite)=)\d+/i, `$1${page}`);
+    } else {
+      try {
+        const urlObj = new URL(targetUrl);
+        if (urlObj.search) {
+          urlObj.searchParams.set("page", String(page));
+          targetUrl = urlObj.toString();
+        } else {
+          const cleanPath = urlObj.pathname.replace(/\/$/, "");
+          targetUrl = `${urlObj.origin}${cleanPath}/page/${page}/`;
+        }
+      } catch {
+        targetUrl = targetUrl.includes("?") ? `${targetUrl}&page=${page}` : `${targetUrl}?page=${page}`;
+      }
+    }
+  }
+
+  let textContent = "";
+
+  // 1. Primärer Reader: r.jina.ai (mit X-With-Images-Summary & X-With-Links-Summary)
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    const jinaUrl = `https://r.jina.ai/${targetUrl}`;
+    const res = await fetch(jinaUrl, {
+      signal: controller.signal,
+      headers: {
+        "Accept": "text/markdown, text/plain, */*",
+        "X-With-Images-Summary": "true",
+        "X-With-Links-Summary": "true",
+        "X-No-Cache": "true",
+      },
+    });
+    clearTimeout(timeoutId);
+    if (res.ok) {
+      const txt = await res.text();
+      if (txt && txt.length > 150) {
+        textContent = txt;
+      }
+    }
+  } catch (err) {
+    // Weiter zum Fallback
+  }
+
+  // 2. Fallback: allorigins.win raw (HTML)
+  if (!textContent || textContent.length < 150) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const rawUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+      const res = await fetch(rawUrl, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        const rawHtml = await res.text();
+        if (rawHtml && rawHtml.length > 200) {
+          textContent = extractMeaningfulTextFromHtml(rawHtml, targetUrl);
+        }
+      }
+    } catch {}
+  }
+
+  // 3. Fallback: allorigins.win get (JSON-wrapped HTML)
+  if (!textContent || textContent.length < 150) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const fallbackUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
+      const res = await fetch(fallbackUrl, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        const json = await res.json();
+        const rawHtml = String(json?.contents || "");
+        if (rawHtml) {
+          textContent = extractMeaningfulTextFromHtml(rawHtml, targetUrl);
+        }
+      }
+    } catch {}
+  }
+
+  // Falls leer, Basis-String bereitstellen
+  if (!textContent) {
+    textContent = `Webseite: ${targetUrl}\n(Inhalt konnte nicht direkt geladen werden)`;
+  }
+
+  // Suche nach nächster Paginierungs-URL für page + 1
+  let nextPageUrl: string | undefined;
+  const nextPageNum = page + 1;
+  const nextRegexes = [
+    new RegExp(`rel=["']next["'][^>]*href=["']([^"']+)["']`, "i"),
+    new RegExp(`href=["']([^"']+)["'][^>]*rel=["']next["']`, "i"),
+    new RegExp(`href=["']([^"']*(?:/page/${nextPageNum}/?|[?&](?:page|p|seite)=${nextPageNum}[^"']*))["']`, "i"),
+    new RegExp(`\\[[^\\]]*(?:Weiter|Nächste|Next|${nextPageNum})[^\\]]*\\]\\(([^)\\s]+)\\)`, "i"),
+    new RegExp(`\\[[^\\]]*\\]\\(([^)\\s]*(?:/page/${nextPageNum}/?|[?&](?:page|p|seite)=${nextPageNum}[^)\\s]*))\\)`, "i"),
+  ];
+
+  for (const reg of nextRegexes) {
+    const m = textContent.match(reg);
+    if (m && m[1]) {
+      const foundUrl = m[1].trim();
+      try {
+        nextPageUrl = new URL(foundUrl, targetUrl).toString();
+        break;
+      } catch {}
+    }
+  }
+
+  const content = textContent.slice(0, 45000);
+  return { content, nextPageUrl };
+}
+
+export interface DiscoveredRecipeCard {
+  title: string;
+  imageUrl: string;
+  recipeUrl: string;
+}
+
+export interface ScrapePageResult {
+  recipes: CatalogRecipe[];
+  nextPageUrl?: string;
+  hasMorePages: boolean;
+  pageNumber: number;
+}
+
+export interface ScrapeSinglePageOptions {
+  onProgress?: (statusText: string) => void;
+  onBatchLoaded?: (batchRecipes: CatalogRecipe[], pageNumber: number) => void;
+  shouldStop?: () => boolean;
+}
+
+export interface ScrapeWebsiteOptions {
+  startPage?: number;
+  pagesToScan?: number;
+  maxPages?: number;
+  autoCrawlAll?: boolean;
+  existingTitles?: string[];
+  existingUrls?: string[];
+  onProgress?: (info: {
+    currentPage: number;
+    maxPages: number;
+    foundRecipesCount: number;
+    statusText: string;
+  }) => void;
+  onPageScraped?: (recipesOnPage: CatalogRecipe[], pageNum: number, hasMorePages: boolean) => void;
+  onBatchLoaded?: (batchRecipes: CatalogRecipe[], pageNum: number) => void;
+  shouldStop?: () => boolean;
+}
+
+/**
+ * Phase A: Extrahiert alle Rezeptkarten (Titel, Bild-URL, Link) von einer Übersichtsseite
+ */
+export function extractRecipeCardsFromListing(content: string, _baseUrl: string): DiscoveredRecipeCard[] {
+  const cards: DiscoveredRecipeCard[] = [];
+  const seenUrls = new Set<string>();
+
+  const isExcluded = (url: string, title: string) => {
+    const u = url.toLowerCase();
+    const t = title.toLowerCase().trim();
+    if (!u.startsWith("http")) return true;
+    if (
+      u.includes("/category/") ||
+      u.includes("/meal-type/") ||
+      u.includes("/tag/") ||
+      u.includes("/page/") ||
+      u.includes("/author/") ||
+      u.includes("/about") ||
+      u.includes("/contact") ||
+      u.includes("/privacy") ||
+      u.includes("/terms") ||
+      u.includes("/shop") ||
+      u.includes("/cookbook") ||
+      u.includes("/wp-content/") ||
+      u.includes("/cart") ||
+      u.includes("/checkout")
+    ) {
+      return true;
+    }
+    if (u.endsWith("#wp--skip-link--target") || u.endsWith("#content")) return true;
+    if (
+      [
+        "appetizer",
+        "breakfast",
+        "dessert",
+        "dinner",
+        "drinks",
+        "main course",
+        "restaurant remakes",
+        "sauce",
+        "side dish",
+        "snack",
+        "soup",
+        "recipes",
+        "home",
+        "search",
+        "skip to content",
+      ].includes(t)
+    ) {
+      return true;
+    }
+    return false;
+  };
+
+  // Pattern 1 (z.B. Moribyan / Foodblogs):
+  // [![Image N](imgUrl)](recipeUrl) followed by ### [Title](recipeUrl) oder [Title](recipeUrl)
+  const regex1 = /\[\!\[[^\]]*\]\((https?:\/\/[^\s\)]+)\)\]\((https?:\/\/[^\s\)]+)\)\s*(?:###|\*\*|##)?\s*\[([^\]]+)\]\(\2\)/gi;
+  let m: RegExpExecArray | null;
+  while ((m = regex1.exec(content)) !== null) {
+    const imageUrl = m[1].trim();
+    const recipeUrl = m[2].trim();
+    const title = m[3].trim();
+    const cleanUrl = recipeUrl.replace(/\/$/, "");
+    if (!isExcluded(recipeUrl, title) && !seenUrls.has(cleanUrl)) {
+      seenUrls.add(cleanUrl);
+      cards.push({ title, imageUrl, recipeUrl });
+    }
+  }
+
+  // Pattern 2: Category badge followed by image link and recipe title link
+  if (cards.length < 3) {
+    const regex2 = /\[\!\[[^\]]*\]\((https?:\/\/[^\s\)]+)\)\]\((https?:\/\/[^\s\)]+)\)[\s\S]{0,120}?\[([^\]]+)\]\(\2\)/gi;
+    while ((m = regex2.exec(content)) !== null) {
+      const imageUrl = m[1].trim();
+      const recipeUrl = m[2].trim();
+      const title = m[3].trim();
+      const cleanUrl = recipeUrl.replace(/\/$/, "");
+      if (!isExcluded(recipeUrl, title) && !seenUrls.has(cleanUrl)) {
+        seenUrls.add(cleanUrl);
+        cards.push({ title, imageUrl, recipeUrl });
+      }
+    }
+  }
+
+  // Pattern 3: Standard-Markdown: ### [Title](recipeUrl) gefolgt von ![Title](imgUrl)
+  if (cards.length < 3) {
+    const regex3 = /###\s*\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)[\s\S]{0,180}?\!\[[^\]]*\]\((https?:\/\/[^\s\)]+)\)/gi;
+    while ((m = regex3.exec(content)) !== null) {
+      const title = m[1].trim();
+      const recipeUrl = m[2].trim();
+      const imageUrl = m[3].trim();
+      const cleanUrl = recipeUrl.replace(/\/$/, "");
+      if (!isExcluded(recipeUrl, title) && !seenUrls.has(cleanUrl)) {
+        seenUrls.add(cleanUrl);
+        cards.push({ title, imageUrl, recipeUrl });
+      }
+    }
+  }
+
+  // Pattern 4: HTML-Tags <a href="recipeUrl">...<img src="imgUrl">...<h3>Title</h3>
+  if (cards.length < 3) {
+    const htmlRegex = /<a\s+[^>]*href=["'](https?:\/\/[^"']+)["'][^>]*>[\s\S]*?<img\s+[^>]*src=["'](https?:\/\/[^"']+)["'][^>]*>[\s\S]*?<(?:h2|h3|h4|span|div)[^>]*>([^<]+)<\/(?:h2|h3|h4|span|div)>/gi;
+    while ((m = htmlRegex.exec(content)) !== null) {
+      const recipeUrl = m[1].trim();
+      const imageUrl = m[2].trim();
+      const title = m[3].trim();
+      const cleanUrl = recipeUrl.replace(/\/$/, "");
+      if (!isExcluded(recipeUrl, title) && !seenUrls.has(cleanUrl)) {
+        seenUrls.add(cleanUrl);
+        cards.push({ title, imageUrl, recipeUrl });
+      }
+    }
+  }
+
+  return cards;
+}
+
+interface RecipeSubpageDetails {
+  title: string;
+  imageUrl: string;
+  recipeUrl: string;
+  recipeIngredient: string[];
+  recipeInstructions: string[];
+  totalTime?: string;
+  rawText?: string;
+}
+
+function extractJsonLdFromHtml(html: string): any | null {
+  const jsonLdRegex = /<script\s+[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = jsonLdRegex.exec(html)) !== null) {
+    try {
+      const parsed = JSON.parse(match[1]);
+      const items = Array.isArray(parsed) ? parsed : (parsed["@graph"] || [parsed]);
+      for (const item of items) {
+        const type = item["@type"];
+        const isRecipe = type === "Recipe" || (Array.isArray(type) && type.includes("Recipe"));
+        if (isRecipe) {
+          return item;
+        }
+      }
+    } catch {}
+  }
+  return null;
+}
+
+function extractInstructionsList(instructions: any): string[] {
+  if (!instructions) return [];
+  if (typeof instructions === "string") return [instructions];
+  if (!Array.isArray(instructions)) return [];
+  const list: string[] = [];
+  for (const step of instructions) {
+    if (typeof step === "string") {
+      list.push(step.trim());
+    } else if (step && typeof step === "object") {
+      if (step["@type"] === "HowToSection" && Array.isArray(step.itemListElement)) {
+        list.push(...extractInstructionsList(step.itemListElement));
+      } else if (step.text) {
+        list.push(String(step.text).trim());
+      } else if (step.name) {
+        list.push(String(step.name).trim());
+      }
+    }
+  }
+  return list.filter(Boolean);
+}
+
+/**
+ * Phase B: Ruft die Unterseite eines Rezepts ab und extrahiert JSON-LD Schema.org / Print / Markdown
+ */
+export async function fetchRecipeSubpageDetails(
+  card: DiscoveredRecipeCard
+): Promise<RecipeSubpageDetails> {
+  const result: RecipeSubpageDetails = {
+    title: card.title,
+    imageUrl: card.imageUrl,
+    recipeUrl: card.recipeUrl,
+    recipeIngredient: [],
+    recipeInstructions: [],
+  };
+
+  const slug = card.recipeUrl.replace(/\/$/, "").split("/").pop();
+
+  // 1. WordPress Print-URL (wprm_print) via Jina Reader (enthält direkt die exakte Rezeptkarte!)
+  if (slug && !slug.includes("?") && !slug.includes("page")) {
+    try {
+      const urlObj = new URL(card.recipeUrl);
+      const wprmPrintUrl = `${urlObj.origin}/wprm_print/${slug}`;
+      const jinaPrint = `https://r.jina.ai/${wprmPrintUrl}`;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const res = await fetch(jinaPrint, {
+        signal: controller.signal,
+        headers: { "Accept": "text/markdown, text/plain, */*", "X-No-Cache": "true" },
+      });
+      clearTimeout(timeoutId);
+      if (res.ok) {
+        const printText = await res.text();
+        if (
+          printText &&
+          printText.length > 300 &&
+          (printText.includes("▢") ||
+            printText.toLowerCase().includes("ingredient") ||
+            printText.toLowerCase().includes("instruction") ||
+            printText.includes("cup") ||
+            printText.includes("tablespoon"))
+        ) {
+          result.rawText = printText.slice(0, 8000);
+          return result;
+        }
+      }
+    } catch {}
+  }
+
+  // 2. Direkter HTML-Abruf für Schema.org JSON-LD <script type="application/ld+json">
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
+    const rawUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(card.recipeUrl)}`;
+    const res = await fetch(rawUrl, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (res.ok) {
+      const html = await res.text();
+      const recipeLd = extractJsonLdFromHtml(html);
+      if (recipeLd) {
+        if (Array.isArray(recipeLd.recipeIngredient) && recipeLd.recipeIngredient.length > 0) {
+          result.recipeIngredient = recipeLd.recipeIngredient.map((i: any) => String(i).trim());
+        }
+        if (recipeLd.recipeInstructions) {
+          result.recipeInstructions = extractInstructionsList(recipeLd.recipeInstructions);
+        }
+        if (recipeLd.totalTime) {
+          result.totalTime = String(recipeLd.totalTime);
+        }
+        if (!result.imageUrl || result.imageUrl.includes("example.com")) {
+          const ldImg = typeof recipeLd.image === "string"
+            ? recipeLd.image
+            : Array.isArray(recipeLd.image) ? recipeLd.image[0] : recipeLd.image?.url;
+          if (ldImg && typeof ldImg === "string" && ldImg.startsWith("http")) {
+            result.imageUrl = ldImg;
+          }
+        }
+        if (result.recipeIngredient.length > 0) {
+          return result;
+        }
+      }
+    }
+  } catch {}
+
+  // 3. Fallback: Jina Reader für die reguläre Unterseite
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 7000);
+    const jinaUrl = `https://r.jina.ai/${card.recipeUrl}`;
+    const res = await fetch(jinaUrl, {
+      signal: controller.signal,
+      headers: { "Accept": "text/markdown, text/plain, */*", "X-No-Cache": "true" },
+    });
+    clearTimeout(timeoutId);
+    if (res.ok) {
+      const txt = await res.text();
+      if (txt && txt.length > 200) {
+        result.rawText = txt.slice(0, 9000);
+      }
+    }
+  } catch {}
+
+  return result;
+}
+
+/**
+ * Übergibt ein Batch von 3–4 Unterseiten-Rezeptdaten an Gemini, um echte Zutaten und Schritte zu strukturieren.
+ */
+async function processBatchWithGemini(
+  batch: RecipeSubpageDetails[],
+  sourceName: string,
+  pageNumber: number,
+  batchIdx: number,
+  pantry: any[] = []
+): Promise<CatalogRecipe[]> {
+  const candidateModels = [
+    "gemini-3.5-flash-lite",
+    "gemini-3.8-flash",
+    "gemini-flash-latest",
+    "gemini-flash-lite-latest",
+  ];
+
+  const batchPayload = batch.map((item, idx) => ({
+    index: idx + 1,
+    title: item.title,
+    imageUrl: item.imageUrl,
+    sourceUrl: item.recipeUrl,
+    totalTime: item.totalTime,
+    recipeIngredient: item.recipeIngredient.length > 0 ? item.recipeIngredient : undefined,
+    recipeInstructions: item.recipeInstructions.length > 0 ? item.recipeInstructions : undefined,
+    contentSnippet: !item.recipeIngredient.length ? item.rawText?.slice(0, 3000) : undefined,
+  }));
+
+  const prompt = `Du bist ein erstklassiger Küchenchef und Rezept-Strukturierer für eine moderne Koch-App.
+Hier sind ${batch.length} echte Rezepte von «${sourceName}» (Seite ${pageNumber}), deren echte Unterseiten-Daten (Zutaten & Zubereitung) wir gerade abgerufen haben.
+
+Rezept-Rohdaten:
+${JSON.stringify(batchPayload, null, 2)}
+
+ANWEISUNGEN:
+1. Behalte "sourceUrl" und "imageUrl" von jedem Rezept ZU 100% UNVERÄNDERT bei!
+2. Rechne die echten Zutaten ("recipeIngredient" bzw. aus dem Text) exakt in das Format {"name": "...", "baseAmountPerPortion": number, "unit": "g"|"ml"|"Stk."|"TL"|"EL", "optional": boolean} für EINE Basisportion um.
+   - WICHTIG: Gewürze NIEMALS zusammenfassen! Jedes Gewürz (z.B. Paprikapulver, Pfeffer, Salz, Knoblauch, Zimt, Vanille) MUSS ein einzelner Zutateneintrag im Array sein!
+3. Formatiere die echten Zubereitungsschritte in unser Format:
+   {"stepNumber": number, "title": string, "instruction": string, "duration": string, "tag": string}.
+4. Falls das Original auf Englisch ist (z. B. "Pumpkin Cinnamon Roll Pancakes"), übersetze Titel, Teaser, Zutaten und Zubereitungsschritte sauber und appetitlich ins Deutsche (z. B. "Kürbis-Zimtschnecken-Pancakes").
+5. Berechne realistische Nährwerte pro 1 Portion ("baseCal", "baseProt", "baseCarb", "baseCost").
+6. Ordne die passende Kategorie zu ("category": "Hauptgericht" | "Frühstück" | "Snack" | "Dessert" | "Backen").
+
+Antworte AUSSCHLIESSLICH als gültiges JSON:
+{
+  "recipes": [
+    {
+      "title": "Deutscher Rezeptname",
+      "subtitle": "Appetitliche Kurzbeschreibung",
+      "category": "Hauptgericht",
+      "time": "25 Min.",
+      "difficulty": "Einfach",
+      "baseCal": 450,
+      "baseProt": 25,
+      "baseCarb": 50,
+      "baseCost": 2.80,
+      "chefTip": "Hilfreicher Profi-Tipp",
+      "imageUrl": "echte URL unverändert",
+      "sourceUrl": "echte URL unverändert",
+      "imageKeywords": "pancakes, cinnamon",
+      "tone": "mint",
+      "mealType": "dinner",
+      "equipment": ["pan"],
+      "ingredients": [
+        {
+          "name": "Zutat",
+          "baseAmountPerPortion": 100,
+          "unit": "g",
+          "optional": false
+        }
+      ],
+      "steps": [
+        {
+          "stepNumber": 1,
+          "title": "Vorbereitung",
+          "instruction": "Anweisung...",
+          "duration": "5 Min.",
+          "tag": "Vorbereitung"
+        }
+      ]
+    }
+  ]
+}`;
+
+  let rawList: any[] = [];
+
+  for (const model of candidateModels) {
+    try {
+      const data = await callGeminiProxy({
+        model,
+        contents: prompt,
+        config: {
+          temperature: 0.2,
+          responseMimeType: "application/json",
+          maxOutputTokens: 8192,
+        },
+      });
+
+      const responseText = extractTextFromGeminiResponse(data) ?? "";
+      const cleaned = responseText.replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
+      const parsed = JSON.parse(cleaned);
+      rawList = Array.isArray(parsed?.recipes) ? parsed.recipes : Array.isArray(parsed) ? parsed : [];
+      if (rawList.length > 0) {
+        break;
+      }
+    } catch (err) {
+      console.warn(`[Batch Gemini] Fehler bei Modell ${model}:`, err);
+    }
+  }
+
+  const timestamp = Date.now();
+  const recipes: CatalogRecipe[] = [];
+
+  for (let i = 0; i < rawList.length; i++) {
+    const item = rawList[i];
+    const originalCard = batch[i] || batch[0];
+    const title = (item.title || originalCard.title || "").trim();
+    if (!title) continue;
+
+    const decompIngredients: RawGeminiIngredient[] = decomposeCompositeIngredients(
+      Array.isArray(item.ingredients) && item.ingredients.length > 0
+        ? item.ingredients
+        : extractIngredientsFromDishText(title, item.subtitle || "")
+    ).map((ing: any) => ({
+      name: String(ing.name || "").trim(),
+      baseAmountPerPortion: Number(ing.baseAmountPerPortion) || 100,
+      unit: String(ing.unit || "g"),
+      optional: Boolean(ing.optional),
+    }));
+
+    const inStock = decompIngredients.filter((ing: any) =>
+      findMatchingPantryItem(ing.name, pantry as any) !== null
+    );
+    const matchScore = Math.round(
+      (inStock.length / Math.max(1, decompIngredients.length)) * 100
+    );
+
+    const imageUrl = item.imageUrl && /^https?:\/\//i.test(item.imageUrl) && !item.imageUrl.includes("example.com")
+      ? item.imageUrl
+      : originalCard.imageUrl || resolveRecipeFoodImage(title, item.imageKeywords);
+
+    const sourceUrl = item.sourceUrl && /^https?:\/\//i.test(item.sourceUrl)
+      ? item.sourceUrl
+      : originalCard.recipeUrl;
+
+    const safeSlug = sourceName.toLowerCase().replace(/[^a-z0-9]+/g, "-") || "portal";
+    const recipeId = `scraped-${safeSlug}-${timestamp}-${pageNumber}-${batchIdx}-${i + 1}`;
+
+    const recipe: CatalogRecipe = {
+      id: recipeId,
+      title,
+      subtitle: item.subtitle || `Rezept von ${sourceName}`,
+      category: item.category || getRecipeCategory({ title, subtitle: item.subtitle }),
+      source: sourceName,
+      sourceUrl,
+      time: item.time || "25 Min.",
+      difficulty: item.difficulty || "Einfach",
+      baseCal: Math.round(Number(item.baseCal) || 450),
+      baseProt: Math.round(Number(item.baseProt) || 20),
+      baseCarb: Math.round(Number(item.baseCarb) || 48),
+      baseCost: Number(item.baseCost) || 2.5,
+      tone: item.tone || "mint",
+      chefTip: item.chefTip || "Frisch zubereitet schmeckt es am besten!",
+      imageUrl,
+      isAiGenerated: true,
+      matchScore,
+      mealType: item.mealType || "dinner",
+      equipment: Array.isArray(item.equipment) ? item.equipment : ["pan"],
+      rawIngredients: decompIngredients,
+      ingredients: decompIngredients,
+      optional: item.optional || "Nach Belieben abschmecken",
+      available: (s: number) => {
+        if (inStock.length > 0) {
+          return inStock
+            .slice(0, 3)
+            .map((ing: any) => `${Math.round(ing.baseAmountPerPortion * s)} ${ing.unit} ${ing.name}`)
+            .join(" · ");
+        }
+        return decompIngredients
+          .slice(0, 3)
+          .map((ing: any) => `${Math.round(ing.baseAmountPerPortion * s)} ${ing.unit} ${ing.name}`)
+          .join(" · ");
+      },
+      ingredientsList: (s: number) => {
+        return decompIngredients.map((ing: any) => ({
+          name: ing.name,
+          amount: `${Math.round(ing.baseAmountPerPortion * s)} ${ing.unit}`,
+          optional: Boolean(ing.optional),
+        }));
+      },
+      steps: Array.isArray(item.steps) && item.steps.length > 0
+        ? item.steps.map((st: any, idx: number) => ({
+            stepNumber: st.stepNumber || idx + 1,
+            title: st.title || `Schritt ${idx + 1}`,
+            instruction: st.instruction || "",
+            duration: st.duration || "4 Min.",
+            tag: st.tag || "Kochen",
+          }))
+        : [
+            {
+              stepNumber: 1,
+              title: "Zutaten vorbereiten",
+              instruction: "Alle Zutaten abmessen, waschen und schneiden.",
+              duration: "5 Min.",
+              tag: "Vorbereitung",
+            },
+            {
+              stepNumber: 2,
+              title: "Zubereiten",
+              instruction: "Die Zutaten nach Rezept garen und miteinander vermengen.",
+              duration: "15 Min.",
+              tag: "Kochen",
+            },
+            {
+              stepNumber: 3,
+              title: "Abschmecken & Servieren",
+              instruction: "Mit Kräutern und Gewürzen abschmecken und warm anrichten.",
+              duration: "3 Min.",
+              tag: "Finish",
+            },
+          ],
+    };
+
+    recipes.push(recipe);
+  }
+
+  return recipes;
+}
+
+/**
+ * 2-Phasen-Scanner für eine einzelne Übersichtsseite:
+ * Phase A: Rezeptkarten finden
+ * Phase B: Unterseiten / JSON-LD / Print abrufen und in 3–4er Batches mit Gemini strukturieren
+ */
+export async function scrapeSinglePageFromWebsiteWithGemini(
+  pageUrl: string,
+  sourceName: string,
+  pageNumber: number,
+  existingTitlesSet: Set<string>,
+  existingUrlsSet: Set<string>,
+  pantry: any[] = [],
+  options?: ScrapeSinglePageOptions
+): Promise<ScrapePageResult> {
+  const pageData = await fetchWebsiteContent(pageUrl, pageNumber);
+
+  if (!pageData.content || pageData.content.length < 80) {
+    return {
+      recipes: [],
+      nextPageUrl: pageData.nextPageUrl,
+      hasMorePages: Boolean(pageData.nextPageUrl),
+      pageNumber,
+    };
+  }
+
+  // Phase A: Alle Rezeptkarten auf der Übersichtsseite finden
+  let cards = extractRecipeCardsFromListing(pageData.content, pageUrl);
+
+  // Fallback mit Gemini, falls Regex weniger als 2 Karten gefunden hat
+  if (cards.length < 2) {
+    try {
+      const cardPrompt = `Analysiere den folgenden Webseiteninhalt von «${sourceName}» (${pageUrl}, Seite ${pageNumber}).
+Extrahiere alle Rezeptkarten als JSON:
+{
+  "cards": [
+    {
+      "title": "Originaler Rezepttitel",
+      "imageUrl": "echte Bild-URL aus dem Quelltext",
+      "recipeUrl": "echte URL zur Rezept-Detailseite"
+    }
+  ]
+}
+Webseiteninhalt:
+"""
+${pageData.content.slice(0, 20000)}
+"""`;
+
+      const resp = await callGeminiProxy({
+        model: "gemini-3.5-flash-lite",
+        contents: cardPrompt,
+        config: { temperature: 0.1, responseMimeType: "application/json" },
+      });
+      const txt = extractTextFromGeminiResponse(resp) ?? "";
+      const cleaned = txt.replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
+      const parsed = JSON.parse(cleaned);
+      if (Array.isArray(parsed?.cards) && parsed.cards.length > 0) {
+        cards = parsed.cards.filter((c: any) => c.title && c.recipeUrl && /^https?:\/\//i.test(c.recipeUrl));
+      }
+    } catch {}
+  }
+
+  // Filter already existing cards
+  const newCards = cards.filter((card) => {
+    const lowerTitle = card.title.toLowerCase().trim();
+    const cleanUrl = card.recipeUrl.toLowerCase().trim().replace(/\/$/, "");
+    if (existingTitlesSet.has(lowerTitle)) return false;
+    if (existingUrlsSet.has(cleanUrl)) return false;
+    for (const exTitle of existingTitlesSet) {
+      if (isTitleSimilar(lowerTitle, exTitle)) return false;
+    }
+    return true;
+  });
+
+  const pageRecipes: CatalogRecipe[] = [];
+
+  if (newCards.length === 0) {
+    const hasMore = Boolean(pageData.nextPageUrl);
+    return {
+      recipes: [],
+      nextPageUrl: pageData.nextPageUrl,
+      hasMorePages: hasMore,
+      pageNumber,
+    };
+  }
+
+  // Phase B: Unterseiten in Batches von 3–4 Karten abrufen und verarbeiten
+  const BATCH_SIZE = 4;
+  let processedCount = 0;
+
+  for (let b = 0; b < newCards.length; b += BATCH_SIZE) {
+    if (options?.shouldStop?.()) break;
+
+    const currentBatchCards = newCards.slice(b, b + BATCH_SIZE);
+    processedCount = Math.min(newCards.length, b + currentBatchCards.length);
+
+    options?.onProgress?.(
+      `⏳ Seite ${pageNumber}: ${newCards.length} Rezeptkarten gefunden – lade Rezept-Details (${processedCount}/${newCards.length})...`
+    );
+
+    // 1. Echte Unterseiten parallel abrufen
+    const subpageDetailsList = await Promise.all(
+      currentBatchCards.map((c) => fetchRecipeSubpageDetails(c))
+    );
+
+    if (options?.shouldStop?.()) break;
+
+    // 2. Batch durch Gemini strukturieren & übersetzen
+    const batchRecipes = await processBatchWithGemini(
+      subpageDetailsList,
+      sourceName,
+      pageNumber,
+      Math.floor(b / BATCH_SIZE) + 1,
+      pantry
+    );
+
+    // Filter duplicates and record
+    const uniqueBatch: CatalogRecipe[] = [];
+    for (const r of batchRecipes) {
+      const lower = r.title.toLowerCase().trim();
+      const rawU = (r.sourceUrl || "").toLowerCase().trim().replace(/\/$/, "");
+      if (existingTitlesSet.has(lower)) continue;
+      if (rawU && existingUrlsSet.has(rawU)) continue;
+
+      existingTitlesSet.add(lower);
+      if (rawU) existingUrlsSet.add(rawU);
+      uniqueBatch.push(r);
+    }
+
+    if (uniqueBatch.length > 0) {
+      pageRecipes.push(...uniqueBatch);
+      // Sofortiges Live-Callback für dieses Batch
+      options?.onBatchLoaded?.(uniqueBatch, pageNumber);
+    }
+  }
+
+  const hasMorePages = (pageRecipes.length > 0 || cards.length > 0) && (Boolean(pageData.nextPageUrl) || pageNumber === 1);
+
+  return {
+    recipes: pageRecipes,
+    nextPageUrl: pageData.nextPageUrl,
+    hasMorePages,
+    pageNumber,
+  };
+}
+
+/**
+ * 2. VOLLAUTOMATISCHER REKURSIVER CRAWLER
+ * Läuft Seite für Seite durch, feuert onBatchLoaded nach jedem 3-4er Batch und onPageScraped nach jeder Seite.
+ * Bricht bei shouldStop() oder Ende der Seiten ab.
+ * KEINE Fake-Rezepte!
+ */
+export async function scrapeRecipesFromWebsiteWithGemini(
+  url: string,
+  sourceName: string,
+  pantry: any[] = [],
+  options?: ScrapeWebsiteOptions
+): Promise<{ recipes: CatalogRecipe[]; lastPageScanned: number }> {
+  const startPage = Math.max(1, options?.startPage ?? 1);
+  const autoCrawlAll = options?.autoCrawlAll ?? true;
+  const maxPagesToVisit = options?.maxPages != null
+    ? Math.max(1, options.maxPages)
+    : (autoCrawlAll ? 30 : Math.max(1, options?.pagesToScan ?? 2));
+
+  const existingTitles = (options?.existingTitles ?? []).map((t) => t.toLowerCase().trim());
+  const existingTitlesSet = new Set(existingTitles);
+  const existingUrls = (options?.existingUrls ?? []).map((u) => u.toLowerCase().trim().replace(/\/$/, ""));
+  const existingUrlsSet = new Set(existingUrls);
+
+  const allDiscoveredRecipes: CatalogRecipe[] = [];
+  let currentTargetUrl = url.trim();
+  let lastPageScanned = startPage - 1;
+
+  for (let pageIdx = 0; pageIdx < maxPagesToVisit; pageIdx++) {
+    if (options?.shouldStop?.()) break;
+
+    const currentPageNum = startPage + pageIdx;
+
+    if (options?.onProgress) {
+      options.onProgress({
+        currentPage: currentPageNum,
+        maxPages: startPage + maxPagesToVisit - 1,
+        foundRecipesCount: allDiscoveredRecipes.length,
+        statusText: `Scanne Webseite (Seite ${currentPageNum})... Bisher ${allDiscoveredRecipes.length} Rezepte gefunden.`,
+      });
+    }
+
+    try {
+      const pageResult = await scrapeSinglePageFromWebsiteWithGemini(
+        currentTargetUrl,
+        sourceName,
+        currentPageNum,
+        existingTitlesSet,
+        existingUrlsSet,
+        pantry,
+        {
+          onProgress: (statusText) => {
+            options?.onProgress?.({
+              currentPage: currentPageNum,
+              maxPages: startPage + maxPagesToVisit - 1,
+              foundRecipesCount: allDiscoveredRecipes.length,
+              statusText,
+            });
+          },
+          onBatchLoaded: (batch, pNum) => {
+            allDiscoveredRecipes.push(...batch);
+            options?.onBatchLoaded?.(batch, pNum);
+
+            // Sofort im localStorage sichern
+            try {
+              const stored = getStoredCustomRecipes();
+              const nextStored = [
+                ...batch,
+                ...stored.filter((r) => !batch.some((nr) => nr.id === r.id)),
+              ];
+              localStorage.setItem(STORAGE_KEYS.CUSTOM_RECIPES, JSON.stringify(nextStored));
+            } catch {}
+          },
+          shouldStop: options?.shouldStop,
+        }
+      );
+
+      if (options?.shouldStop?.()) break;
+
+      lastPageScanned = currentPageNum;
+
+      if (pageResult.recipes.length > 0) {
+        options?.onPageScraped?.(pageResult.recipes, currentPageNum, pageResult.hasMorePages);
+      }
+
+      // Ende erreicht wenn keine Rezepte auf der Seite oder keine Folgeseite
+      if (!pageResult.hasMorePages || pageResult.recipes.length === 0) {
+        break;
+      }
+
+      if (pageResult.nextPageUrl) {
+        currentTargetUrl = pageResult.nextPageUrl;
+      } else {
+        break;
+      }
+    } catch (err) {
+      console.warn(`Fehler beim Scannen von Seite ${currentPageNum}:`, err);
+      break;
+    }
+  }
+
+  // KEINE Fake-Rezepte! Wenn nichts gefunden wurde, geben wir ehrlich das leere Array zurück.
+  return { recipes: allDiscoveredRecipes, lastPageScanned: Math.max(startPage, lastPageScanned) };
+}
+
 export async function importRecipeFromTextOrUrlWithGemini(
   content: string,
   pantryItems: Array<{ name: string; amount?: number }>
 ): Promise<{ recipe: CatalogRecipe; missingIngredients: RawGeminiIngredient[]; rawIngredients: RawGeminiIngredient[] }> {
   const isUrl = /^https?:\/\//i.test(content.trim());
+  let contentToAnalyze = content.trim();
+  let sourceDomain = "Importiert";
+
+  if (isUrl) {
+    try {
+      sourceDomain = new URL(content.trim()).hostname.replace(/^www\./, "");
+    } catch {
+      sourceDomain = "Web-Rezept";
+    }
+
+    try {
+      const fetched = await fetchWebsiteContent(content.trim(), 1);
+      if (fetched.content && fetched.content.length > 80) {
+        contentToAnalyze = fetched.content;
+      }
+    } catch {}
+  }
 
   const prompt = `Du bist ein Rezept-Extraktor. Analysiere diesen Rezept-Inhalt (${isUrl ? "Weblink" : "Text/Social-Media Caption/Notiz"}) und extrahiere daraus ein strukturiertes Rezept für EINE PORTION (Basisportionierung).
 
 WICHTIGE REGEL FÜR GEWÜRZE & ZUTATEN:
 - Fasse Gewürze NIEMALS zusammen! Jedes Gewürz (z.B. "Paprikapulver edelsüß", "Knoblauchpulver", "Salz", "Schwarzer Pfeffer") MUSS als separater Eintrag im "ingredients"-Array aufgeführt werden.
 - NIEMALS "Gewürze (Paprika, Knoblauch, Salz)" oder "Salz & Pfeffer" in einer einzigen Zeile bündeln!
+- ERFINDE NIEMALS LINKS ODER URLS: Gib keine fiktiven Quellen-Links, Website-URLs oder Video-URLs aus.
 
 Inhalt zum Extrahieren:
 """
-${content.trim().slice(0, 4000)}
+${contentToAnalyze.slice(0, 45000)}
 """
 
 Antworte AUSSCHLIESSLICH mit gültigem JSON im folgenden Schema ohne Markdown-Formatierung:
 {
   "title": "Prägnanter Rezeptname",
   "subtitle": "Kurze, appetitliche Beschreibung (1 Satz)",
+  "category": "Hauptgericht" | "Frühstück" | "Snack" | "Dessert" | "Backen",
   "time": "Zubereitungszeit (z.B. 20 Min.)",
   "difficulty": "Einfach" | "Mittel",
   "baseCal": 450,
@@ -856,10 +1926,23 @@ Antworte AUSSCHLIESSLICH mit gültigem JSON im folgenden Schema ohne Markdown-Fo
     (inStockIngredients.length / Math.max(1, parsed.ingredients.length)) * 100
   );
 
+  if (!sourceDomain || sourceDomain === "Importiert") {
+    if (isUrl) {
+      try {
+        sourceDomain = new URL(content.trim()).hostname.replace(/^www\./, "");
+      } catch {
+        sourceDomain = "Web-Rezept";
+      }
+    }
+  }
+
   const recipe: CatalogRecipe = {
     id: recipeId,
     title: parsed.title,
     subtitle: parsed.subtitle || "Aus dem Web / Social Media importiert",
+    category: parsed.category || getRecipeCategory({ title: parsed.title, subtitle: parsed.subtitle }),
+    source: sourceDomain,
+    sourceUrl: isUrl ? content.trim() : undefined,
     time: parsed.time || "20 Min.",
     difficulty: parsed.difficulty || "Einfach",
     baseCal: Math.round(Number(parsed.baseCal) || 450),
@@ -951,11 +2034,13 @@ Analysiere dieses Kochvideo (Reel, TikTok oder Video-Clip) ganzheitlich:
 WICHTIGE REGEL FÜR GEWÜRZE & ZUTATEN:
 - Fasse Gewürze NIEMALS zusammen! Jedes Gewürz (z.B. "Paprikapulver edelsüß", "Knoblauchpulver", "Salz", "Schwarzer Pfeffer") MUSS als separater Eintrag im "ingredients"-Array aufgeführt werden.
 - NIEMALS "Gewürze (Paprika, Knoblauch, Salz)" oder "Salz & Pfeffer" in einer einzigen Zeile bündeln!
+- ERFINDE NIEMALS LINKS ODER URLS: Gib keine fiktiven Quellen-Links, Website-URLs oder Video-URLs aus.
 
 Antworte AUSSCHLIESSLICH mit gültigem JSON im folgenden Schema ohne Markdown-Formatierung:
 {
   "title": "Prägnanter, ansprechender Rezeptname",
   "subtitle": "Kurze, appetitliche Beschreibung (1 Satz)",
+  "category": "Hauptgericht" | "Frühstück" | "Snack" | "Dessert" | "Backen",
   "time": "Zubereitungszeit (z.B. 15 Min.)",
   "difficulty": "Einfach" | "Mittel",
   "baseCal": 480,
@@ -1014,6 +2099,8 @@ Antworte AUSSCHLIESSLICH mit gültigem JSON im folgenden Schema ohne Markdown-Fo
     id: recipeId,
     title: parsed.title,
     subtitle: parsed.subtitle || "Aus Video / Reel analysiert",
+    category: parsed.category || getRecipeCategory({ title: parsed.title, subtitle: parsed.subtitle }),
+    source: "Video / Reel",
     time: parsed.time || "20 Min.",
     difficulty: parsed.difficulty || "Einfach",
     baseCal: Math.round(Number(parsed.baseCal) || 450),
@@ -1108,7 +2195,12 @@ ANWEISUNG AN DICH ALS CHEFKOCH:
 5. Wenn nach Hitze, Garzeit oder Konsistenz gefragt wird: Gib präzise Herd-Stufen oder Minuten an.
 6. Kein langes Vorgeplänkel, direkt die Lösung für die Küche.`;
 
-    const candidateModels = ["gemini-flash-latest", "gemini-3.8-flash", "gemini-flash-lite-latest", "gemini-2.5-flash"];
+    const candidateModels = [
+      "gemini-3.5-flash-lite",
+      "gemini-3.8-flash",
+      "gemini-flash-latest",
+      "gemini-flash-lite-latest",
+    ];
     for (const model of candidateModels) {
       try {
         const resp = await callGeminiProxy({

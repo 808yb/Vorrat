@@ -267,7 +267,7 @@ Antworte AUSSCHLIESSLICH als valides JSON in folgendem Schema ohne Markdown-Back
 
     if (params.imageBase64) {
       const cleanBase64 = params.imageBase64.replace(/^data:[^;]+;base64,/, "");
-      const modelsToTry = ["gemini-3.8-flash", "gemini-flash-lite-latest", "gemini-3.5-flash-lite"];
+      const modelsToTry = ["gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-flash-latest", "gemini-flash-lite-latest"];
       let rawText = "";
 
       for (const model of modelsToTry) {
@@ -324,7 +324,7 @@ Antworte AUSSCHLIESSLICH als valides JSON in folgendem Schema ohne Markdown-Back
       }
     } else {
       // Text-only mode: use a simple model cascade through the proxy
-      const modelsToTry = ["gemini-3.8-flash", "gemini-flash-lite-latest", "gemini-3.5-flash-lite"];
+      const modelsToTry = ["gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-flash-latest", "gemini-flash-lite-latest"];
       let rawText = "";
 
       for (const model of modelsToTry) {
