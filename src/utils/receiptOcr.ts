@@ -522,6 +522,8 @@ export interface ParsedReceiptFoodItem {
   isUnlimited?: boolean;
 }
 
+export type ReceiptParsedItem = ParsedReceiptFoodItem;
+
 /**
  * Intelligent Receipt OCR & Text Analysis with Gemini Vision / AI
  */
@@ -578,42 +580,34 @@ Antworte AUSSCHLIESSLICH als valides JSON in folgendem Schema ohne Markdown-Back
 
   // Primary: route through the secure server-side proxy
   try {
-    const modelsToTry = ["gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-flash-latest", "gemini-flash-lite-latest"];
     let rawText = "";
 
     if (params.imageBase64) {
       const cleanBase64 = params.imageBase64.replace(/^data:[^;]+;base64,/, "");
-
-      for (const model of modelsToTry) {
-        try {
-          const resp = await callGeminiProxy({
-            model,
-            contents: params.text
-              ? `Kassenbon-Textinhalt:\n${params.text}\n\n${promptText}`
-              : promptText,
-            config: { responseMimeType: "application/json", temperature: 0.2 },
-            inlineData: { data: cleanBase64, mimeType: params.mimeType || "image/jpeg" },
-          });
-          rawText = extractTextFromGeminiResponse(resp) ?? "";
-          if (rawText) break;
-        } catch (mErr) {
-          console.warn(`[Receipt OCR] Fehler mit Modell ${model}:`, mErr);
-        }
+      try {
+        const resp = await callGeminiProxy({
+          model: "gemini-3.8-flash",
+          contents: params.text
+            ? `Kassenbon-Textinhalt:\n${params.text}\n\n${promptText}`
+            : promptText,
+          config: { responseMimeType: "application/json", temperature: 0.2 },
+          inlineData: { data: cleanBase64, mimeType: params.mimeType || "image/jpeg" },
+        });
+        rawText = extractTextFromGeminiResponse(resp) ?? "";
+      } catch (err) {
+        console.warn("[Receipt OCR] Proxy-Call mit Foto fehlgeschlagen:", err);
       }
     } else {
-      for (const model of modelsToTry) {
-        try {
-          const textPrompt = `Kassenbon-Textinhalt:\n${params.text}\n\n${promptText}`;
-          const resp = await callGeminiProxy({
-            model,
-            contents: textPrompt,
-            config: { responseMimeType: "application/json", temperature: 0.2 },
-          });
-          rawText = extractTextFromGeminiResponse(resp) ?? "";
-          if (rawText) break;
-        } catch (mErr) {
-          console.warn(`[Receipt OCR] Fehler mit Modell ${model}:`, mErr);
-        }
+      try {
+        const textPrompt = `Kassenbon-Textinhalt:\n${params.text}\n\n${promptText}`;
+        const resp = await callGeminiProxy({
+          model: "gemini-3.8-flash",
+          contents: textPrompt,
+          config: { responseMimeType: "application/json", temperature: 0.2 },
+        });
+        rawText = extractTextFromGeminiResponse(resp) ?? "";
+      } catch (err) {
+        console.warn("[Receipt OCR] Proxy-Call mit Text fehlgeschlagen:", err);
       }
     }
 

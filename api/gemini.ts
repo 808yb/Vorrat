@@ -5,28 +5,64 @@
  * The GEMINI_API_KEY environment variable is read exclusively here on the
  * server – it is NEVER shipped in the client-side JS bundle.
  *
- * Request body (POST, application/json):
- * {
- *   model: string;            // e.g. "gemini-3.8-flash"
- *   contents: unknown;        // Gemini contents (string or Content[])
- *   config?: {                // GenerationConfig (optional)
- *     temperature?: number;
- *     responseMimeType?: string;
- *     [key: string]: unknown;
- *   };
- *   inlineData?: {            // for multimodal (video/image) requests
- *     data: string;           // base64 payload
- *     mimeType: string;
- *   };
- * }
- *
- * Response: raw Gemini REST response JSON.
+ * Security & Hardening:
+ * 1. Origin / Referer check: Allowed on localhost, 127.0.0.1 and *.vercel.app.
+ * 2. Payload size limits: Max 4 MB for inlineData (images/videos), max 120 KB for text.
+ * 3. Rate limiting: In-memory IP-based rate limit (max 20 requests per 60 seconds per IP).
+ * 4. Max output tokens cap: generationConfig.maxOutputTokens is capped at 8192.
+ * 5. Model cascade: Centralized 3-step fallback without duplicate outer loops.
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
 const GEMINI_BASE =
   "https://generativelanguage.googleapis.com/v1beta/models";
+
+// Max 3 supported models in approved cascade
+const CANDIDATE_MODELS = [
+  "gemini-3.5-flash-lite",
+  "gemini-3.8-flash",
+  "gemini-flash-latest",
+] as const;
+
+// In-Memory IP Rate Limiter (20 requests / 60 seconds)
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now();
+  // Cleanup old expired entries periodically
+  if (rateLimitMap.size > 1000) {
+    for (const [key, val] of rateLimitMap.entries()) {
+      if (now > val.resetAt) rateLimitMap.delete(key);
+    }
+  }
+
+  const entry = rateLimitMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + 60_000 });
+    return true;
+  }
+
+  if (entry.count >= 20) {
+    return false;
+  }
+
+  entry.count++;
+  return true;
+}
+
+function isOriginAllowed(originHeader?: string, refererHeader?: string): boolean {
+  if (!originHeader && !refererHeader) {
+    // Same-origin serverless or internal proxy calls have empty origin
+    return true;
+  }
+  const checkStr = (originHeader || refererHeader || "").toLowerCase();
+  return (
+    checkStr.includes("localhost") ||
+    checkStr.includes("127.0.0.1") ||
+    /\.vercel\.app(\/|$)/.test(checkStr)
+  );
+}
 
 /** Build the Gemini REST `contents` array from various input shapes */
 function buildContents(
@@ -44,7 +80,6 @@ function buildContents(
   if (typeof contents === "string") {
     parts.push({ text: contents });
   } else if (Array.isArray(contents)) {
-    // Already a Content[] or Part[] array – use as-is
     return contents as unknown[];
   } else if (contents && typeof contents === "object") {
     parts.push(contents);
@@ -63,7 +98,71 @@ export default async function handler(
     return res.status(405).json({ error: "Method Not Allowed" });
   }
 
-  // ── API key – server-only, never VITE_ prefixed ───────────────────────────
+  // ── Origin & Referer Verification ─────────────────────────────────────────
+  const origin = req.headers.origin as string | undefined;
+  const referer = req.headers.referer as string | undefined;
+  if (!isOriginAllowed(origin, referer)) {
+    return res.status(403).json({ error: "Forbidden: Origin not allowed." });
+  }
+
+  // ── IP Rate Limiting (20 requests / 60 seconds) ───────────────────────────
+  const clientIp =
+    ((req.headers["x-forwarded-for"] as string) || "").split(",")[0]?.trim() ||
+    req.socket?.remoteAddress ||
+    "unknown-ip";
+
+  if (!checkRateLimit(clientIp)) {
+    return res.status(429).json({
+      error: "Too Many Requests: Rate limit exceeded (max 20 requests per minute).",
+    });
+  }
+
+  // ── Payload Size Limits ───────────────────────────────────────────────────
+  const body = req.body as {
+    model?: string;
+    contents?: unknown;
+    config?: Record<string, unknown>;
+    inlineData?: { data: string; mimeType: string };
+  };
+
+  if (!body) {
+    return res.status(400).json({ error: "Bad Request: Empty request body." });
+  }
+
+  const {
+    model: requestedModel,
+    contents,
+    config = {},
+    inlineData,
+  } = body;
+
+  if (!contents && !inlineData) {
+    return res
+      .status(400)
+      .json({ error: "Request body must include 'contents' or 'inlineData'." });
+  }
+
+  // Multimodal payload limit: max 4 MB base64 data
+  if (inlineData?.data) {
+    const approximateBytes = inlineData.data.length * 0.75;
+    if (approximateBytes > 4 * 1024 * 1024) {
+      return res.status(413).json({
+        error: "Payload Too Large: Multimodal inlineData must not exceed 4 MB.",
+      });
+    }
+  }
+
+  // Text contents payload limit: max 120 KB
+  if (contents) {
+    const textLength = typeof contents === "string" ? contents.length : JSON.stringify(contents).length;
+    if (textLength > 120 * 1024) {
+      return res.status(413).json({
+        error: "Payload Too Large: Text content must not exceed 120 KB.",
+      });
+    }
+  }
+
+  // ── API Key Verification ──────────────────────────────────────────────────
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) {
     console.error("[/api/gemini] GEMINI_API_KEY is not set in environment.");
@@ -72,47 +171,31 @@ export default async function handler(
       .json({ error: "Server configuration error: missing API key." });
   }
 
-  // ── Parse request body ────────────────────────────────────────────────────
-  const CANDIDATE_MODELS = [
-    "gemini-3.5-flash-lite",
-    "gemini-3.8-flash",
-    "gemini-flash-latest",
-    "gemini-flash-lite-latest",
-  ];
+  // ── Server-side Token & Config Clamping ───────────────────────────────────
+  const clampedConfig = { ...config };
+  const requestedMaxTokens = Number(clampedConfig.maxOutputTokens);
+  if (requestedMaxTokens && requestedMaxTokens > 8192) {
+    clampedConfig.maxOutputTokens = 8192;
+  } else if (!requestedMaxTokens) {
+    clampedConfig.maxOutputTokens = 8192;
+  }
 
-  const {
-    model: requestedModel,
-    contents,
-    config = {},
-    inlineData,
-  } = req.body as {
-    model?: string;
-    contents?: unknown;
-    config?: Record<string, unknown>;
-    inlineData?: { data: string; mimeType: string };
-  };
-
-  const primaryModel = requestedModel && CANDIDATE_MODELS.includes(requestedModel)
-    ? requestedModel
+  const primaryModel = requestedModel && (CANDIDATE_MODELS as readonly string[]).includes(requestedModel)
+    ? (requestedModel as typeof CANDIDATE_MODELS[number])
     : CANDIDATE_MODELS[0];
 
-  const modelsToTry = [
+  // Up to 3 models in sequence (no infinite loops)
+  const modelsToTry: string[] = [
     primaryModel,
     ...CANDIDATE_MODELS.filter((m) => m !== primaryModel),
-  ];
-
-  if (!contents && !inlineData) {
-    return res
-      .status(400)
-      .json({ error: "Request body must include 'contents' or 'inlineData'." });
-  }
+  ].slice(0, 3);
 
   const geminiBody = {
     contents: buildContents(contents, inlineData),
-    generationConfig: config,
+    generationConfig: clampedConfig,
   };
 
-  // ── Forward to Gemini REST API with model fallback ─────────────────────────
+  // ── Forward to Gemini REST API with centralized model fallback ────────────
   let lastError: { status: number; body: unknown } | null = null;
 
   for (const currentModel of modelsToTry) {

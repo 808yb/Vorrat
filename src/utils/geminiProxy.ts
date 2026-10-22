@@ -116,7 +116,6 @@ export async function callGeminiProxy(
     "gemini-3.5-flash-lite",
     "gemini-3.8-flash",
     "gemini-flash-latest",
-    "gemini-flash-lite-latest",
   ];
 
   const primaryModel = CANDIDATE_MODELS.includes(request.model)
@@ -126,7 +125,7 @@ export async function callGeminiProxy(
   const modelsToTry = [
     primaryModel,
     ...CANDIDATE_MODELS.filter((m) => m !== primaryModel),
-  ];
+  ].slice(0, 3);
 
   const { contents, config = {}, inlineData } = request;
 

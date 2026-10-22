@@ -1001,7 +1001,27 @@ export async function fetchWebsiteContent(
 
   let textContent = "";
 
-  // 1. Primärer Reader: r.jina.ai (mit X-With-Images-Summary & X-With-Links-Summary)
+  // 0. Primärer Scraper: Eigener Serverless Endpoint /api/scrape
+  try {
+    const scrapeEndpoint = `/api/scrape?url=${encodeURIComponent(targetUrl)}`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 9000);
+    const res = await fetch(scrapeEndpoint, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.success && data.textContent && data.textContent.length > 150) {
+        return {
+          content: data.textContent.slice(0, 45000),
+          nextPageUrl: data.nextPageUrl,
+        };
+      }
+    }
+  } catch {
+    // Weiter zum Fallback wenn lokaler Dev-Server ohne /api/scrape läuft
+  }
+
+  // 1. Fallback: r.jina.ai (mit X-With-Images-Summary & X-With-Links-Summary)
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 12000);
@@ -1331,6 +1351,52 @@ export async function fetchRecipeSubpageDetails(
     recipeInstructions: [],
   };
 
+  // 0. Primärer Abruf über unseren eigenen /api/scrape Endpoint
+  try {
+    const scrapeEndpoint = `/api/scrape?url=${encodeURIComponent(card.recipeUrl)}`;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch(scrapeEndpoint, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (res.ok) {
+      const data = await res.json();
+      if (data?.success) {
+        if (Array.isArray(data.jsonLdRecipes) && data.jsonLdRecipes.length > 0) {
+          const recipeLd = data.jsonLdRecipes[0];
+          if (Array.isArray(recipeLd.recipeIngredient) && recipeLd.recipeIngredient.length > 0) {
+            result.recipeIngredient = recipeLd.recipeIngredient.map((i: any) => String(i).trim());
+          }
+          if (recipeLd.recipeInstructions) {
+            result.recipeInstructions = extractInstructionsList(recipeLd.recipeInstructions);
+          }
+          if (recipeLd.totalTime) {
+            result.totalTime = String(recipeLd.totalTime);
+          }
+          if (!result.imageUrl || result.imageUrl.includes("example.com")) {
+            const ldImg = typeof recipeLd.image === "string"
+              ? recipeLd.image
+              : Array.isArray(recipeLd.image) ? recipeLd.image[0] : recipeLd.image?.url;
+            if (ldImg && typeof ldImg === "string" && ldImg.startsWith("http")) {
+              result.imageUrl = ldImg;
+            } else if (data.ogImage) {
+              result.imageUrl = data.ogImage;
+            }
+          }
+          if (result.recipeIngredient.length > 0) {
+            return result;
+          }
+        }
+
+        if (data.textContent && data.textContent.length > 200) {
+          result.rawText = data.textContent.slice(0, 9000);
+          if (data.ogImage && (!result.imageUrl || result.imageUrl.includes("example.com"))) {
+            result.imageUrl = data.ogImage;
+          }
+        }
+      }
+    }
+  } catch {}
+
   const slug = card.recipeUrl.replace(/\/$/, "").split("/").pop();
 
   // 1. WordPress Print-URL (wprm_print) via Jina Reader (enthält direkt die exakte Rezeptkarte!)
@@ -1430,12 +1496,6 @@ async function processBatchWithGemini(
   batchIdx: number,
   pantry: any[] = []
 ): Promise<CatalogRecipe[]> {
-  const candidateModels = [
-    "gemini-3.5-flash-lite",
-    "gemini-3.8-flash",
-    "gemini-flash-latest",
-    "gemini-flash-lite-latest",
-  ];
 
   const batchPayload = batch.map((item, idx) => ({
     index: idx + 1,
@@ -1507,28 +1567,23 @@ Antworte AUSSCHLIESSLICH als gültiges JSON:
 
   let rawList: any[] = [];
 
-  for (const model of candidateModels) {
-    try {
-      const data = await callGeminiProxy({
-        model,
-        contents: prompt,
-        config: {
-          temperature: 0.2,
-          responseMimeType: "application/json",
-          maxOutputTokens: 8192,
-        },
-      });
+  try {
+    const data = await callGeminiProxy({
+      model: "gemini-3.5-flash-lite",
+      contents: prompt,
+      config: {
+        temperature: 0.2,
+        responseMimeType: "application/json",
+        maxOutputTokens: 8192,
+      },
+    });
 
-      const responseText = extractTextFromGeminiResponse(data) ?? "";
-      const cleaned = responseText.replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
-      const parsed = JSON.parse(cleaned);
-      rawList = Array.isArray(parsed?.recipes) ? parsed.recipes : Array.isArray(parsed) ? parsed : [];
-      if (rawList.length > 0) {
-        break;
-      }
-    } catch (err) {
-      console.warn(`[Batch Gemini] Fehler bei Modell ${model}:`, err);
-    }
+    const responseText = extractTextFromGeminiResponse(data) ?? "";
+    const cleaned = responseText.replace(/^```json\s*/i, "").replace(/```$/i, "").trim();
+    const parsed = JSON.parse(cleaned);
+    rawList = Array.isArray(parsed?.recipes) ? parsed.recipes : Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    console.warn("[Batch Gemini] Fehler bei KI-Strukturierung:", err);
   }
 
   const timestamp = Date.now();
@@ -2259,25 +2314,17 @@ ANWEISUNG AN DICH ALS CHEFKOCH:
 5. Wenn nach Hitze, Garzeit oder Konsistenz gefragt wird: Gib präzise Herd-Stufen oder Minuten an.
 6. Kein langes Vorgeplänkel, direkt die Lösung für die Küche.`;
 
-    const candidateModels = [
-      "gemini-3.5-flash-lite",
-      "gemini-3.8-flash",
-      "gemini-flash-latest",
-      "gemini-flash-lite-latest",
-    ];
-    for (const model of candidateModels) {
-      try {
-        const resp = await callGeminiProxy({
-          model,
-          contents: prompt,
-          config: { temperature: 0.3 },
-        });
+    try {
+      const resp = await callGeminiProxy({
+        model: "gemini-3.5-flash-lite",
+        contents: prompt,
+        config: { temperature: 0.3 },
+      });
 
-        const text = extractTextFromGeminiResponse(resp);
-        if (text) return text;
-      } catch (err) {
-        console.warn(`[askAboutRecipeWithGemini] Model ${model} failed, trying next:`, err);
-      }
+      const text = extractTextFromGeminiResponse(resp);
+      if (text) return text;
+    } catch (err) {
+      console.warn("[askAboutRecipeWithGemini] Proxy-Anfrage fehlgeschlagen:", err);
     }
   }
 

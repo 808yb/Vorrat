@@ -3059,7 +3059,7 @@ export default function App() {
     notify(`Barcode erfasst: +${scanned.name}`);
   };
 
-  const handleReceiptImported = (importedItems?: Array<Omit<PantryItem, "id">>) => {
+  const handleReceiptImported = (importedItems?: Array<Omit<PantryItem, "id"> & { price?: number }>) => {
     if (!importedItems || !Array.isArray(importedItems) || importedItems.length === 0) {
       notify("Keine Kassenbon-Positionen ausgewählt");
       return;
@@ -3067,10 +3067,36 @@ export default function App() {
     importedItems.forEach((item) => {
       handleAddProduct(item);
     });
-    notify(
-      `${importedItems.length} ${importedItems.length === 1 ? "Position" : "Positionen"
-      } vom Kassenbon erfolgreich eingebucht!`
-    );
+
+    let checkedGroceriesCount = 0;
+    setGroceries((prevGroceries) => {
+      return prevGroceries.filter((grocery) => {
+        const isMatched = importedItems.some((imported) => {
+          const match = findMatchingPantryItem(grocery.name, [
+            { name: imported.name, category: imported.category },
+          ]);
+          return Boolean(match);
+        });
+        if (isMatched) {
+          checkedGroceriesCount++;
+          return false; // Automatically removed because purchased on receipt
+        }
+        return true;
+      });
+    });
+
+    const totalReceiptSpent = importedItems.reduce((acc, cur) => acc + (Number(cur.price) || 0), 0);
+    const priceText = totalReceiptSpent > 0 ? ` (~${totalReceiptSpent.toFixed(2).replace(".", ",")} € erfasst)` : "";
+
+    if (checkedGroceriesCount > 0) {
+      notify(
+        `${importedItems.length} ${importedItems.length === 1 ? "Artikel" : "Artikel"} in den Vorrat gebucht & ${checkedGroceriesCount} von deiner Einkaufsliste erledigt!${priceText}`
+      );
+    } else {
+      notify(
+        `${importedItems.length} ${importedItems.length === 1 ? "Position" : "Positionen"} vom Kassenbon erfolgreich eingebucht!${priceText}`
+      );
+    }
   };
 
   const handleAddProduct = (item: Omit<PantryItem, "id">) => {
@@ -3385,6 +3411,7 @@ export default function App() {
         <UnifiedAddModal
           isOpen={isAddModalOpen}
           onClose={() => setIsAddModalOpen(false)}
+          groceries={groceries}
           onAddProduct={handleAddProduct}
           onImportReceipt={handleReceiptImported}
           onNotify={notify}

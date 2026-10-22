@@ -10,6 +10,7 @@ import {
   type ParsedReceiptFoodItem,
 } from "../utils/receiptOcr";
 import { findFoodNutrition, type FoodNutritionInfo } from "../data/foodNutritionDatabase";
+import { findMatchingPantryItem } from "../utils/pantryMatching";
 
 export type AddMode = "menu" | "camera" | "receipt" | "manual";
 
@@ -54,6 +55,7 @@ function playScanBeep() {
 interface UnifiedAddModalProps {
   isOpen: boolean;
   onClose: () => void;
+  groceries?: Array<{ id: number | string; name: string; category?: string; [key: string]: any }>;
   onAddProduct: (item: {
     name: string;
     category: string;
@@ -76,6 +78,7 @@ interface UnifiedAddModalProps {
     total: number;
     unit: string;
     tone: string;
+    price?: number;
     minAmount?: number;
     caloriesPer100g?: number;
     proteinPer100g?: number;
@@ -90,6 +93,7 @@ interface UnifiedAddModalProps {
 export function UnifiedAddModal({
   isOpen,
   onClose,
+  groceries = [],
   onAddProduct,
   onImportReceipt,
   onNotify,
@@ -2211,6 +2215,36 @@ export function UnifiedAddModal({
                                     <option value="Sonstiges">Sonstiges</option>
                                   </select>
                                 </div>
+                                {(() => {
+                                  const isMatchedOnShoppingList = Boolean(
+                                    groceries &&
+                                      groceries.length > 0 &&
+                                      findMatchingPantryItem(
+                                        item.name,
+                                        groceries.map((g) => ({ name: g.name, category: g.category }))
+                                      )
+                                  );
+                                  if (!isMatchedOnShoppingList) return null;
+                                  return (
+                                    <span
+                                      style={{
+                                        fontSize: "10px",
+                                        fontWeight: 700,
+                                        padding: "2px 6px",
+                                        borderRadius: "6px",
+                                        background: "#ecfdf5",
+                                        color: "#047857",
+                                        border: "1px solid #a7f3d0",
+                                        display: "inline-flex",
+                                        alignItems: "center",
+                                        gap: "4px",
+                                        width: "fit-content",
+                                      }}
+                                    >
+                                      ✓ Steht auf Einkaufsliste (wird abgehakt)
+                                    </span>
+                                  );
+                                })()}
                                 {item.mhd && (
                                   <span
                                     style={{
@@ -2283,6 +2317,7 @@ export function UnifiedAddModal({
                           amount: item.amount,
                           total: item.total || item.amount,
                           unit: item.unit || "Stk.",
+                          price: item.price,
                           tone: item.tone || getFoodTone(item.name, item.category),
                           minAmount: Math.round(item.amount * 0.3),
                           caloriesPer100g: item.caloriesPer100g,
