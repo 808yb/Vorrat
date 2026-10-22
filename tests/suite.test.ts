@@ -1,11 +1,32 @@
-import { deduplicatePantry, formatMhdDisplay, getMhdStatus, getItemNutrientSpecs, isItemExpiringSoonOrCritical, type PantryItem } from "../src/App";
+import {
+  deduplicatePantry,
+  formatMhdDisplay,
+  getMhdStatus,
+  getItemNutrientSpecs,
+  isItemExpiringSoonOrCritical,
+  confirmCookingCompletion,
+  processReceiptImport,
+  type PantryItem,
+} from "../src/App";
 import { parseReceiptFallback, calculateEstimatedMhd } from "../src/utils/receiptOcr";
-import { getRecipePantryBreakdown, findMatchingPantryItem, isDrinkingWater, cleanAlternativeText, formatAlternativeHint, setAlternativeOverride, getAlternativeOverride } from "../src/utils/pantryMatching";
+import {
+  getRecipePantryBreakdown,
+  findMatchingPantryItem,
+  isDrinkingWater,
+  cleanAlternativeText,
+  formatAlternativeHint,
+  setAlternativeOverride,
+  getAlternativeOverride,
+  deductIngredientFromPantryAmount,
+  parseIngredientAmountAndUnit,
+} from "../src/utils/pantryMatching";
 import { FULL_RECIPE_CATALOG } from "../src/data/recipeCatalog";
 import { getFoodTone } from "../src/components/FoodIcons";
 import { findFoodNutrition, calculatePortionNutrition } from "../src/data/foodNutritionDatabase";
 import { getSafeIngredientsList, getSafeSteps, getSafeAvailable, rehydrateRecipe, getCurrentMealTimeSlot, decomposeCompositeIngredients, cleanSpiceName, isEggIngredientName, isRiceIngredientName, getRecipeVideoUrl, getRecipeSourceUrl, getRecipeCategory, RECIPE_CATEGORIES } from "../src/utils/recipeHelpers";
 import { extractIngredientsFromDishText, resolveRecipeFoodImage, askAboutRecipeWithGemini } from "../src/utils/geminiRecipes";
+import { STORAGE_KEYS, migrateLegacyStorageKeys } from "../src/constants/storage";
+import { applyCloudDataToState } from "../src/hooks/useCloudSync";
 
 let passedCount = 0;
 let failedCount = 0;
@@ -1352,6 +1373,254 @@ const computedBadgeCount = testPantry.filter((item) => isItemExpiringSoonOrCriti
 assert(
   computedBadgeCount === 1,
   `Badge count strictly yields exactly 1 for test pantry (got ${computedBadgeCount})`
+);
+
+// -----------------------------------------------------------------------------
+// TEST SUITE 24: UNIT-SAFE PANTRY DEDUCTION & RECEIPT-GROCERY RECONCILIATION
+// -----------------------------------------------------------------------------
+console.log("\n🍳 24. Testing Unit-Safe Pantry Deduction & Receipt Reconcile...");
+
+// 1. Weight conversions: kg <-> g
+assert(
+  deductIngredientFromPantryAmount(1, "kg", 150, "g") === 0.85,
+  "1 kg Reis minus 150 g correctly yields 0.85 kg (not 0!)"
+);
+assert(
+  deductIngredientFromPantryAmount(500, "g", 0.2, "kg") === 300,
+  "500 g Reis minus 0.2 kg yields 300 g"
+);
+
+// 2. Volume conversions: l <-> ml
+assert(
+  deductIngredientFromPantryAmount(1, "l", 250, "ml") === 0.75,
+  "1 l Milch minus 250 ml yields 0.75 l"
+);
+assert(
+  deductIngredientFromPantryAmount(500, "ml", 0.1, "l") === 400,
+  "500 ml Milch minus 0.1 l yields 400 ml"
+);
+
+// 3. Spoons to grams & ml
+assert(
+  deductIngredientFromPantryAmount(500, "g", 2, "EL") === 470,
+  "500 g Mehl minus 2 EL (30g) yields 470 g"
+);
+assert(
+  deductIngredientFromPantryAmount(1, "kg", 2, "EL") === 0.97,
+  "1 kg Mehl minus 2 EL (0.03kg) yields 0.97 kg"
+);
+assert(
+  deductIngredientFromPantryAmount(500, "g", 2, "TL") === 490,
+  "500 g Zucker minus 2 TL (10g) yields 490 g"
+);
+
+// 4. Protection for bulk containers (Packung, Glas, Flasche)
+assert(
+  deductIngredientFromPantryAmount(1, "Packung", 150, "g") === 0.7,
+  "1 Packung Reis minus 150 g yields 0.7 Packung (does not wipe to 0)"
+);
+assert(
+  deductIngredientFromPantryAmount(1, "Glas", 100, "g") === 0.75,
+  "1 Glas Pesto minus 100 g yields 0.75 Glas"
+);
+assert(
+  deductIngredientFromPantryAmount(1, "Flasche", 250, "ml") === 0.67,
+  "1 Flasche Öl minus 250 ml yields 0.67 Flasche"
+);
+
+// 5. Piece unit deductions
+assert(
+  deductIngredientFromPantryAmount(6, "Stk.", 2, "Stk.") === 4,
+  "6 Stk. Eier minus 2 Stk. yields 4 Stk."
+);
+assert(
+  deductIngredientFromPantryAmount(1, "Stk.", 2, "Stk.") === 0,
+  "Deduction exceeding available clamps at 0 (never negative)"
+);
+
+// 6. parseIngredientAmountAndUnit helper
+const parsedG = parseIngredientAmountAndUnit("150 g");
+assert(parsedG.amount === 150 && parsedG.unit === "g", "Parses '150 g' into amount: 150, unit: 'g'");
+
+const parsedKg = parseIngredientAmountAndUnit("1.5 kg");
+assert(parsedKg.amount === 1.5 && parsedKg.unit === "kg", "Parses '1.5 kg' into amount: 1.5, unit: 'kg'");
+
+// 7. confirmCookingCompletion unit-safe cooking test
+const sampleCookingPantry: PantryItem[] = [
+  { id: 1, name: "Basmati Reis", category: "Trocken", amount: 1, total: 1, unit: "kg", tone: "rice" },
+  { id: 2, name: "Bio Eier", category: "Kühl", amount: 6, total: 10, unit: "Stk.", tone: "egg" },
+  { id: 3, name: "Sojasoße", category: "Saucen", amount: 250, total: 250, unit: "ml", tone: "sauce" },
+];
+
+const cookingDeductionResult = confirmCookingCompletion(
+  "Egg Fried Rice Deluxe",
+  2,
+  sampleCookingPantry,
+  FULL_RECIPE_CATALOG
+);
+
+const cookedReis = cookingDeductionResult.updatedPantry.find((p) => p.name.includes("Reis"));
+assert(
+  Boolean(cookedReis && cookedReis.amount > 0 && cookedReis.amount < 1),
+  `Egg Fried Rice deducts rice safely from 1 kg without dropping to 0 (remaining: ${cookedReis?.amount} kg)`
+);
+
+const cookedEier = cookingDeductionResult.updatedPantry.find((p) => p.name.includes("Eier"));
+assert(
+  Boolean(cookedEier && cookedEier.amount === 4),
+  `Egg Fried Rice deducts exactly 2 eggs (remaining: ${cookedEier?.amount} Stk.)`
+);
+
+// 8. Receipt Scan Reconciles Grocery List & Captures Prices
+const initialGroceries = [
+  { id: 1, name: "Basmati Reis", category: "Trockenvorrat", checked: false },
+  { id: 2, name: "Bio Eier", category: "Kühl & Tiefkühl", checked: false },
+  { id: 3, name: "Hafermilch", category: "Getränke", checked: false },
+  { id: 4, name: "Bereits erledigt", category: "Sonstiges", checked: true },
+];
+
+const importedReceiptItems = [
+  { name: "Basmati Reis", category: "Trocken", amount: 1000, unit: "g", price: 2.49, tone: "rice" },
+  { name: "Bio Eier", category: "Kühl", amount: 10, unit: "Stk.", price: 3.29, tone: "egg" },
+];
+
+const receiptImportResult = processReceiptImport(
+  importedReceiptItems as any,
+  sampleCookingPantry,
+  initialGroceries
+);
+
+assert(
+  receiptImportResult.checkedGroceriesCount === 2,
+  "Receipt import checks off exactly 2 matching open grocery items"
+);
+assert(
+  receiptImportResult.updatedGroceries.length === 2 &&
+  receiptImportResult.updatedGroceries.some((g) => g.name === "Hafermilch") &&
+  receiptImportResult.updatedGroceries.some((g) => g.name === "Bereits erledigt"),
+  "Unmatched item 'Hafermilch' and already checked item remain on list"
+);
+assert(
+  receiptImportResult.totalSpent === 5.78,
+  `Receipt total spent is accurately calculated (2.49 + 3.29 = 5.78, got ${receiptImportResult.totalSpent})`
+);
+assert(
+  receiptImportResult.toastMessage.includes("2 Artikel in den Vorrat gebucht & 2 von deiner Einkaufsliste erledigt!"),
+  `Toast accurately reports: "${receiptImportResult.toastMessage}"`
+);
+assert(
+  receiptImportResult.toastMessage.includes("5,78 €"),
+  `Toast includes recognized receipt total price (~5,78 €)`
+);
+
+// -----------------------------------------------------------------------------
+// 25. STORAGE MIGRATION & EMPTY-CLOUD-SYNC INTEGRITY
+// -----------------------------------------------------------------------------
+console.log("\n📦 25. Testing Legacy Storage Migration (forret_* -> vorrat_*) & Empty-Cloud-Sync...");
+
+// Mock localStorage for node test environment
+const mockStore: Record<string, string> = {};
+const mockLocalStorage = {
+  getItem: (key: string) => mockStore[key] ?? null,
+  setItem: (key: string, value: string) => {
+    mockStore[key] = String(value);
+  },
+  removeItem: (key: string) => {
+    delete mockStore[key];
+  },
+  clear: () => {
+    for (const k in mockStore) delete mockStore[k];
+  },
+};
+(globalThis as any).localStorage = mockLocalStorage;
+
+// Scenario A: Legacy pantry & favorites exist, modern keys do not
+mockLocalStorage.clear();
+mockLocalStorage.setItem("forret_design_pantry", JSON.stringify([{ id: 1, name: "Reis" }]));
+mockLocalStorage.setItem("forret_favorite_recipes", JSON.stringify(["r1", "r2"]));
+mockLocalStorage.setItem("forret_household_name", "Familie Schmidt");
+
+migrateLegacyStorageKeys();
+
+assert(
+  mockLocalStorage.getItem(STORAGE_KEYS.PANTRY) === JSON.stringify([{ id: 1, name: "Reis" }]),
+  "migrateLegacyStorageKeys migrates forret_design_pantry to modern vorrat_pantry"
+);
+assert(
+  mockLocalStorage.getItem("forret_design_pantry") === null,
+  "migrateLegacyStorageKeys deletes legacy forret_design_pantry key after migration"
+);
+assert(
+  mockLocalStorage.getItem(STORAGE_KEYS.FAVORITES) === JSON.stringify(["r1", "r2"]),
+  "migrateLegacyStorageKeys migrates forret_favorite_recipes to modern vorrat_favorites"
+);
+assert(
+  mockLocalStorage.getItem("forret_favorite_recipes") === null,
+  "migrateLegacyStorageKeys deletes legacy forret_favorite_recipes key after migration"
+);
+assert(
+  mockLocalStorage.getItem(STORAGE_KEYS.HOUSEHOLD_NAME) === "Familie Schmidt",
+  "migrateLegacyStorageKeys migrates forret_household_name to modern vorrat_household_name"
+);
+assert(
+  mockLocalStorage.getItem("forret_household_name") === null,
+  "migrateLegacyStorageKeys deletes legacy forret_household_name key after migration"
+);
+
+// Scenario B: Modern key already exists -> legacy key must NOT overwrite modern data, but legacy key gets cleaned up
+mockLocalStorage.setItem(STORAGE_KEYS.PANTRY, JSON.stringify([{ id: 99, name: "Neuer Reis" }]));
+mockLocalStorage.setItem("forret_design_pantry", JSON.stringify([{ id: 1, name: "Alter Reis" }]));
+
+migrateLegacyStorageKeys();
+
+assert(
+  mockLocalStorage.getItem(STORAGE_KEYS.PANTRY) === JSON.stringify([{ id: 99, name: "Neuer Reis" }]),
+  "migrateLegacyStorageKeys preserves existing modern vorrat_pantry without overwriting from legacy"
+);
+assert(
+  mockLocalStorage.getItem("forret_design_pantry") === null,
+  "migrateLegacyStorageKeys cleans up legacy key even if modern key already had data"
+);
+
+// Scenario C: Empty-Cloud-Sync Bug Fix (applyCloudDataToState)
+// When Device A completely empties the pantry, cloudData.pantry is []
+// Device B MUST set its pantry to [] and NOT ignore it!
+let syncedPantry: any[] = [{ id: 1, name: "Vorhandener Artikel" }];
+let syncedGroceries: any[] = [{ id: 1, name: "Apfel" }];
+let syncedRecipes: any[] = [{ id: "c1", title: "Eigenes Rezept" }];
+let syncedMeals: any[] = [{ id: "m1", recipeId: "r1" }];
+let syncedFavorites: string[] = ["r1", "r2"];
+
+applyCloudDataToState(
+  {
+    pantry: [], // Emptied pantry on cloud!
+    groceries: [], // Emptied shopping list on cloud!
+    favorites: ["r3"],
+  },
+  {
+    setPantry: (items) => { syncedPantry = items; },
+    setGroceries: (items) => { syncedGroceries = items; },
+    setCustomRecipes: (recipes) => { syncedRecipes = recipes; },
+    setPlannedMeals: (meals) => { syncedMeals = meals; },
+    setFavorites: (favs) => { syncedFavorites = favs; },
+  }
+);
+
+assert(
+  Array.isArray(syncedPantry) && syncedPantry.length === 0,
+  "applyCloudDataToState honors empty cloud pantry array [] (Empty-Cloud-Bug fix)"
+);
+assert(
+  Array.isArray(syncedGroceries) && syncedGroceries.length === 0,
+  "applyCloudDataToState honors empty cloud groceries array []"
+);
+assert(
+  syncedFavorites.length === 1 && syncedFavorites[0] === "r3",
+  "applyCloudDataToState correctly updates favorites from cloud"
+);
+assert(
+  syncedRecipes.length === 1 && syncedRecipes[0].id === "c1",
+  "applyCloudDataToState leaves non-provided fields untouched"
 );
 
 // -----------------------------------------------------------------------------

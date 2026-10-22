@@ -87,7 +87,24 @@ interface UnifiedAddModalProps {
     isUnlimited?: boolean;
     mhd?: string;
   }>) => void;
+  onAddItems?: (importedItems: Array<{
+    name: string;
+    category: string;
+    amount: number;
+    total: number;
+    unit: string;
+    tone: string;
+    price?: number;
+    minAmount?: number;
+    caloriesPer100g?: number;
+    proteinPer100g?: number;
+    carbsPer100g?: number;
+    fatPer100g?: number;
+    isUnlimited?: boolean;
+    mhd?: string;
+  }>) => void;
   onNotify?: (msg: string) => void;
+  initialMode?: AddMode;
 }
 
 export function UnifiedAddModal({
@@ -96,9 +113,17 @@ export function UnifiedAddModal({
   groceries = [],
   onAddProduct,
   onImportReceipt,
+  onAddItems,
   onNotify,
+  initialMode = "menu",
 }: UnifiedAddModalProps) {
-  const [activeMode, setActiveMode] = useState<AddMode>("menu");
+  const [activeMode, setActiveMode] = useState<AddMode>(initialMode);
+
+  useEffect(() => {
+    if (isOpen) {
+      setActiveMode(initialMode);
+    }
+  }, [isOpen, initialMode]);
 
   // Camera & Barcode State
   const [barcodeInput, setBarcodeInput] = useState("");
@@ -2216,12 +2241,12 @@ export function UnifiedAddModal({
                                   </select>
                                 </div>
                                 {(() => {
+                                  const openGroceries = (groceries || []).filter((g) => !g.checked);
                                   const isMatchedOnShoppingList = Boolean(
-                                    groceries &&
-                                      groceries.length > 0 &&
+                                    openGroceries.length > 0 &&
                                       findMatchingPantryItem(
                                         item.name,
-                                        groceries.map((g) => ({ name: g.name, category: g.category }))
+                                        openGroceries.map((g) => ({ name: g.name, category: g.category }))
                                       )
                                   );
                                   if (!isMatchedOnShoppingList) return null;
@@ -2327,8 +2352,9 @@ export function UnifiedAddModal({
                           mhd: item.mhd,
                         }));
 
-                        if (onImportReceipt) {
-                          onImportReceipt(convertedItems);
+                        const importFn = onImportReceipt || onAddItems;
+                        if (importFn) {
+                          importFn(convertedItems);
                         } else {
                           convertedItems.forEach((item) => onAddProduct(item));
                           if (onNotify) {

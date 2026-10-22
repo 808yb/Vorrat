@@ -817,4 +817,138 @@ export function getRecipePantryBreakdown(
   return { inStock, missing, all: allIngredients, matchPercentage };
 }
 
+/**
+ * Parses numeric amount and trailing unit string from an ingredient spec like "150 g", "1.5 kg", "2 Stk."
+ */
+export function parseIngredientAmountAndUnit(amountStr: string | number): { amount: number; unit: string } {
+  if (typeof amountStr === "number") {
+    return { amount: amountStr, unit: "" };
+  }
+  const clean = String(amountStr || "").trim();
+  const match = clean.match(/^(\d+(?:[.,]\d+)?)\s*(.*)$/);
+  if (!match) {
+    return { amount: 0, unit: "" };
+  }
+  const amount = parseFloat(match[1].replace(",", "."));
+  const unit = match[2]?.trim() || "";
+  return { amount, unit };
+}
+
+/**
+ * Deducts recipe ingredient amounts from pantry inventory with safe unit conversions (kg <-> g, l <-> ml, EL/TL -> ml/g)
+ * and protection for bulk packaging (Packung, Glas, Flasche, Dose).
+ *
+ * Example: 1 kg Reis minus 150 g -> 0.85 kg (instead of 0).
+ */
+export function deductIngredientFromPantryAmount(
+  pantryAmount: number,
+  pantryUnit: string = "",
+  deductAmount: number,
+  deductUnit: string = ""
+): number {
+  if (!deductAmount || deductAmount <= 0) return pantryAmount;
+  if (!pantryAmount || pantryAmount <= 0) return 0;
+
+  const pUnit = (pantryUnit || "").toLowerCase().trim();
+  const dUnit = (deductUnit || "").toLowerCase().trim();
+
+  // If units match directly or deductUnit is omitted
+  if (pUnit === dUnit || !dUnit) {
+    return Math.max(0, Number((pantryAmount - deductAmount).toFixed(3)));
+  }
+
+  // Normalized unit checkers
+  const isGram = (u: string) => u === "g" || u === "gramm";
+  const isKg = (u: string) => u === "kg" || u === "kilogramm";
+  const isMl = (u: string) => u === "ml" || u === "milliliter";
+  const isLiter = (u: string) => u === "l" || u === "liter";
+  const isEl = (u: string) => u === "el" || u === "esslöffel" || u === "essloeffel";
+  const isTl = (u: string) => u === "tl" || u === "teelöffel" || u === "teeloeffel";
+  const isPrise = (u: string) => u === "prise" || u === "prisen";
+  const isPackage = (u: string) => u === "packung" || u === "pkg." || u === "pkg" || u === "pck.";
+  const isGlass = (u: string) => u === "glas" || u === "gläser" || u === "glaeser";
+  const isCan = (u: string) => u === "dose" || u === "dosen";
+  const isBottle = (u: string) => u === "flasche" || u === "flaschen" || u === "fl.";
+
+  let convertedDeduct = deductAmount;
+
+  // Weight conversions: kg <-> g
+  if (isKg(pUnit) && isGram(dUnit)) {
+    convertedDeduct = deductAmount / 1000;
+    return Math.max(0, Number((pantryAmount - convertedDeduct).toFixed(3)));
+  }
+  if (isGram(pUnit) && isKg(dUnit)) {
+    convertedDeduct = deductAmount * 1000;
+    return Math.max(0, Number((pantryAmount - convertedDeduct).toFixed(3)));
+  }
+
+  // Volume conversions: l <-> ml
+  if (isLiter(pUnit) && isMl(dUnit)) {
+    convertedDeduct = deductAmount / 1000;
+    return Math.max(0, Number((pantryAmount - convertedDeduct).toFixed(3)));
+  }
+  if (isMl(pUnit) && isLiter(dUnit)) {
+    convertedDeduct = deductAmount * 1000;
+    return Math.max(0, Number((pantryAmount - convertedDeduct).toFixed(3)));
+  }
+
+  // Spoons / Prise to grams or ml
+  if (isEl(dUnit)) {
+    if (isGram(pUnit) || isMl(pUnit)) {
+      convertedDeduct = deductAmount * 15;
+    } else if (isKg(pUnit) || isLiter(pUnit)) {
+      convertedDeduct = (deductAmount * 15) / 1000;
+    }
+    return Math.max(0, Number((pantryAmount - convertedDeduct).toFixed(3)));
+  }
+  if (isTl(dUnit)) {
+    if (isGram(pUnit) || isMl(pUnit)) {
+      convertedDeduct = deductAmount * 5;
+    } else if (isKg(pUnit) || isLiter(pUnit)) {
+      convertedDeduct = (deductAmount * 5) / 1000;
+    }
+    return Math.max(0, Number((pantryAmount - convertedDeduct).toFixed(3)));
+  }
+  if (isPrise(dUnit)) {
+    if (isGram(pUnit) || isMl(pUnit)) {
+      convertedDeduct = deductAmount * 1;
+    } else if (isKg(pUnit) || isLiter(pUnit)) {
+      convertedDeduct = deductAmount / 1000;
+    }
+    return Math.max(0, Number((pantryAmount - convertedDeduct).toFixed(3)));
+  }
+
+  // Protection for bulk containers: Packung, Glas, Dose, Flasche
+  if (isPackage(pUnit)) {
+    if (isGram(dUnit)) {
+      convertedDeduct = deductAmount / 500;
+    } else if (isKg(dUnit)) {
+      convertedDeduct = deductAmount / 0.5;
+    }
+    return Math.max(0, Number((pantryAmount - convertedDeduct).toFixed(2)));
+  }
+  if (isCan(pUnit) || isGlass(pUnit)) {
+    if (isGram(dUnit) || isMl(dUnit)) {
+      convertedDeduct = deductAmount / 400;
+    }
+    return Math.max(0, Number((pantryAmount - convertedDeduct).toFixed(2)));
+  }
+  if (isBottle(pUnit)) {
+    if (isMl(dUnit)) {
+      convertedDeduct = deductAmount / 750;
+    } else if (isLiter(dUnit)) {
+      convertedDeduct = deductAmount / 0.75;
+    }
+    return Math.max(0, Number((pantryAmount - convertedDeduct).toFixed(2)));
+  }
+
+  // General fallback: if deductUnit is gram or ml and pantryUnit is pieces/packs, prevent instant wipe to 0
+  if (deductAmount >= pantryAmount && (isGram(dUnit) || isMl(dUnit)) && !isGram(pUnit) && !isMl(pUnit)) {
+    return Math.max(0, Number((pantryAmount - 1).toFixed(2)));
+  }
+
+  return Math.max(0, Number((pantryAmount - deductAmount).toFixed(3)));
+}
+
+
 

@@ -1,22 +1,15 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
-  Users,
   Cloud,
   CloudUpload,
   CloudDownload,
   LogIn,
   UserPlus,
   LogOut,
-  Database,
   AlertCircle,
-  CheckCircle2,
-  RefreshCw,
-  Key,
   Settings,
   Download,
   Upload,
-  Copy,
-  FileText,
 } from "lucide-react";
 import {
   getSupabaseConfig,
@@ -27,8 +20,6 @@ import {
   signOut,
   backupUserDataToSupabase,
   fetchUserDataFromSupabase,
-  SUPABASE_SQL_SETUP,
-  DEFAULT_SUPABASE_PROJECT_ID,
   DEFAULT_SUPABASE_URL,
   displayUsernameFromEmail,
   type VorratSyncPayload,
@@ -64,14 +55,11 @@ export function HouseholdSyncModal({
   onOpenReset,
   onAuthChange,
 }: HouseholdSyncModalProps) {
-  const [activeTab, setActiveTab] = useState<"cloud" | "backup">("cloud");
-
-  // Household State
+  // Household Name for local JSON backups
   const [householdName, setHouseholdName] = useState(() => {
     try {
       return (
         localStorage.getItem(STORAGE_KEYS.HOUSEHOLD_NAME) ||
-        localStorage.getItem("forret_household_name") ||
         "Unsere Küche (WG & Familie)"
       );
     } catch {
@@ -79,12 +67,10 @@ export function HouseholdSyncModal({
     }
   });
 
-  const [jsonCopied, setJsonCopied] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [lastSyncTime, setLastSyncTime] = useState("Gerade eben");
 
-  // Supabase State
+  // Supabase Auth & Config State
   const [supabaseConfig, setSupabaseConfig] = useState(getSupabaseConfig());
   const [anonKeyInput, setAnonKeyInput] = useState(supabaseConfig.anonKey || "");
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
@@ -93,8 +79,6 @@ export function HouseholdSyncModal({
   const [authPassword, setAuthPassword] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [sqlCopied, setSqlCopied] = useState(false);
-  const [showSqlDetails, setShowSqlDetails] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -139,36 +123,15 @@ export function HouseholdSyncModal({
       downloadAnchor.setAttribute("href", dataStr);
       downloadAnchor.setAttribute(
         "download",
-        `vorrat-haushalt-${new Date().toISOString().split("T")[0]}.json`
+        `vorrat-backup-${new Date().toISOString().split("T")[0]}.json`
       );
       document.body.appendChild(downloadAnchor);
       downloadAnchor.click();
       downloadAnchor.remove();
-      if (onNotify) onNotify("Haushalts-Backup als JSON heruntergeladen!");
+      if (onNotify) onNotify("Lokales Backup als JSON heruntergeladen!");
     } catch (err) {
       console.error(err);
       if (onNotify) onNotify("Fehler beim Erstellen des Backups.");
-    }
-  };
-
-  const handleCopyJson = () => {
-    try {
-      const payload = {
-        version: 1,
-        appName: "Vorrat",
-        exportedAt: new Date().toISOString(),
-        householdName,
-        pantry: pantryData,
-        groceries: groceriesData,
-        customRecipes: customRecipesData,
-        mealPlan: mealPlanData,
-      };
-      navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
-      setJsonCopied(true);
-      if (onNotify) onNotify("Haushalts-Daten in Zwischenablage kopiert!");
-      setTimeout(() => setJsonCopied(false), 2200);
-    } catch {
-      if (onNotify) onNotify("Kopieren nicht unterstützt.");
     }
   };
 
@@ -196,12 +159,13 @@ export function HouseholdSyncModal({
           handleSaveName(parsed.householdName);
         }
         if (onNotify) {
-          onNotify("Haushalts-Backup erfolgreich eingespielt!");
+          onNotify("Lokales Backup erfolgreich eingespielt!");
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error(err);
+        const msg = err instanceof Error ? err.message : "Ungültige Datei";
         if (onNotify) {
-          onNotify(`Fehler beim JSON-Import: ${err?.message || "Ungültige Datei"}`);
+          onNotify(`Fehler beim JSON-Import: ${msg}`);
         }
       } finally {
         if (fileInputRef.current) {
@@ -245,7 +209,6 @@ export function HouseholdSyncModal({
       return;
     }
 
-    // Auto-save key if entered in the modal
     if (!supabaseConfig.isConfigured) {
       if (anonKeyInput.trim()) {
         saveSupabaseConfig(DEFAULT_SUPABASE_URL, anonKeyInput.trim());
@@ -256,7 +219,7 @@ export function HouseholdSyncModal({
           return;
         }
       } else {
-        setAuthError("Bitte füge unten deinen Supabase Anon Key (aus dem Supabase Dashboard) ein.");
+        setAuthError("Bitte füge unten deinen Supabase Anon Key ein.");
         return;
       }
     }
@@ -328,7 +291,6 @@ export function HouseholdSyncModal({
         customRecipes: customRecipesData,
         mealPlan: mealPlanData,
       });
-      setLastSyncTime("Gerade eben");
       if (onNotify) onNotify("Gesamter Vorrat erfolgreich in Supabase gesichert!");
     } catch (err: unknown) {
       console.error(err);
@@ -362,7 +324,6 @@ export function HouseholdSyncModal({
       setIsSyncing(false);
     }
   };
-
 
   if (!isOpen) return null;
 
@@ -417,7 +378,7 @@ export function HouseholdSyncModal({
             </div>
             <div style={{ minWidth: 0 }}>
               <h2 style={{ margin: 0, fontSize: "16px", color: "#0f172a", fontWeight: 800 }}>
-                Accounts & Cloud-Sync
+                Account & Cloud-Sync
               </h2>
               <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "2px" }}>
                 <span
@@ -432,7 +393,7 @@ export function HouseholdSyncModal({
                   }}
                 />
                 <span style={{ fontSize: "11px", color: currentUserEmail ? "#059669" : "#64748b", fontWeight: 650 }}>
-                  {currentUserEmail ? `Verbunden: ${displayUsernameFromEmail(currentUserEmail)}` : "Supabase PostgreSQL Sync"}
+                  {currentUserEmail ? `Verbunden: ${displayUsernameFromEmail(currentUserEmail)}` : "Supabase Cloud-Sync"}
                 </span>
               </div>
             </div>
@@ -472,665 +433,362 @@ export function HouseholdSyncModal({
           </button>
         </div>
 
-        {/* Tab Switcher */}
-        <div style={{ padding: "12px 20px 0" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", background: "#f1f5f9", padding: "4px", borderRadius: "12px" }}>
-            <button
-              type="button"
-              onClick={() => setActiveTab("cloud")}
-              style={{
-                padding: "8px",
-                borderRadius: "9px",
-                border: "none",
-                fontSize: "12px",
-                fontWeight: 750,
-                cursor: "pointer",
-                background: activeTab === "cloud" ? "#ffffff" : "transparent",
-                color: activeTab === "cloud" ? "#0f172a" : "#64748b",
-                boxShadow: activeTab === "cloud" ? "0 1px 3px rgba(0,0,0,0.06)" : "none",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "6px",
-              }}
-            >
-              <Database size={14} />
-              <span>Supabase Cloud</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab("backup")}
-              style={{
-                padding: "8px",
-                borderRadius: "9px",
-                border: "none",
-                fontSize: "12px",
-                fontWeight: 750,
-                cursor: "pointer",
-                background: activeTab === "backup" ? "#ffffff" : "transparent",
-                color: activeTab === "backup" ? "#0f172a" : "#64748b",
-                boxShadow: activeTab === "backup" ? "0 1px 3px rgba(0,0,0,0.06)" : "none",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "6px",
-              }}
-            >
-              <Users size={14} />
-              <span>Haushalt & Backup</span>
-            </button>
-          </div>
-        </div>
-
         {/* Modal Body */}
         <div className="modal-body" style={{ padding: "16px 20px 20px", display: "flex", flexDirection: "column", gap: "16px" }}>
-          
-          {/* TAB 1: SUPABASE CLOUD & ACCOUNTS */}
-          {activeTab === "cloud" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-              {currentUserEmail ? (
-                /* Logged In State */
-                <div style={{ background: "#f8fafc", padding: "14px", borderRadius: "16px", border: "1px solid #e2e8f0" }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
-                    <div>
-                      <span style={{ fontSize: "10.5px", color: "#64748b", textTransform: "uppercase", fontWeight: 700, letterSpacing: "0.05em" }}>
-                        Eingeloggter Account
-                      </span>
-                      <strong style={{ display: "block", fontSize: "14px", color: "#0f172a", marginTop: "2px" }}>
-                        {displayUsernameFromEmail(currentUserEmail)}
-                      </strong>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={handleSignOut}
-                      style={{
-                        padding: "5px 10px",
-                        background: "#fee2e2",
-                        color: "#b91c1c",
-                        border: "1px solid #fecaca",
-                        borderRadius: "8px",
-                        fontSize: "11px",
-                        fontWeight: 750,
-                        cursor: "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "4px",
-                      }}
-                    >
-                      <LogOut size={12} />
-                      Abmelden
-                    </button>
-                  </div>
 
-                  {/* Auto-Sync Live Status */}
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "8px",
-                      background: "rgba(16, 185, 129, 0.08)",
-                      border: "1px solid rgba(16, 185, 129, 0.2)",
-                      borderRadius: "10px",
-                      padding: "8px 12px",
-                      fontSize: "11.5px",
-                      color: "#047857",
-                      fontWeight: 650,
-                      marginTop: "6px",
-                      marginBottom: "12px",
-                    }}
-                  >
-                    <span
-                      style={{
-                        width: "8px",
-                        height: "8px",
-                        borderRadius: "50%",
-                        background: "#10b981",
-                        boxShadow: "0 0 6px rgba(16,185,129,0.8)",
-                        flexShrink: 0,
-                      }}
-                    />
-                    <span>
-                      <strong>Automatischer Cloud-Sync aktiv:</strong> Jede Änderung an Vorrat & Einkaufsliste wird automatisch in Echtzeit gesichert.
-                    </span>
-                  </div>
-
-                  {/* Backup & Restore Controls */}
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-                    <button
-                      type="button"
-                      disabled={isSyncing}
-                      onClick={handleCloudBackup}
-                      style={{
-                        padding: "9px 12px",
-                        background: "#059669",
-                        color: "white",
-                        border: "none",
-                        borderRadius: "10px",
-                        fontSize: "12px",
-                        fontWeight: 750,
-                        cursor: "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: "6px",
-                        boxShadow: "0 2px 4px rgba(5,150,105,0.2)",
-                      }}
-                    >
-                      <CloudUpload size={14} />
-                      {isSyncing ? "Sichert..." : "In Cloud sichern"}
-                    </button>
-
-                    <button
-                      type="button"
-                      disabled={isSyncing}
-                      onClick={handleCloudRestore}
-                      style={{
-                        padding: "9px 12px",
-                        background: "#ffffff",
-                        color: "#1e293b",
-                        border: "1px solid #cbd5e1",
-                        borderRadius: "10px",
-                        fontSize: "12px",
-                        fontWeight: 750,
-                        cursor: "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: "6px",
-                      }}
-                    >
-                      <CloudDownload size={14} />
-                      Aus Cloud laden
-                    </button>
-                  </div>
+          {/* KARTE 1: ACCOUNT & CLOUD-SYNC */}
+          {currentUserEmail ? (
+            /* Logged In State */
+            <div style={{ background: "#f8fafc", padding: "16px", borderRadius: "18px", border: "1px solid #e2e8f0" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
+                <div>
+                  <span style={{ fontSize: "10.5px", color: "#64748b", textTransform: "uppercase", fontWeight: 700, letterSpacing: "0.05em" }}>
+                    Eingeloggter Account
+                  </span>
+                  <strong style={{ display: "block", fontSize: "15px", color: "#0f172a", marginTop: "2px" }}>
+                    {displayUsernameFromEmail(currentUserEmail)}
+                  </strong>
                 </div>
-              ) : (
-                /* Auth Form (Login / Register) */
-                <form onSubmit={handleAuthSubmit} style={{ background: "#f8fafc", padding: "16px", borderRadius: "16px", border: "1px solid #e2e8f0" }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
-                    <div style={{ display: "flex", gap: "8px" }}>
-                      <button
-                        type="button"
-                        onClick={() => setAuthMode("login")}
-                        style={{
-                          background: "transparent",
-                          border: "none",
-                          fontSize: "13px",
-                          fontWeight: authMode === "login" ? 800 : 600,
-                          color: authMode === "login" ? "#059669" : "#64748b",
-                          cursor: "pointer",
-                          paddingBottom: "2px",
-                          borderBottom: authMode === "login" ? "2px solid #059669" : "none",
-                        }}
-                      >
-                        Anmelden
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setAuthMode("signup")}
-                        style={{
-                          background: "transparent",
-                          border: "none",
-                          fontSize: "13px",
-                          fontWeight: authMode === "signup" ? 800 : 600,
-                          color: authMode === "signup" ? "#059669" : "#64748b",
-                          cursor: "pointer",
-                          paddingBottom: "2px",
-                          borderBottom: authMode === "signup" ? "2px solid #059669" : "none",
-                        }}
-                      >
-                        Konto erstellen
-                      </button>
-                    </div>
-                    <span style={{ fontSize: "10px", fontWeight: 700, color: "#64748b" }}>
-                      Kostenlos & Sicher
-                    </span>
-                  </div>
+                <button
+                  type="button"
+                  onClick={handleSignOut}
+                  style={{
+                    padding: "6px 12px",
+                    background: "#fee2e2",
+                    color: "#b91c1c",
+                    border: "1px solid #fecaca",
+                    borderRadius: "8px",
+                    fontSize: "11px",
+                    fontWeight: 750,
+                    cursor: "pointer",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "5px",
+                  }}
+                >
+                  <LogOut size={12} />
+                  Abmelden
+                </button>
+              </div>
 
-                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                    <input
-                      type="text"
-                      value={authEmail}
-                      onChange={(e) => setAuthEmail(e.target.value)}
-                      placeholder="Benutzername (z. B. wg-mitte oder unserekueche)"
-                      autoCapitalize="none"
-                      autoCorrect="off"
-                      required
-                      style={{
-                        padding: "10px 12px",
-                        borderRadius: "10px",
-                        border: "1px solid #cbd5e1",
-                        fontSize: "14px",
-                        outline: "none",
-                        background: "#ffffff",
-                        minHeight: "44px",
-                        boxSizing: "border-box",
-                      }}
-                    />
-                    <input
-                      type="password"
-                      value={authPassword}
-                      onChange={(e) => setAuthPassword(e.target.value)}
-                      placeholder="Passwort"
-                      required
-                      style={{
-                        padding: "10px 12px",
-                        borderRadius: "10px",
-                        border: "1px solid #cbd5e1",
-                        fontSize: "14px",
-                        outline: "none",
-                        background: "#ffffff",
-                        minHeight: "44px",
-                        boxSizing: "border-box",
-                      }}
-                    />
+              {/* Live Status Pill */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  background: "rgba(16, 185, 129, 0.08)",
+                  border: "1px solid rgba(16, 185, 129, 0.2)",
+                  borderRadius: "10px",
+                  padding: "9px 12px",
+                  fontSize: "12px",
+                  color: "#047857",
+                  fontWeight: 650,
+                  marginBottom: "12px",
+                }}
+              >
+                <span
+                  style={{
+                    width: "8px",
+                    height: "8px",
+                    borderRadius: "50%",
+                    background: "#10b981",
+                    boxShadow: "0 0 6px rgba(16,185,129,0.8)",
+                    flexShrink: 0,
+                  }}
+                />
+                <span>
+                  <strong>Automatischer Cloud-Sync aktiv:</strong> Synchronisiert in Echtzeit.
+                </span>
+              </div>
 
-                    {authError && (
-                      <div style={{ display: "flex", alignItems: "center", gap: "5px", color: "#dc2626", fontSize: "11px", marginTop: "2px" }}>
-                        <AlertCircle size={13} />
-                        <span>{authError}</span>
-                      </div>
-                    )}
+              {/* Statistik */}
+              <div
+                style={{
+                  fontSize: "12px",
+                  color: "#475569",
+                  background: "#ffffff",
+                  border: "1px solid #e2e8f0",
+                  borderRadius: "10px",
+                  padding: "8px 12px",
+                  marginBottom: "12px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
+                <span>Aktueller Datenbestand:</span>
+                <strong>
+                  {pantryCount} {pantryCount === 1 ? "Produkt" : "Produkte"} · {shoppingCount} {shoppingCount === 1 ? "Einkaufsartikel" : "Einkaufsartikel"}
+                </strong>
+              </div>
 
-                    <button
-                      type="submit"
-                      disabled={authLoading}
-                      style={{
-                        marginTop: "4px",
-                        padding: "11px 14px",
-                        background: "#059669",
-                        color: "white",
-                        border: "none",
-                        borderRadius: "10px",
-                        fontSize: "13.5px",
-                        fontWeight: 750,
-                        cursor: "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: "6px",
-                        minHeight: "44px",
-                        touchAction: "manipulation",
-                      }}
-                    >
-                      {authMode === "login" ? <LogIn size={15} /> : <UserPlus size={15} />}
-                      {authLoading
-                        ? "Verbinde..."
-                        : authMode === "login"
-                        ? "Mit Benutzername einloggen"
-                        : "Account jetzt registrieren"}
-                    </button>
-                  </div>
-                </form>
-              )}
+              {/* Sync Actions */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "14px" }}>
+                <button
+                  type="button"
+                  disabled={isSyncing}
+                  onClick={handleCloudBackup}
+                  style={{
+                    padding: "10px 12px",
+                    background: "#059669",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "10px",
+                    fontSize: "12.5px",
+                    fontWeight: 750,
+                    cursor: isSyncing ? "not-allowed" : "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "6px",
+                    boxShadow: "0 2px 4px rgba(5,150,105,0.2)",
+                  }}
+                >
+                  <CloudUpload size={15} />
+                  {isSyncing ? "Sichert..." : "In Cloud sichern"}
+                </button>
 
-              {/* Pre-configured Supabase Direct Status & Key Input */}
-              <div style={{ background: "#ffffff", border: `1px solid ${supabaseConfig.isConfigured ? "#e2e8f0" : "#fcd34d"}`, borderRadius: "14px", padding: "13px 14px" }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "9px" }}>
-                    <div
-                      style={{
-                        width: "28px",
-                        height: "28px",
-                        borderRadius: "8px",
-                        background: supabaseConfig.isConfigured ? "#ecfdf5" : "#fef3c7",
-                        color: supabaseConfig.isConfigured ? "#059669" : "#d97706",
-                        display: "grid",
-                        placeItems: "center",
-                      }}
-                    >
-                      <Database size={15} />
-                    </div>
-                    <div>
-                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                        <span style={{ fontSize: "12px", fontWeight: 750, color: "#0f172a" }}>
-                          {supabaseConfig.isConfigured ? "Supabase Cloud direkt aktiv" : "Anon Key erforderlich"}
-                        </span>
-                        <span
-                          style={{
-                            fontSize: "9.5px",
-                            fontWeight: 750,
-                            padding: "1px 6px",
-                            borderRadius: "5px",
-                            background: supabaseConfig.isConfigured ? "#dcfce7" : "#fef08a",
-                            color: supabaseConfig.isConfigured ? "#15803d" : "#854d0e",
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "3px",
-                          }}
-                        >
-                          {supabaseConfig.isConfigured ? (
-                            <>
-                              <CheckCircle2 size={10} /> Direkt eingerichtet
-                            </>
-                          ) : (
-                            "Key einfügen"
-                          )}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: "10.5px", color: "#64748b", fontFamily: "monospace", marginTop: "1px" }}>
-                        Projekt: <strong>{DEFAULT_SUPABASE_PROJECT_ID}</strong>
-                      </div>
-                    </div>
-                  </div>
+                <button
+                  type="button"
+                  disabled={isSyncing}
+                  onClick={handleCloudRestore}
+                  style={{
+                    padding: "10px 12px",
+                    background: "#ffffff",
+                    color: "#1e293b",
+                    border: "1px solid #cbd5e1",
+                    borderRadius: "10px",
+                    fontSize: "12.5px",
+                    fontWeight: 750,
+                    cursor: isSyncing ? "not-allowed" : "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "6px",
+                  }}
+                >
+                  <CloudDownload size={15} />
+                  Aus Cloud laden
+                </button>
+              </div>
 
+              {/* WG & Paare Hinweis */}
+              <div
+                style={{
+                  fontSize: "11.5px",
+                  color: "#64748b",
+                  lineHeight: 1.45,
+                  background: "#f1f5f9",
+                  padding: "10px 12px",
+                  borderRadius: "10px",
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "7px",
+                }}
+              >
+                <span style={{ fontSize: "14px", lineHeight: 1 }}>💡</span>
+                <span>
+                  <strong>Tipp für Paare & WGs:</strong> Einfach auf beiden Handys mit demselben Account anmelden, um Vorrat & Einkaufsliste gemeinsam zu nutzen.
+                </span>
+              </div>
+            </div>
+          ) : (
+            /* Auth Form (Login / Register) */
+            <form onSubmit={handleAuthSubmit} style={{ background: "#f8fafc", padding: "16px", borderRadius: "18px", border: "1px solid #e2e8f0" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
+                <div style={{ display: "flex", gap: "8px" }}>
                   <button
                     type="button"
-                    onClick={() => setShowSqlDetails((prev) => !prev)}
+                    onClick={() => setAuthMode("login")}
                     style={{
                       background: "transparent",
                       border: "none",
-                      color: "#64748b",
-                      fontSize: "11px",
-                      fontWeight: 700,
+                      fontSize: "13px",
+                      fontWeight: authMode === "login" ? 800 : 600,
+                      color: authMode === "login" ? "#059669" : "#64748b",
                       cursor: "pointer",
-                      padding: "4px 8px",
-                      borderRadius: "6px",
+                      paddingBottom: "2px",
+                      borderBottom: authMode === "login" ? "2px solid #059669" : "none",
                     }}
                   >
-                    {showSqlDetails ? "SQL Info ▲" : "SQL Info ▼"}
+                    Anmelden
                   </button>
-                </div>
-
-                {/* If anon key is missing, show convenient 1-tap paste & activate box */}
-                {!supabaseConfig.isConfigured && (
-                  <div style={{ marginTop: "10px", paddingTop: "10px", borderTop: "1px solid #fef3c7" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "5px", marginBottom: "4px" }}>
-                      <Key size={12} style={{ color: "#d97706" }} />
-                      <label style={{ fontSize: "10.5px", fontWeight: 750, color: "#92400e" }}>
-                        Anon Public Key hier einfügen (aus Supabase Settings ➔ API):
-                      </label>
-                    </div>
-                    <div style={{ display: "flex", gap: "6px" }}>
-                      <input
-                        type="password"
-                        value={anonKeyInput}
-                        onChange={(e) => setAnonKeyInput(e.target.value)}
-                        placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                        style={{
-                          flex: 1,
-                          padding: "7px 10px",
-                          borderRadius: "8px",
-                          border: "1px solid #cbd5e1",
-                          fontSize: "11px",
-                          outline: "none",
-                          background: "#ffffff",
-                        }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleSaveAnonKey()}
-                        style={{
-                          padding: "7px 12px",
-                          background: "#059669",
-                          color: "white",
-                          border: "none",
-                          borderRadius: "8px",
-                          fontSize: "11.5px",
-                          fontWeight: 750,
-                          cursor: "pointer",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        Aktivieren
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {showSqlDetails && (
-                  <div style={{ marginTop: "10px", paddingTop: "10px", borderTop: "1px solid #f1f5f9", display: "flex", flexDirection: "column", gap: "8px" }}>
-                    <p style={{ margin: 0, fontSize: "11px", color: "#64748b", lineHeight: 1.4 }}>
-                      Falls du die Tabelle im Supabase SQL Editor noch anlegen möchtest, kannst du hier das Schema kopieren:
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        navigator.clipboard.writeText(SUPABASE_SQL_SETUP);
-                        setSqlCopied(true);
-                        setTimeout(() => setSqlCopied(false), 2500);
-                      }}
-                      style={{
-                        padding: "7px 12px",
-                        background: "#f1f5f9",
-                        color: "#334155",
-                        border: "1px solid #cbd5e1",
-                        borderRadius: "8px",
-                        fontSize: "11px",
-                        fontWeight: 700,
-                        cursor: "pointer",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: "6px",
-                      }}
-                    >
-                      {sqlCopied ? "SQL Table Schema kopiert!" : "SQL Table Schema kopieren"}
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* TAB 2: HOUSEHOLD BACKUP & TRANSFER */}
-          {activeTab === "backup" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-              {/* Household Name */}
-              <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "14px", border: "1px solid #e2e8f0" }}>
-                <label style={{ display: "block", fontSize: "10.5px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "4px" }}>
-                  Name des Haushalts
-                </label>
-                <input
-                  type="text"
-                  value={householdName}
-                  onChange={(e) => handleSaveName(e.target.value)}
-                  placeholder="z.B. Familie Muster oder WG Sonnenallee"
-                  style={{
-                    width: "100%",
-                    background: "transparent",
-                    border: "none",
-                    fontSize: "14px",
-                    fontWeight: 750,
-                    color: "#0f172a",
-                    outline: "none",
-                  }}
-                />
-              </div>
-
-              {/* Offline / JSON Backup & Sharing */}
-              <div
-                style={{
-                  background: "linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)",
-                  border: "1.5px solid #cbd5e1",
-                  borderRadius: "16px",
-                  padding: "16px",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "7px" }}>
-                    <FileText size={16} color="#0f172a" />
-                    <span style={{ fontSize: "13px", fontWeight: 750, color: "#0f172a" }}>
-                      Lokales Haushalts-Backup (JSON)
-                    </span>
-                  </div>
-                  <span
-                    style={{
-                      fontSize: "10px",
-                      fontWeight: 800,
-                      background: "#2d5a3e",
-                      color: "white",
-                      padding: "2px 7px",
-                      borderRadius: "6px",
-                      letterSpacing: "0.05em",
-                    }}
-                  >
-                    OFFLINE-SICHER
-                  </span>
-                </div>
-                <p style={{ margin: "0 0 14px", fontSize: "11.5px", color: "#475569", lineHeight: 1.45 }}>
-                  Sichere deinen aktuellen Vorrat, eigene Rezepte, Wochenpläne und Einkaufslisten als JSON-Datei oder teile sie direkt mit Mitbewohnern und Partnern per Datei oder Zwischenablage.
-                </p>
-
-                {/* Hidden File Input */}
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".json,application/json"
-                  onChange={handleImportJsonFile}
-                  style={{ display: "none" }}
-                />
-
-                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                  <div style={{ display: "flex", gap: "8px" }}>
-                    <button
-                      type="button"
-                      onClick={handleExportJson}
-                      style={{
-                        flex: 1,
-                        padding: "8px 12px",
-                        background: "#2d5a3e",
-                        color: "white",
-                        border: "none",
-                        borderRadius: "10px",
-                        fontSize: "12px",
-                        fontWeight: 700,
-                        cursor: "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: "6px",
-                        boxShadow: "0 1px 2px rgba(45, 90, 62, 0.2)",
-                      }}
-                    >
-                      <Download size={13} />
-                      <span>JSON herunterladen</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleCopyJson}
-                      style={{
-                        flex: 1,
-                        padding: "8px 12px",
-                        background: jsonCopied ? "#047857" : "#ffffff",
-                        color: jsonCopied ? "white" : "#1e293b",
-                        border: jsonCopied ? "1px solid #047857" : "1px solid #cbd5e1",
-                        borderRadius: "10px",
-                        fontSize: "12px",
-                        fontWeight: 700,
-                        cursor: "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: "6px",
-                        transition: "all 150ms ease",
-                      }}
-                    >
-                      <Copy size={13} />
-                      <span>{jsonCopied ? "Kopiert!" : "JSON kopieren"}</span>
-                    </button>
-                  </div>
-
                   <button
                     type="button"
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={() => setAuthMode("signup")}
                     style={{
-                      width: "100%",
-                      padding: "8px 12px",
-                      background: "#ffffff",
-                      color: "#1e293b",
-                      border: "1px dashed #94a3b8",
-                      borderRadius: "10px",
-                      fontSize: "12px",
-                      fontWeight: 700,
+                      background: "transparent",
+                      border: "none",
+                      fontSize: "13px",
+                      fontWeight: authMode === "signup" ? 800 : 600,
+                      color: authMode === "signup" ? "#059669" : "#64748b",
                       cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: "6px",
+                      paddingBottom: "2px",
+                      borderBottom: authMode === "signup" ? "2px solid #059669" : "none",
                     }}
                   >
-                    <Upload size={13} />
-                    <span>JSON-Backup wiederherstellen / importieren</span>
+                    Konto erstellen
                   </button>
                 </div>
+                <span style={{ fontSize: "10px", fontWeight: 700, color: "#64748b" }}>
+                  Kostenlos & Sicher
+                </span>
               </div>
-            </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                <input
+                  type="text"
+                  value={authEmail}
+                  onChange={(e) => setAuthEmail(e.target.value)}
+                  placeholder="Benutzername (z. B. wg-mitte oder unserekueche)"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  required
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: "10px",
+                    border: "1px solid #cbd5e1",
+                    fontSize: "14px",
+                    outline: "none",
+                    background: "#ffffff",
+                    minHeight: "44px",
+                    boxSizing: "border-box",
+                  }}
+                />
+                <input
+                  type="password"
+                  value={authPassword}
+                  onChange={(e) => setAuthPassword(e.target.value)}
+                  placeholder="Passwort"
+                  required
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: "10px",
+                    border: "1px solid #cbd5e1",
+                    fontSize: "14px",
+                    outline: "none",
+                    background: "#ffffff",
+                    minHeight: "44px",
+                    boxSizing: "border-box",
+                  }}
+                />
+
+                {authError && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "5px", color: "#dc2626", fontSize: "11px", marginTop: "2px" }}>
+                    <AlertCircle size={13} />
+                    <span>{authError}</span>
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={authLoading}
+                  style={{
+                    marginTop: "4px",
+                    padding: "11px 14px",
+                    background: "#059669",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "10px",
+                    fontSize: "13.5px",
+                    fontWeight: 750,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "6px",
+                    minHeight: "44px",
+                    touchAction: "manipulation",
+                  }}
+                >
+                  {authMode === "login" ? <LogIn size={15} /> : <UserPlus size={15} />}
+                  {authLoading
+                    ? "Verbinde..."
+                    : authMode === "login"
+                    ? "Mit Benutzername einloggen"
+                    : "Account jetzt registrieren"}
+                </button>
+              </div>
+
+              {!supabaseConfig.isConfigured && (
+                <div style={{ marginTop: "12px", paddingTop: "10px", borderTop: "1px solid #e2e8f0" }}>
+                  <label style={{ display: "block", fontSize: "10.5px", fontWeight: 700, color: "#64748b", marginBottom: "4px" }}>
+                    Supabase Anon Public Key:
+                  </label>
+                  <div style={{ display: "flex", gap: "6px" }}>
+                    <input
+                      type="password"
+                      value={anonKeyInput}
+                      onChange={(e) => setAnonKeyInput(e.target.value)}
+                      placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                      style={{
+                        flex: 1,
+                        padding: "7px 10px",
+                        borderRadius: "8px",
+                        border: "1px solid #cbd5e1",
+                        fontSize: "11px",
+                        outline: "none",
+                        background: "#ffffff",
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleSaveAnonKey()}
+                      style={{
+                        padding: "7px 12px",
+                        background: "#059669",
+                        color: "white",
+                        border: "none",
+                        borderRadius: "8px",
+                        fontSize: "11.5px",
+                        fontWeight: 750,
+                        cursor: "pointer",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      Speichern
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* WG & Paare Hinweis */}
+              <div
+                style={{
+                  fontSize: "11.5px",
+                  color: "#64748b",
+                  lineHeight: 1.45,
+                  background: "#f1f5f9",
+                  padding: "10px 12px",
+                  borderRadius: "10px",
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "7px",
+                  marginTop: "12px",
+                }}
+              >
+                <span style={{ fontSize: "14px", lineHeight: 1 }}>💡</span>
+                <span>
+                  <strong>Tipp für Paare & WGs:</strong> Einfach auf beiden Handys mit demselben Account anmelden, um Vorrat & Einkaufsliste gemeinsam zu nutzen.
+                </span>
+              </div>
+            </form>
           )}
 
-          {/* Sync Stats & Honest Action Trigger */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: "10px 14px",
-              background: "#f8fafc",
-              borderRadius: "12px",
-              border: "1px solid #e2e8f0",
-              fontSize: "11px",
-              color: "#64748b",
-            }}
-          >
-            <div>
-              <span>Status: <strong>{pantryCount} Produkte</strong> · <strong>{shoppingCount} Einkaufsartikel</strong></span>
-              <div style={{ fontSize: "10px", color: "#94a3b8", marginTop: "1px" }}>
-                {currentUserEmail
-                  ? `Cloud-Sync aktiv (${displayUsernameFromEmail(currentUserEmail)}) · ${lastSyncTime}`
-                  : "Lokal im Browser gespeichert (kein Cloud-Konto)"}
-              </div>
+          {/* KARTE 2: DATEN-VERWALTUNG & BACKUP */}
+          <div style={{ background: "#ffffff", padding: "16px", borderRadius: "18px", border: "1px solid #e2e8f0" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
+              <span style={{ fontSize: "11px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Daten-Verwaltung & Backup
+              </span>
+              <span style={{ fontSize: "11px", color: "#94a3b8" }}>
+                {pantryCount} Produkte
+              </span>
             </div>
-            {currentUserEmail ? (
-              <button
-                type="button"
-                onClick={handleCloudBackup}
-                disabled={isSyncing}
-                style={{
-                  background: "#ffffff",
-                  border: "1px solid #cbd5e1",
-                  borderRadius: "8px",
-                  padding: "5px 10px",
-                  fontSize: "11px",
-                  fontWeight: 700,
-                  color: "#1e293b",
-                  cursor: isSyncing ? "not-allowed" : "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "4px",
-                }}
-              >
-                <span style={{ display: "inline-block", transform: isSyncing ? "rotate(180deg)" : "none", transition: "transform 400ms ease" }}>
-                  <RefreshCw size={12} />
-                </span>
-                {isSyncing ? "Sichert..." : "In Cloud sichern"}
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleExportJson}
-                style={{
-                  background: "#ffffff",
-                  border: "1px solid #cbd5e1",
-                  borderRadius: "8px",
-                  padding: "5px 10px",
-                  fontSize: "11px",
-                  fontWeight: 700,
-                  color: "#1e293b",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "4px",
-                }}
-              >
-                <Download size={12} />
-                JSON-Backup
-              </button>
-            )}
-          </div>
 
-          {/* Danger Zone: Link to Full Reset Modal */}
-          {onOpenReset && (
-            <div style={{ paddingTop: "4px", borderTop: "1px dashed #e2e8f0" }}>
+            {/* Reset & Deduplication Trigger */}
+            {onOpenReset && (
               <button
                 type="button"
                 onClick={() => {
@@ -1139,11 +797,11 @@ export function HouseholdSyncModal({
                 }}
                 style={{
                   width: "100%",
-                  padding: "9px 12px",
+                  padding: "10px 14px",
                   background: "#fef2f2",
                   border: "1px solid #fecaca",
                   borderRadius: "12px",
-                  fontSize: "12px",
+                  fontSize: "12.5px",
                   fontWeight: 700,
                   color: "#dc2626",
                   cursor: "pointer",
@@ -1152,15 +810,75 @@ export function HouseholdSyncModal({
                   justifyContent: "center",
                   gap: "6px",
                   transition: "background 150ms ease",
+                  marginBottom: "10px",
                 }}
               >
-                <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><Settings className="w-3.5 h-3.5" /> Account & Vorrat leeren / Duplikate fixen / Reset</span>
+                <Settings size={14} />
+                <span>Account & Vorrat leeren / Duplikate fixen / Reset</span>
+              </button>
+            )}
+
+            {/* Hidden File Input for JSON restore */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json,application/json"
+              onChange={handleImportJsonFile}
+              style={{ display: "none" }}
+            />
+
+            {/* Dezente Backup-Aktionen */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+              <button
+                type="button"
+                onClick={handleExportJson}
+                style={{
+                  padding: "7px 10px",
+                  background: "#f8fafc",
+                  color: "#475569",
+                  border: "1px solid #cbd5e1",
+                  borderRadius: "9px",
+                  fontSize: "11px",
+                  fontWeight: 650,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "5px",
+                }}
+                title="Sichert alle Daten als JSON-Datei auf diesem Gerät"
+              >
+                <Download size={13} />
+                <span>Lokales JSON-Backup exportieren</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                style={{
+                  padding: "7px 10px",
+                  background: "#f8fafc",
+                  color: "#475569",
+                  border: "1px solid #cbd5e1",
+                  borderRadius: "9px",
+                  fontSize: "11px",
+                  fontWeight: 650,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "5px",
+                }}
+                title="Stellt Daten aus einer lokalen JSON-Backup-Datei wieder her"
+              >
+                <Upload size={13} />
+                <span>Importieren</span>
               </button>
             </div>
-          )}
+          </div>
 
           {/* Primary Bottom Close Button */}
-          <div style={{ marginTop: "12px", paddingTop: "8px" }}>
+          <div style={{ marginTop: "4px" }}>
             <button
               type="button"
               onClick={onClose}

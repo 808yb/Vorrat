@@ -333,7 +333,7 @@ export function isTitleSimilar(a: string, b: string): boolean {
 
 export function getStoredCustomRecipes(): CatalogRecipe[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEYS.CUSTOM_RECIPES) || localStorage.getItem("forret_custom_recipes");
+    const raw = localStorage.getItem(STORAGE_KEYS.CUSTOM_RECIPES);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
@@ -770,33 +770,23 @@ function buildSmartFallbackRecipe(
  * The API key is NEVER read in the browser here – it lives in api/gemini.ts.
  */
 async function callGeminiCascade(_apiKey: string, prompt: string): Promise<RawGeminiRecipe | null> {
-  const models = [
-    "gemini-3.5-flash-lite",
-    "gemini-3.8-flash",
-    "gemini-flash-latest",
-    "gemini-flash-lite-latest",
-  ];
+  try {
+    const data = await callGeminiProxy({
+      model: "gemini-3.5-flash-lite",
+      contents: prompt,
+      config: { responseMimeType: "application/json", temperature: 0.7 },
+    });
 
-  for (const model of models) {
-    try {
-      const data = await callGeminiProxy({
-        model,
-        contents: prompt,
-        config: { responseMimeType: "application/json", temperature: 0.7 },
-      });
+    const rawText = extractTextFromGeminiResponse(data);
+    if (!rawText) return null;
 
-      const rawText = extractTextFromGeminiResponse(data);
-      if (!rawText) continue;
-
-      const cleanJson = rawText.replace(/^```json/i, "").replace(/^```/, "").replace(/```$/, "").trim();
-      const parsed: RawGeminiRecipe = JSON.parse(cleanJson);
-      if (parsed && parsed.title && Array.isArray(parsed.ingredients) && Array.isArray(parsed.steps)) {
-        console.info(`[Gemini Cascade] Erfolgreich geladen von Modell: ${model}`);
-        return parsed;
-      }
-    } catch (err) {
-      console.warn(`[Gemini Cascade] Fehler bei Modell ${model}:`, err);
+    const cleanJson = rawText.replace(/^```json/i, "").replace(/^```/, "").replace(/```$/, "").trim();
+    const parsed: RawGeminiRecipe = JSON.parse(cleanJson);
+    if (parsed && parsed.title && Array.isArray(parsed.ingredients) && Array.isArray(parsed.steps)) {
+      return parsed;
     }
+  } catch (err) {
+    console.warn("[Gemini Cascade] API-Call fehlgeschlagen:", err);
   }
 
   return null;
@@ -1010,11 +1000,26 @@ export async function fetchWebsiteContent(
     clearTimeout(timeoutId);
     if (res.ok) {
       const data = await res.json();
-      if (data && data.success && data.textContent && data.textContent.length > 150) {
-        return {
-          content: data.textContent.slice(0, 45000),
-          nextPageUrl: data.nextPageUrl,
-        };
+      if (data && data.success) {
+        let assembledText = "";
+        if (Array.isArray(data.jsonLdRecipes) && data.jsonLdRecipes.length > 0) {
+          assembledText += `=== SCHEMA.ORG REZEPT-DATEN (JSON-LD) ===\n${JSON.stringify(data.jsonLdRecipes, null, 2)}\n\n`;
+        }
+        if (data.title) {
+          assembledText += `Titel: ${data.title}\n`;
+        }
+        if (data.ogDescription) {
+          assembledText += `Beschreibung: ${data.ogDescription}\n\n`;
+        }
+        if (data.textContent) {
+          assembledText += data.textContent;
+        }
+        if (assembledText.length > 100) {
+          return {
+            content: assembledText.slice(0, 45000),
+            nextPageUrl: data.nextPageUrl,
+          };
+        }
       }
     }
   } catch {
