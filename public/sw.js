@@ -1,5 +1,5 @@
 // Vorrat PWA Service Worker (Offline-First)
-const CACHE_NAME = 'vorrat-pwa-v1';
+const CACHE_NAME = 'vorrat-pwa-v2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -28,8 +28,22 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Ignore chrome-extension or external analytics
-  if (!event.request.url.startsWith(self.location.origin)) {
+  // CRITICAL: NEVER intercept or cache non-GET requests (e.g. POST, PUT, DELETE)
+  if (event.request.method !== 'GET') {
+    return;
+  }
+
+  const url = event.request.url;
+
+  // Never intercept or cache API calls, dev-server assets or localhost
+  if (
+    url.includes('/api/') ||
+    url.includes('localhost') ||
+    url.includes('127.0.0.1') ||
+    url.includes('/src/') ||
+    url.includes('/@vite') ||
+    !url.startsWith(self.location.origin)
+  ) {
     return;
   }
 
@@ -41,15 +55,24 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Stale-while-revalidate for local assets
+  // Stale-while-revalidate for local assets (GET requests only!)
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       const fetchPromise = fetch(event.request)
         .then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+          if (
+            event.request.method === 'GET' &&
+            networkResponse &&
+            networkResponse.status === 200 &&
+            networkResponse.type === 'basic'
+          ) {
             const responseToCache = networkResponse.clone();
             caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, responseToCache);
+              try {
+                if (event.request.method === 'GET') {
+                  cache.put(event.request, responseToCache);
+                }
+              } catch {}
             });
           }
           return networkResponse;

@@ -263,15 +263,17 @@ export function RecipeImportModal({
                     </div>
                   </div>
 
-                  {/* Demo Button for Testing */}
-                  <button
-                    type="button"
-                    onClick={handleLoadDemoReel}
-                    className="w-full py-2.5 px-3 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer"
-                  >
-                    <Sparkles size={14} className="text-emerald-600" />
-                    <span>Beispiel-Reel testen: Crispy Chicken Wraps (TikTok)</span>
-                  </button>
+                  {/* Demo Button for Testing (DEV only) */}
+                  {import.meta.env.DEV && (
+                    <button
+                      type="button"
+                      onClick={handleLoadDemoReel}
+                      className="w-full py-2.5 px-3 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    >
+                      <Sparkles size={14} className="text-emerald-600" />
+                      <span>Beispiel-Reel testen: Crispy Chicken Wraps (TikTok)</span>
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -326,6 +328,7 @@ export function RecipeImportModal({
                   src={importedData.recipe.imageUrl}
                   alt={importedData.recipe.title}
                   className="w-full h-44 object-cover"
+                  referrerPolicy="no-referrer"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-slate-950/30 to-transparent" />
 

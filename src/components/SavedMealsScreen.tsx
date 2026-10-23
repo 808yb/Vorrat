@@ -390,6 +390,7 @@ export function SavedMealsScreen({
                   src={activeRecipe.imageUrl || resolveRecipeFoodImage(activeRecipe.title, activeRecipe.subtitle)}
                   alt={activeRecipe.title}
                   style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  referrerPolicy="no-referrer"
                   onError={(e) => {
                     (e.currentTarget as HTMLImageElement).src = resolveRecipeFoodImage(activeRecipe.title);
                   }}
@@ -930,6 +931,7 @@ export function SavedMealsScreen({
                         src={imgUrl}
                         alt={recipe.title}
                         className="saved-grid-thumb-img"
+                        referrerPolicy="no-referrer"
                         onError={(e) => {
                           (e.currentTarget as HTMLImageElement).src = resolveRecipeFoodImage(recipe.title);
                         }}

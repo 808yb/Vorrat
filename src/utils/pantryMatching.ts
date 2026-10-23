@@ -858,10 +858,14 @@ export function deductIngredientFromPantryAmount(
   }
 
   // Normalized unit checkers
-  const isGram = (u: string) => u === "g" || u === "gramm";
+  const isGram = (u: string) => u === "g" || u === "gramm" || u === "mg";
   const isKg = (u: string) => u === "kg" || u === "kilogramm";
-  const isMl = (u: string) => u === "ml" || u === "milliliter";
+  const isMass = (u: string) => isGram(u) || isKg(u);
+
+  const isMl = (u: string) => u === "ml" || u === "milliliter" || u === "cl" || u === "dl";
   const isLiter = (u: string) => u === "l" || u === "liter";
+  const isVolume = (u: string) => isMl(u) || isLiter(u);
+
   const isEl = (u: string) => u === "el" || u === "esslöffel" || u === "essloeffel";
   const isTl = (u: string) => u === "tl" || u === "teelöffel" || u === "teeloeffel";
   const isPrise = (u: string) => u === "prise" || u === "prisen";
@@ -869,6 +873,27 @@ export function deductIngredientFromPantryAmount(
   const isGlass = (u: string) => u === "glas" || u === "gläser" || u === "glaeser";
   const isCan = (u: string) => u === "dose" || u === "dosen";
   const isBottle = (u: string) => u === "flasche" || u === "flaschen" || u === "fl.";
+  const isPiece = (u: string) =>
+    u === "stk" ||
+    u === "stk." ||
+    u === "st" ||
+    u === "stück" ||
+    u === "stueck" ||
+    u === "portion" ||
+    u === "portionen" ||
+    u === "zehe" ||
+    u === "zehen" ||
+    u === "knolle" ||
+    u === "knollen" ||
+    u === "bund" ||
+    u === "stange" ||
+    u === "stangen" ||
+    u === "scheibe" ||
+    u === "scheiben" ||
+    u === "blatt" ||
+    u === "blätter" ||
+    u === "zweig" ||
+    u === "zweige";
 
   let convertedDeduct = deductAmount;
 
@@ -898,6 +923,8 @@ export function deductIngredientFromPantryAmount(
       convertedDeduct = deductAmount * 15;
     } else if (isKg(pUnit) || isLiter(pUnit)) {
       convertedDeduct = (deductAmount * 15) / 1000;
+    } else {
+      return pantryAmount;
     }
     return Math.max(0, Number((pantryAmount - convertedDeduct).toFixed(3)));
   }
@@ -906,6 +933,8 @@ export function deductIngredientFromPantryAmount(
       convertedDeduct = deductAmount * 5;
     } else if (isKg(pUnit) || isLiter(pUnit)) {
       convertedDeduct = (deductAmount * 5) / 1000;
+    } else {
+      return pantryAmount;
     }
     return Math.max(0, Number((pantryAmount - convertedDeduct).toFixed(3)));
   }
@@ -914,6 +943,8 @@ export function deductIngredientFromPantryAmount(
       convertedDeduct = deductAmount * 1;
     } else if (isKg(pUnit) || isLiter(pUnit)) {
       convertedDeduct = deductAmount / 1000;
+    } else {
+      return pantryAmount;
     }
     return Math.max(0, Number((pantryAmount - convertedDeduct).toFixed(3)));
   }
@@ -924,12 +955,16 @@ export function deductIngredientFromPantryAmount(
       convertedDeduct = deductAmount / 500;
     } else if (isKg(dUnit)) {
       convertedDeduct = deductAmount / 0.5;
+    } else {
+      return pantryAmount;
     }
     return Math.max(0, Number((pantryAmount - convertedDeduct).toFixed(2)));
   }
   if (isCan(pUnit) || isGlass(pUnit)) {
     if (isGram(dUnit) || isMl(dUnit)) {
       convertedDeduct = deductAmount / 400;
+    } else {
+      return pantryAmount;
     }
     return Math.max(0, Number((pantryAmount - convertedDeduct).toFixed(2)));
   }
@@ -938,16 +973,30 @@ export function deductIngredientFromPantryAmount(
       convertedDeduct = deductAmount / 750;
     } else if (isLiter(dUnit)) {
       convertedDeduct = deductAmount / 0.75;
+    } else {
+      return pantryAmount;
     }
     return Math.max(0, Number((pantryAmount - convertedDeduct).toFixed(2)));
   }
 
-  // General fallback: if deductUnit is gram or ml and pantryUnit is pieces/packs, prevent instant wipe to 0
-  if (deductAmount >= pantryAmount && (isGram(dUnit) || isMl(dUnit)) && !isGram(pUnit) && !isMl(pUnit)) {
-    return Math.max(0, Number((pantryAmount - 1).toFixed(2)));
+  // Piece vs Piece (e.g. Stk vs Stück)
+  if (isPiece(pUnit) && isPiece(dUnit)) {
+    return Math.max(0, Number((pantryAmount - deductAmount).toFixed(3)));
   }
 
-  return Math.max(0, Number((pantryAmount - deductAmount).toFixed(3)));
+  // Incompatible dimensions check (Mass vs Volume, Piece vs Mass/Volume, etc.)
+  // NEVER blindly subtract raw numbers across incompatible dimensions!
+  if (
+    (isMass(pUnit) && isVolume(dUnit)) ||
+    (isVolume(pUnit) && isMass(dUnit)) ||
+    (isPiece(pUnit) && (isMass(dUnit) || isVolume(dUnit))) ||
+    ((isMass(pUnit) || isVolume(pUnit)) && isPiece(dUnit))
+  ) {
+    return pantryAmount;
+  }
+
+  // If neither unit is known or recognized as compatible, preserve pantryAmount safely
+  return pantryAmount;
 }
 
 

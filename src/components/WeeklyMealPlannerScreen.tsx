@@ -71,6 +71,7 @@ function DayMealThumb({ recipe }: { recipe: CatalogRecipe }) {
         alt={recipe.title}
         className="day-col-img"
         loading="lazy"
+        referrerPolicy="no-referrer"
         onError={() => setImgError(true)}
       />
     );

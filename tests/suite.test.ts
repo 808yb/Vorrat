@@ -24,7 +24,7 @@ import { FULL_RECIPE_CATALOG } from "../src/data/recipeCatalog";
 import { getFoodTone } from "../src/components/FoodIcons";
 import { findFoodNutrition, calculatePortionNutrition } from "../src/data/foodNutritionDatabase";
 import { getSafeIngredientsList, getSafeSteps, getSafeAvailable, rehydrateRecipe, getCurrentMealTimeSlot, decomposeCompositeIngredients, cleanSpiceName, isEggIngredientName, isRiceIngredientName, getRecipeVideoUrl, getRecipeSourceUrl, getRecipeCategory, RECIPE_CATEGORIES } from "../src/utils/recipeHelpers";
-import { extractIngredientsFromDishText, resolveRecipeFoodImage, askAboutRecipeWithGemini } from "../src/utils/geminiRecipes";
+import { extractIngredientsFromDishText, resolveRecipeFoodImage, askAboutRecipeWithGemini, rehydrateCustomRecipe, convertRawToCatalogRecipe } from "../src/utils/geminiRecipes";
 import { STORAGE_KEYS, migrateLegacyStorageKeys } from "../src/constants/storage";
 import { applyCloudDataToState } from "../src/hooks/useCloudSync";
 
@@ -1622,6 +1622,208 @@ assert(
   syncedRecipes.length === 1 && syncedRecipes[0].id === "c1",
   "applyCloudDataToState leaves non-provided fields untouched"
 );
+
+// -----------------------------------------------------------------------------
+// TEST SUITE 25: UNIT CONVERSION & DIMENSION INTEGRITY (deductIngredientFromPantryAmount)
+// -----------------------------------------------------------------------------
+console.log("\n⚖️ 25. Testing Unit Conversion & Dimension Integrity...");
+
+// Incompatible dimensions MUST NOT blind-subtract raw numbers
+const gMinusMl = deductIngredientFromPantryAmount(500, "g", 100, "ml");
+assert(gMinusMl === 500, "500 g minus 100 ml remains 500 g (incompatible dimensions: mass vs volume)", `Got: ${gMinusMl}`);
+
+const mlMinusStk = deductIngredientFromPantryAmount(1000, "ml", 2, "Stk.");
+assert(mlMinusStk === 1000, "1000 ml minus 2 Stk. remains 1000 ml (incompatible dimensions: volume vs piece)", `Got: ${mlMinusStk}`);
+
+const stkMinusG = deductIngredientFromPantryAmount(6, "Stk.", 200, "g");
+assert(stkMinusG === 6, "6 Stk. minus 200 g remains 6 Stk. (incompatible dimensions: piece vs mass)", `Got: ${stkMinusG}`);
+
+const unknownUnitMismatch = deductIngredientFromPantryAmount(10, "Schuss", 2, "g");
+assert(unknownUnitMismatch === 10, "10 Schuss minus 2 g remains 10 Schuss (unknown dimension)", `Got: ${unknownUnitMismatch}`);
+
+// Compatible dimensions SHOULD properly deduct
+const gMinusG = deductIngredientFromPantryAmount(500, "g", 100, "g");
+assert(gMinusG === 400, "500 g minus 100 g = 400 g", `Got: ${gMinusG}`);
+
+const kgMinusG = deductIngredientFromPantryAmount(1, "kg", 250, "g");
+assert(kgMinusG === 0.75, "1 kg minus 250 g = 0.75 kg", `Got: ${kgMinusG}`);
+
+const mlMinusMl = deductIngredientFromPantryAmount(800, "ml", 300, "ml");
+assert(mlMinusMl === 500, "800 ml minus 300 ml = 500 ml", `Got: ${mlMinusMl}`);
+
+const lMinusMl = deductIngredientFromPantryAmount(1, "l", 250, "ml");
+assert(lMinusMl === 0.75, "1 l minus 250 ml = 0.75 l", `Got: ${lMinusMl}`);
+
+const stkMinusStk = deductIngredientFromPantryAmount(6, "Stk.", 2, "Stk.");
+assert(stkMinusStk === 4, "6 Stk. minus 2 Stk. = 4 Stk.", `Got: ${stkMinusStk}`);
+
+// -----------------------------------------------------------------------------
+// TEST SUITE 26: 4 SCRAPER BUG FIXES (BUGS A, B, C, D)
+// -----------------------------------------------------------------------------
+console.log("\n🕷️ 26. Testing Scraper Bug Fixes (Images, Instructions, Dev Middleware, Pagination)...");
+
+// Bug A: Echte Rezept-Bilder werden nicht durch resolveRecipeFoodImage verworfen
+const authenticWebImg = "https://images.unsplash.com/photo-1546069901-ba9599a7e63c";
+const rawRecipeWithRealImg = {
+  title: "Gourmet Avocado Bowl",
+  imageUrl: authenticWebImg,
+  ingredients: [{ name: "Avocado", baseAmountPerPortion: 1, unit: "Stk." }],
+};
+const convertedFromScrape = convertRawToCatalogRecipe(rawRecipeWithRealImg);
+assert(convertedFromScrape.imageUrl === authenticWebImg, "Bug A: convertRawToCatalogRecipe preserves real imageUrl from website", `Got: ${convertedFromScrape.imageUrl}`);
+
+const rehydratedCustom = rehydrateCustomRecipe(rawRecipeWithRealImg);
+assert(rehydratedCustom.imageUrl === authenticWebImg, "Bug A: rehydrateCustomRecipe preserves real imageUrl from website", `Got: ${rehydratedCustom.imageUrl}`);
+
+const rawRecipeWithoutImg = {
+  title: "Gourmet Avocado Bowl",
+  imageUrl: "",
+};
+const convertedFallback = convertRawToCatalogRecipe(rawRecipeWithoutImg);
+assert(Boolean(convertedFallback.imageUrl && (convertedFallback.imageUrl.startsWith("https://images.unsplash.com") || convertedFallback.imageUrl.length > 10)), "Bug A: Falls keine echte URL da ist, greift Fallback");
+
+// Bug B: Detailed recipe instructions & prompt integrity
+const fs = await import("node:fs");
+const geminiCode = fs.readFileSync("src/utils/geminiRecipes.ts", "utf-8");
+assert(
+  geminiCode.includes("Kürze oder vereinfache die Zubereitungsschritte der Webseite NIEMALS!"),
+  "Bug B: Prompt forbids shortening or simplifying recipe steps"
+);
+assert(
+  geminiCode.includes("Übernimm ALLE detaillierten Schritte, Garzeiten, Temperaturen und Mengenangaben"),
+  "Bug B: Prompt enforces full retention of times, temps and amounts"
+);
+assert(
+  geminiCode.includes("übersetze jeden Schritt Detail für Detail ins Deutsche"),
+  "Bug B: Prompt enforces step-by-step translation without summarizing"
+);
+
+// Bug C: Local Vite Dev Support for /api/scrape
+const viteCode = fs.readFileSync("vite.config.ts", "utf-8");
+assert(viteCode.includes("localScrapeDevPlugin"), "Bug C: vite.config.ts includes localScrapeDevPlugin");
+assert(viteCode.includes("'/api/scrape'"), "Bug C: vite.config.ts configures middleware for /api/scrape");
+
+// Bug D: Pagination & link extraction
+const scrapeApiCode = fs.readFileSync("api/scrape.ts", "utf-8");
+assert(scrapeApiCode.includes("extractNextPageUrl"), "Bug D: api/scrape.ts implements robust extractNextPageUrl");
+assert(
+  geminiCode.includes("currentTargetUrl = pageResult.nextPageUrl"),
+  "Bug D: Scraper automatically follows pageResult.nextPageUrl"
+);
+assert(
+  !geminiCode.includes("if (!pageResult.hasMorePages || pageResult.recipes.length === 0)"),
+  "Bug D: Scraper does NOT prematurely abort when a page has 0 new recipes but hasMorePages is true"
+);
+
+// -----------------------------------------------------------------------------
+// TEST SUITE 27: SCRAPER HARDENING & STEP FIDELITY (POINTS 1, 2, 3, 4)
+// -----------------------------------------------------------------------------
+console.log("\n🛡️ 27. Testing Scraper Hardening & 1:1 Step Fidelity...");
+
+// Point 1: 5 MB cap without 413 error, and allorigins.win removed from geminiRecipes.ts
+assert(scrapeApiCode.includes("5 * 1024 * 1024"), "Point 1: api/scrape.ts raises stream limit to 5 MB");
+assert(!scrapeApiCode.includes("status(413)"), "Point 1: api/scrape.ts truncates instead of throwing 413 error");
+assert(!geminiCode.includes("api.allorigins.win"), "Point 1: geminiRecipes.ts completely removes allorigins.win");
+
+// Point 2: Strict URL and Domain Filter
+const { isValidRecipeUrl, extractRecipeImage } = await import("../api/scrape");
+const baseHost = "www.americastestkitchen.com";
+
+assert(
+  !isValidRecipeUrl("https://res.cloudinary.com/hks/image/upload/Weeknight.jpg", baseHost),
+  "Point 2: Rejects CDN image URLs from other domains (cloudinary)"
+);
+assert(
+  !isValidRecipeUrl("https://www.americastestkitchen.com/recipes/pasta.jpg", baseHost),
+  "Point 2: Rejects recipe links ending in .jpg"
+);
+assert(
+  !isValidRecipeUrl("https://www.americastestkitchen.com/cookbook/volume-1", baseHost),
+  "Point 2: Rejects non-recipe shop/cookbook paths"
+);
+assert(
+  isValidRecipeUrl("https://www.americastestkitchen.com/recipes/12345-skillet-chicken", baseHost),
+  "Point 2: Accepts authentic on-domain recipe detail URL"
+);
+
+// Point 3: Safe Recipe Image Extraction across all 4 JSON-LD formats
+const imgStr = extractRecipeImage("https://example.com/pancake.jpg");
+assert(imgStr === "https://example.com/pancake.jpg", "Point 3: Format 1 - String URL extracted");
+
+const imgArrStr = extractRecipeImage(["https://example.com/pancake1.jpg", "https://example.com/pancake2.jpg"]);
+assert(imgArrStr === "https://example.com/pancake1.jpg", "Point 3: Format 2 - Array of strings extracted first item");
+
+const imgObj = extractRecipeImage({ "@type": "ImageObject", "url": "https://example.com/pancake-obj.jpg" });
+assert(imgObj === "https://example.com/pancake-obj.jpg", "Point 3: Format 3 - ImageObject url extracted");
+
+const imgArrObj = extractRecipeImage([{ "url": "https://example.com/pancake-arrobj.jpg" }]);
+assert(imgArrObj === "https://example.com/pancake-arrobj.jpg", "Point 3: Format 4 - Array of ImageObjects url extracted");
+
+// Point 4: 1:1 Step Fidelity and Hard Code-Guard
+const { isGermanRecipeText } = await import("../src/utils/geminiRecipes");
+const germanSampleSteps = [
+  { sectionTitle: "Vorbereitung", text: "Den Backofen auf 180 Grad Ober-/Unterhitze vorheizen und die Backform fetten." },
+  { sectionTitle: "Teig zubereiten", text: "Mehl, Zucker und Backpulver in einer Schüssel vermischen und die Milch unterrühren." },
+  { sectionTitle: "Backen", text: "Den Teig in die Form füllen und für 25 Minuten backen." },
+];
+assert(isGermanRecipeText("Kuchen", germanSampleSteps) === true, "Point 4: Identifies German recipe text");
+
+const rawScrapedItemWith11Steps = {
+  title: "11-Schritte Kürbiskuchen",
+  verifiedImageUrl: "https://images.unsplash.com/photo-kuchen.jpg",
+  rawSteps: Array.from({ length: 11 }, (_, i) => ({
+    sectionTitle: `Abschnitt ${Math.floor(i / 3) + 1}`,
+    text: `Ausführlicher Zubereitungsschritt Nummer ${i + 1} mit genauer Temperatur und 10 Minuten Garzeit.`
+  })),
+};
+const convertedRecipe11 = convertRawToCatalogRecipe({
+  title: rawScrapedItemWith11Steps.title,
+  verifiedImageUrl: rawScrapedItemWith11Steps.verifiedImageUrl,
+  steps: rawScrapedItemWith11Steps.rawSteps.map((s, idx) => ({
+    stepNumber: idx + 1,
+    title: s.sectionTitle,
+    instruction: s.text,
+    duration: "10 Min.",
+    tag: s.sectionTitle
+  }))
+});
+assert(convertedRecipe11.steps.length === 11, "Point 4: Preserves all 11 detailed original steps without summarizing");
+// -----------------------------------------------------------------------------
+// TEST SUITE 28: ZOMBIE SERVICE WORKER & ROBUST RECIPE CARD EXTRACTION
+// -----------------------------------------------------------------------------
+console.log("\n🧟 28. Testing Zombie Service Worker Elimination & Robust Card Extraction...");
+
+// Test SW GET guard & exclusions
+const swContent = fs.readFileSync("public/sw.js", "utf-8");
+assert(swContent.includes("event.request.method !== 'GET'"), "sw.js: strictly ignores non-GET requests");
+assert(swContent.includes("url.includes('/api/')"), "sw.js: excludes /api/ requests from caching");
+assert(swContent.includes("url.includes('localhost')"), "sw.js: excludes localhost from caching");
+assert(swContent.includes("self.skipWaiting()"), "sw.js: calls self.skipWaiting() on install");
+
+// Test main.tsx active localhost unregister cleanup
+const mainContent = fs.readFileSync("src/main.tsx", "utf-8");
+assert(mainContent.includes("navigator.serviceWorker.getRegistrations()"), "main.tsx: includes active unregister cleanup for localhost");
+
+// Test extractRecipeCardsAndLinks with Moribyan-like article structure
+const sampleArticleHtml = `
+<article class="mtt-recipe-card">
+  <div class="mtt-recipe-card__meta">
+    <a class="mtt-recipe-card__category-link" href="https://moribyan.com/meal-type/breakfast/">Breakfast</a>
+  </div>
+  <a class="mtt-recipe-card__media-link" href="https://moribyan.com/pumpkin-cinnamon-roll-pancakes/" aria-label="View recipe: Pumpkin Cinnamon Roll Pancakes">
+    <img src="https://moribyan.com/wp-content/uploads/2026/09/IMG_0558.jpg" alt="" />
+  </a>
+  <h3 class="mtt-recipe-card__title">
+    <a href="https://moribyan.com/pumpkin-cinnamon-roll-pancakes/">Pumpkin Cinnamon Roll Pancakes</a>
+  </h3>
+</article>
+`;
+const { extractRecipeCardsAndLinks } = await import("../api/scrape");
+const extractedMoribyanCards = extractRecipeCardsAndLinks(sampleArticleHtml, new URL("https://moribyan.com/recipes/"));
+assert(extractedMoribyanCards.length === 1, "extractRecipeCardsAndLinks finds article card even with leading category link", `Got: ${extractedMoribyanCards.length}`);
+assert(extractedMoribyanCards[0].url === "https://moribyan.com/pumpkin-cinnamon-roll-pancakes/", "extractRecipeCardsAndLinks selects recipe URL (not category link)", `Got: ${extractedMoribyanCards[0]?.url}`);
+assert(extractedMoribyanCards[0].title === "Pumpkin Cinnamon Roll Pancakes", "extractRecipeCardsAndLinks selects correct recipe title", `Got: ${extractedMoribyanCards[0]?.title}`);
+assert(extractedMoribyanCards[0].imageUrl === "https://moribyan.com/wp-content/uploads/2026/09/IMG_0558.jpg", "extractRecipeCardsAndLinks extracts image URL from article", `Got: ${extractedMoribyanCards[0]?.imageUrl}`);
 
 // -----------------------------------------------------------------------------
 // SUMMARY

@@ -24,6 +24,7 @@ export interface CatalogRecipe {
   tone: "mint" | "sage" | "amber";
   chefTip: string;
   imageUrl?: string;
+  verifiedImageUrl?: string;
   isAiGenerated?: boolean;
   matchScore?: number;
   imageKeywords?: string;

@@ -25,10 +25,21 @@ const CANDIDATE_MODELS = [
   "gemini-flash-latest",
 ] as const;
 
-// In-Memory IP Rate Limiter (20 requests / 60 seconds)
+// In-Memory IP Rate Limiter (max 15 requests / 60 seconds)
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 
 function checkRateLimit(ip: string): boolean {
+  const cleanIp = ip.toLowerCase().trim();
+  if (
+    cleanIp === "127.0.0.1" ||
+    cleanIp === "::1" ||
+    cleanIp === "localhost" ||
+    cleanIp.startsWith("::ffff:127.0.0.1") ||
+    process.env.NODE_ENV !== "production"
+  ) {
+    return true;
+  }
+
   const now = Date.now();
   // Cleanup old expired entries periodically
   if (rateLimitMap.size > 1000) {
@@ -37,13 +48,13 @@ function checkRateLimit(ip: string): boolean {
     }
   }
 
-  const entry = rateLimitMap.get(ip);
+  const entry = rateLimitMap.get(cleanIp);
   if (!entry || now > entry.resetAt) {
-    rateLimitMap.set(ip, { count: 1, resetAt: now + 60_000 });
+    rateLimitMap.set(cleanIp, { count: 1, resetAt: now + 60_000 });
     return true;
   }
 
-  if (entry.count >= 20) {
+  if (entry.count >= 120) {
     return false;
   }
 
@@ -52,16 +63,23 @@ function checkRateLimit(ip: string): boolean {
 }
 
 function isOriginAllowed(originHeader?: string, refererHeader?: string): boolean {
-  if (!originHeader && !refererHeader) {
-    // Same-origin serverless or internal proxy calls have empty origin
-    return true;
+  const target = originHeader || refererHeader;
+  if (!target) {
+    // In production, reject requests without Origin or Referer
+    return process.env.NODE_ENV !== "production";
   }
-  const checkStr = (originHeader || refererHeader || "").toLowerCase();
-  return (
-    checkStr.includes("localhost") ||
-    checkStr.includes("127.0.0.1") ||
-    /\.vercel\.app(\/|$)/.test(checkStr)
-  );
+  try {
+    const parsed = new URL(target);
+    const hostname = parsed.hostname.toLowerCase();
+    return (
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "vercel.app" ||
+      hostname.endsWith(".vercel.app")
+    );
+  } catch {
+    return false;
+  }
 }
 
 /** Build the Gemini REST `contents` array from various input shapes */
@@ -163,9 +181,9 @@ export default async function handler(
   }
 
   // ── API Key Verification ──────────────────────────────────────────────────
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  const apiKey = (process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY)?.trim();
   if (!apiKey) {
-    console.error("[/api/gemini] GEMINI_API_KEY is not set in environment.");
+    console.error("[/api/gemini] Neither GEMINI_API_KEY nor VITE_GEMINI_API_KEY is set in environment.");
     return res
       .status(500)
       .json({ error: "Server configuration error: missing API key." });

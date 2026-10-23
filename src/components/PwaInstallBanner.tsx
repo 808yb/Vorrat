@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Download, Share, PlusSquare, X } from "lucide-react";
+import { STORAGE_KEYS } from "../constants/storage";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -22,7 +23,7 @@ export function PwaInstallBanner() {
     if (standalone) return;
 
     // Check if user previously dismissed
-    const dismissedTime = localStorage.getItem("vorrat_pwa_dismissed");
+    const dismissedTime = localStorage.getItem(STORAGE_KEYS.PWA_DISMISSED);
     if (dismissedTime && Date.now() - parseInt(dismissedTime, 10) < 7 * 24 * 60 * 60 * 1000) {
       // Dismissed within last 7 days
       return;
@@ -59,7 +60,7 @@ export function PwaInstallBanner() {
 
   const handleDismiss = () => {
     setIsDismissed(true);
-    localStorage.setItem("vorrat_pwa_dismissed", Date.now().toString());
+    localStorage.setItem(STORAGE_KEYS.PWA_DISMISSED, Date.now().toString());
   };
 
   if (isStandalone || isDismissed) {

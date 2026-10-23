@@ -1,5 +1,8 @@
 # VORRAT – SYSTEM ARCHITECTURE & UI/UX RULES
 
+> **PFLICHT VOR JEDER AUFGABE: Lies zuerst `CODEBASE_MAP.md`, um ohne unnötige Suchschleifen direkt in die zuständige Datei zu springen.**
+> **LEBENDE `CODEBASE_MAP.md`:** Jede strukturelle Änderung an der Codebase (neue Dateien, verschobene Screens/Hooks/Komponenten oder neue zentrale Hilfsfunktionen) MUSS zwingend und unmittelbar in `CODEBASE_MAP.md` nachgetragen werden, damit die Map immer zu 100 % synchron mit dem Projekt bleibt.
+
 You are an expert full-stack developer working on the Vorrat pantry and cooking assistant app.
 You must adhere strictly to these architecture and design rules for every single modification:
 

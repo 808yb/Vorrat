@@ -27,6 +27,7 @@ export interface UseCloudSyncProps {
 export interface UseCloudSyncReturn {
   hasCloudUser: boolean;
   setHasCloudUser: React.Dispatch<React.SetStateAction<boolean>>;
+  hasCompletedInitialCloudLoad: boolean;
   syncStatus: CloudSyncStatus;
   lastSyncTime: string | null;
   triggerManualSync: () => Promise<void>;
@@ -91,12 +92,18 @@ export function useCloudSync({
   const [hasCloudUser, setHasCloudUser] = useState(false);
   const [syncStatus, setSyncStatus] = useState<CloudSyncStatus>("idle");
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
+  const [hasCompletedInitialCloudLoad, setHasCompletedInitialCloudLoad] = useState(false);
   const isInitialCloudLoadedRef = useRef(false);
 
   const checkUserSession = useCallback(async () => {
     try {
       const user = await getCurrentUser();
-      setHasCloudUser(Boolean(user));
+      const hasUser = Boolean(user);
+      setHasCloudUser(hasUser);
+      if (!hasUser) {
+        setHasCompletedInitialCloudLoad(true);
+        isInitialCloudLoadedRef.current = true;
+      }
     } catch (err) {
       console.warn("[CloudSync] Session check error:", err);
       setHasCloudUser(false);
@@ -110,12 +117,24 @@ export function useCloudSync({
     (async () => {
       try {
         const user = await getCurrentUser();
-        if (user && isMounted) {
+        if (!user) {
+          if (isMounted) {
+            setHasCloudUser(false);
+            setHasCompletedInitialCloudLoad(true);
+            isInitialCloudLoadedRef.current = true;
+          }
+          return;
+        }
+
+        if (isMounted) {
           setHasCloudUser(true);
           setSyncStatus("saving");
-          const cloudData = await fetchUserDataFromSupabase();
+        }
 
-          if (cloudData && isMounted) {
+        const cloudData = await fetchUserDataFromSupabase();
+
+        if (isMounted) {
+          if (cloudData) {
             applyCloudDataToState(cloudData, {
               setPantry,
               setGroceries,
@@ -127,16 +146,20 @@ export function useCloudSync({
             setLastSyncTime(
               new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
             );
-          } else if (isMounted) {
+          } else {
             setSyncStatus("idle");
           }
+          // Mark initial load successful ONLY on non-error
+          setHasCompletedInitialCloudLoad(true);
+          isInitialCloudLoadedRef.current = true;
         }
       } catch (err) {
         console.warn("[CloudSync] Initial fetch error:", err);
-        if (isMounted) setSyncStatus("error");
-      } finally {
         if (isMounted) {
-          isInitialCloudLoadedRef.current = true;
+          setSyncStatus("error");
+          // DO NOT mark initial load as completed on failure to prevent wiping cloud data
+          setHasCompletedInitialCloudLoad(false);
+          isInitialCloudLoadedRef.current = false;
         }
       }
     })();
@@ -148,7 +171,8 @@ export function useCloudSync({
 
   // 2. Debounced auto-save to Supabase when data changes
   useEffect(() => {
-    if (!hasCloudUser || !isInitialCloudLoadedRef.current) return;
+    // Strictly block auto-saving until initial cloud load succeeded (or manual sync succeeds)
+    if (!hasCloudUser || !isInitialCloudLoadedRef.current || !hasCompletedInitialCloudLoad) return;
 
     const timer = setTimeout(async () => {
       setSyncStatus("saving");
@@ -171,7 +195,7 @@ export function useCloudSync({
     }, 2000);
 
     return () => clearTimeout(timer);
-  }, [pantry, groceries, customRecipes, plannedMeals, favorites, hasCloudUser]);
+  }, [pantry, groceries, customRecipes, plannedMeals, favorites, hasCloudUser, hasCompletedInitialCloudLoad]);
 
   // Manual force sync trigger
   const triggerManualSync = useCallback(async () => {
@@ -185,6 +209,9 @@ export function useCloudSync({
         mealPlan: plannedMeals,
         favorites,
       });
+      // Manual save succeeds, so cloud data is now validly aligned
+      setHasCompletedInitialCloudLoad(true);
+      isInitialCloudLoadedRef.current = true;
       setSyncStatus("saved");
       setLastSyncTime(
         new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
@@ -201,6 +228,7 @@ export function useCloudSync({
     setHasCloudUser,
     syncStatus,
     lastSyncTime,
+    hasCompletedInitialCloudLoad,
     triggerManualSync,
     checkUserSession,
   };

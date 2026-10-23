@@ -1,5 +1,8 @@
 # VORRAT – SYSTEM ARCHITECTURE & UI/UX RULES
 
+> **PFLICHT VOR JEDER AUFGABE: Lies zuerst `CODEBASE_MAP.md`, um ohne unnötige Suchschleifen direkt in die zuständige Datei zu springen.**  
+> **LEBENDE `CODEBASE_MAP.md`:** Jede strukturelle Änderung an der Codebase (neue Dateien, verschobene Screens/Hooks/Komponenten oder neue zentrale Hilfsfunktionen) MUSS zwingend und unmittelbar in `CODEBASE_MAP.md` nachgetragen werden, damit die Map immer zu 100 % synchron mit dem Projekt bleibt.
+
 > **Verbindliche Architektur- & Design-Vorgaben für die App Vorrat.**  
 > Jede zukünftige Code-Änderung MUSS sich strikt an diese Vorgaben halten.
 

@@ -545,15 +545,8 @@ export function UnifiedAddModal({
     setIsScanFlashing(true);
     setTimeout(() => setIsScanFlashing(false), 380);
 
-    if (isContinuousScanRef.current) {
-      // In Kühlschrank-Mehrfachscan mode: DO NOT close camera! Keep continuous scan active!
-      handleMultiScanItem(scannedCode);
-    } else {
-      // Single scan mode: stop camera and open edit form
-      stopLiveCamera();
-      setBarcodeInput(scannedCode);
-      handlePerformBarcodeLookup(scannedCode);
-    }
+    // Universal barcode scan: directly add to scanned items list
+    handleMultiScanItem(scannedCode);
   };
 
   // Lookup barcode handler for single scan mode
@@ -948,83 +941,6 @@ export function UnifiedAddModal({
               ======================================================== */}
           {activeMode === "camera" && (
             <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-              {/* Segmented Mode Switcher: Kühlschrank-Mehrfachscan vs Einzel-Scan */}
-              <div
-                style={{
-                  display: "flex",
-                  background: "#f1f5f9",
-                  borderRadius: "12px",
-                  padding: "4px",
-                  gap: "4px",
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsContinuousScan(true);
-                    isContinuousScanRef.current = true;
-                  }}
-                  style={{
-                    flex: 1,
-                    padding: "8px 10px",
-                    borderRadius: "9px",
-                    border: "none",
-                    fontSize: "12px",
-                    fontWeight: 750,
-                    cursor: "pointer",
-                    background: isContinuousScan ? "#2d5a3e" : "transparent",
-                    color: isContinuousScan ? "#ffffff" : "#64748b",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: "6px",
-                    transition: "all 0.15s ease",
-                    boxShadow: isContinuousScan ? "0 2px 6px rgba(45, 90, 62, 0.25)" : "none",
-                  }}
-                >
-                  <span>Mehrfachscan</span>
-                  {multiScannedItems.length > 0 && (
-                    <span
-                      style={{
-                        background: isContinuousScan ? "rgba(255,255,255,0.25)" : "#2d5a3e",
-                        color: "#ffffff",
-                        padding: "1px 6px",
-                        borderRadius: "10px",
-                        fontSize: "10.5px",
-                        fontWeight: 800,
-                      }}
-                    >
-                      {multiScannedItems.length}
-                    </span>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsContinuousScan(false);
-                    isContinuousScanRef.current = false;
-                  }}
-                  style={{
-                    flex: 1,
-                    padding: "8px 10px",
-                    borderRadius: "9px",
-                    border: "none",
-                    fontSize: "12px",
-                    fontWeight: 750,
-                    cursor: "pointer",
-                    background: !isContinuousScan ? "#2d5a3e" : "transparent",
-                    color: !isContinuousScan ? "#ffffff" : "#64748b",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: "6px",
-                    transition: "all 0.15s ease",
-                    boxShadow: !isContinuousScan ? "0 2px 6px rgba(45, 90, 62, 0.25)" : "none",
-                  }}
-                >
-                  <span>Einzelscan</span>
-                </button>
-              </div>
 
               {/* Camera Viewfinder */}
               <div
@@ -1113,9 +1029,7 @@ export function UnifiedAddModal({
                           boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
                         }}
                       >
-                        {isContinuousScan
-                          ? "Mehrfachscan aktiv · Barcode vorhalten"
-                          : "Barcode zentrieren"}
+                        Barcode vorhalten
                       </span>
                     </div>
 
@@ -1187,12 +1101,10 @@ export function UnifiedAddModal({
                       </svg>
                     </div>
                     <strong style={{ fontSize: "14px", color: "#0f172a", fontWeight: 750, display: "block" }}>
-                      {isContinuousScan ? "Mehrfachscan bereit" : "Scanner bereit"}
+                      Barcode scannen
                     </strong>
                     <p style={{ margin: "4px 0 14px", fontSize: "11.5px", color: "#64748b" }}>
-                      {isContinuousScan
-                        ? "Kamera bleibt geöffnet – scanne Produkte nacheinander ab"
-                        : "Live-Scan per Kamera oder Foto aus deiner Mediathek"}
+                      Halte Barcodes nacheinander vor die Kamera – erfasste Produkte landen direkt in deiner Liste
                     </p>
                     <div style={{ display: "flex", gap: "8px", justifyContent: "center" }}>
                       <button
@@ -1217,7 +1129,7 @@ export function UnifiedAddModal({
                           <circle cx="12" cy="12" r="10" />
                           <polygon points="10 8 16 12 10 16 10 8" fill="currentColor" />
                         </svg>
-                        {isContinuousScan ? "Mehrfachscan starten" : "Live-Kamera starten"}
+                        Kamera starten
                       </button>
                       <label
                         style={{
@@ -1266,8 +1178,8 @@ export function UnifiedAddModal({
                 </div>
               )}
 
-              {/* Continuous Mehrfachscan Tray */}
-              {isContinuousScan ? (
+              {/* Scanned Items Tray (Only visible when items scanned) */}
+              {multiScannedItems.length > 0 && (
                 <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div>
@@ -1295,44 +1207,6 @@ export function UnifiedAddModal({
                       </button>
                     )}
                   </div>
-
-                  {multiScannedItems.length === 0 ? (
-                    <div
-                      style={{
-                        background: "#f8fafc",
-                        border: "1.5px dashed #cbd5e1",
-                        borderRadius: "14px",
-                        padding: "16px",
-                        textAlign: "center",
-                        color: "#64748b",
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: "36px",
-                          height: "36px",
-                          borderRadius: "10px",
-                          background: "#e2e8f0",
-                          color: "#475569",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          marginBottom: "8px",
-                        }}
-                      >
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                          <path d="M4 5v14M7 5v14M11 5v14M13.5 5v14M17 5v14M20 5v14" />
-                        </svg>
-                      </div>
-                      <strong style={{ display: "block", color: "#1e293b", fontSize: "12.5px" }}>
-                        Mehrfachscan aktiv
-                      </strong>
-                      <p style={{ margin: "4px 0 0", fontSize: "11px", lineHeight: "1.4" }}>
-                        Scanne Barcodes nacheinander vor der Kamera oder nutze die Schnelltest-Barcodes.
-                        Jedes Produkt wird mit Signalton erfasst und landet direkt in dieser Liste.
-                      </p>
-                    </div>
-                  ) : (
                     <div
                       style={{
                         display: "flex",
@@ -1495,9 +1369,7 @@ export function UnifiedAddModal({
                         </div>
                       ))}
                     </div>
-                  )}
 
-                  {multiScannedItems.length > 0 && (
                     <button
                       type="button"
                       className="primary-button"
@@ -1529,227 +1401,7 @@ export function UnifiedAddModal({
                         {multiScannedItems.length} {multiScannedItems.length === 1 ? "Produkt" : "Produkte"}
                       </span>
                     </button>
-                  )}
                 </div>
-              ) : (
-                /* Single Scan Preview Mode */
-                scannedProduct && (
-                  <div className="product-match-preview-card">
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "10px" }}>
-                      <div>
-                        <span style={{ fontSize: "10px", color: "#059669", fontWeight: 750, textTransform: "uppercase" }}>
-                          Erkanntes Produkt
-                        </span>
-                        <h4 style={{ margin: "2px 0 0", fontSize: "14px", color: "#0f172a" }}>
-                          {scannedProduct.name}
-                        </h4>
-                        <p style={{ margin: "1px 0 0", fontSize: "11px", color: "#64748b" }}>
-                          {scannedProduct.brand} · Kategorie: {scannedProduct.category}
-                        </p>
-                      </div>
-                      <span className="nutri-pill">
-                        Nutri {scannedProduct.nutriScore}
-                      </span>
-                    </div>
-
-                    <div className="preview-macros-grid">
-                      <div>
-                        <span>Kcal</span>
-                        <strong>{scannedProduct.calories}</strong>
-                      </div>
-                      <div>
-                        <span>Protein</span>
-                        <strong>{scannedProduct.protein}g</strong>
-                      </div>
-                      <div>
-                        <span>Carbs</span>
-                        <strong>{scannedProduct.carbs}g</strong>
-                      </div>
-                      <div>
-                        <span>Fett</span>
-                        <strong>{scannedProduct.fat}g</strong>
-                      </div>
-                    </div>
-
-                    {/* Upgraded Quantity, Unit, Category & MHD Configurator */}
-                    <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "12px", background: "#f8fafc", padding: "12px", borderRadius: "14px", border: "1px solid #e2e8f0" }}>
-                      <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr 1fr", gap: "8px", alignItems: "center" }}>
-                        <div>
-                          <label style={{ fontSize: "10px", fontWeight: 750, color: "#475569", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>
-                            Menge
-                          </label>
-                          <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const cur = Number(scanAmountStr) || 0;
-                                const step = ["Stk.", "Bund", "Packung", "Dose", "Flasche"].includes(scanUnit) ? 1 : 50;
-                                setScanAmountStr(String(Math.max(0, cur - step)));
-                              }}
-                              style={{ width: "30px", height: "34px", borderRadius: "8px", border: "1px solid #cbd5e1", background: "#ffffff", fontWeight: 700, cursor: "pointer", color: "#334155" }}
-                            >
-                              −
-                            </button>
-                            <input
-                              type="number"
-                              min="0"
-                              value={scanAmountStr}
-                              onChange={(e) => setScanAmountStr(e.target.value)}
-                              placeholder="Menge"
-                              className="search-field"
-                              style={{ width: "100%", height: "34px", textAlign: "center", fontWeight: 700, fontSize: "13px" }}
-                            />
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const cur = Number(scanAmountStr) || 0;
-                                const step = ["Stk.", "Bund", "Packung", "Dose", "Flasche"].includes(scanUnit) ? 1 : 50;
-                                setScanAmountStr(String(cur + step));
-                              }}
-                              style={{ width: "30px", height: "34px", borderRadius: "8px", border: "1px solid #cbd5e1", background: "#ffffff", fontWeight: 700, cursor: "pointer", color: "#334155" }}
-                            >
-                              +
-                            </button>
-                          </div>
-                        </div>
-
-                        <div>
-                          <label style={{ fontSize: "10px", fontWeight: 750, color: "#475569", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>
-                            Einheit
-                          </label>
-                          <select
-                            value={scanUnit}
-                            onChange={(e) => setScanUnit(e.target.value)}
-                            className="search-field"
-                            style={{ width: "100%", height: "34px", fontSize: "11.5px", padding: "0 6px", background: "#ffffff" }}
-                          >
-                            <option value="g">Gramm (g)</option>
-                            <option value="ml">Milliliter (ml)</option>
-                            <option value="Stk.">Stück (Stk.)</option>
-                            <option value="Bund">Bund</option>
-                            <option value="Packung">Packung (Pkg.)</option>
-                            <option value="Dose">Dose</option>
-                            <option value="Flasche">Flasche</option>
-                            <option value="kg">Kilogramm (kg)</option>
-                            <option value="l">Liter (l)</option>
-                          </select>
-                        </div>
-
-                        <div>
-                          <label style={{ fontSize: "10px", fontWeight: 750, color: "#475569", textTransform: "uppercase", display: "block", marginBottom: "4px" }}>
-                            Lagerort
-                          </label>
-                          <select
-                            value={scanCategory}
-                            onChange={(e) => setScanCategory(e.target.value)}
-                            className="search-field"
-                            style={{ width: "100%", height: "34px", fontSize: "11.5px", padding: "0 6px", background: "#ffffff" }}
-                          >
-                            <option value="Gemüse">Gemüse & Obst</option>
-                            <option value="Gewürze">Gewürze</option>
-                            <option value="Kühl">Kühlschrank</option>
-                            <option value="Tiefkühl">Tiefkühl</option>
-                            <option value="Trocken">Trockenvorrat</option>
-                            <option value="Saucen">Saucen/Gewürze</option>
-                            <option value="Getränke">Getränke</option>
-                            <option value="Sonstiges">Sonstiges</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      {/* Quick amount chips */}
-                      <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
-                        <span style={{ fontSize: "10.5px", color: "#64748b", fontWeight: 600 }}>Schnellwahl:</span>
-                        {(["Stk.", "Bund", "Packung", "Dose", "Flasche"].includes(scanUnit)
-                          ? [1, 2, 3, 5, 10]
-                          : ["kg", "l"].includes(scanUnit)
-                          ? [1, 2, 5]
-                          : [100, 250, 500, 1000]
-                        ).map((chipVal) => (
-                          <button
-                            key={chipVal}
-                            type="button"
-                            onClick={() => setScanAmountStr(String(chipVal))}
-                            style={{
-                              padding: "3px 8px",
-                              borderRadius: "6px",
-                              border: scanAmountStr === String(chipVal) ? "1.5px solid #059669" : "1px solid #cbd5e1",
-                              background: scanAmountStr === String(chipVal) ? "#ecfdf5" : "#ffffff",
-                              color: scanAmountStr === String(chipVal) ? "#047857" : "#334155",
-                              fontSize: "11px",
-                              fontWeight: 700,
-                              cursor: "pointer",
-                            }}
-                          >
-                            {chipVal}{scanUnit}
-                          </button>
-                        ))}
-                      </div>
-
-                      {/* Optional MHD */}
-                      <div>
-                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "4px" }}>
-                          <label style={{ fontSize: "10px", fontWeight: 750, color: "#475569", textTransform: "uppercase" }}>
-                            Mindesthaltbarkeitsdatum (MHD)
-                          </label>
-                          {scanMhd && (
-                            <button
-                              type="button"
-                              onClick={() => setScanMhd("")}
-                              style={{ border: "none", background: "none", color: "#dc2626", fontSize: "10px", cursor: "pointer", fontWeight: 700 }}
-                            >
-                              Entfernen
-                            </button>
-                          )}
-                        </div>
-                        <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
-                          <input
-                            type="date"
-                            value={scanMhd}
-                            onChange={(e) => setScanMhd(e.target.value)}
-                            className="search-field"
-                            style={{ height: "32px", fontSize: "11px", padding: "0 8px", background: "#ffffff" }}
-                          />
-                          {[
-                            { label: "+3 T.", days: 3 },
-                            { label: "+7 T.", days: 7 },
-                            { label: "+14 T.", days: 14 },
-                            { label: "+6 M.", days: 180 },
-                          ].map((btn) => (
-                            <button
-                              key={btn.label}
-                              type="button"
-                              onClick={() => {
-                                const d = new Date();
-                                d.setDate(d.getDate() + btn.days);
-                                setScanMhd(d.toISOString().split("T")[0]);
-                              }}
-                              style={{ padding: "3px 7px", fontSize: "10.5px", fontWeight: 600, borderRadius: "6px", border: "1px solid #cbd5e1", background: "#ffffff", cursor: "pointer", color: "#475569" }}
-                            >
-                              {btn.label}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        className="primary-button"
-                        disabled={!scanAmountStr.trim() || Number(scanAmountStr) <= 0}
-                        style={{
-                          height: "40px",
-                          fontSize: "12.5px",
-                          borderRadius: "10px",
-                          opacity: (!scanAmountStr.trim() || Number(scanAmountStr) <= 0) ? 0.5 : 1,
-                          cursor: (!scanAmountStr.trim() || Number(scanAmountStr) <= 0) ? "not-allowed" : "pointer",
-                        }}
-                        onClick={() => handleApplyOFFProduct(scannedProduct, Number(scanAmountStr), scanUnit, scanCategory, scanMhd)}
-                      >
-                        {Number(scanAmountStr) > 0 ? "In Vorrat übernehmen" : "Menge eingeben"}
-                      </button>
-                    </div>
-                  </div>
-                )
               )}
 
               {/* Manual Barcode Input */}
@@ -1780,29 +1432,31 @@ export function UnifiedAddModal({
                   className="primary-button"
                   style={{ padding: "0 16px", height: "42px", borderRadius: "12px", fontSize: "12px" }}
                 >
-                  {isScanningLoading ? "Sucht..." : isContinuousScan ? "+ Scannen" : "Prüfen"}
+                  {isScanningLoading ? "Sucht..." : "+ Scannen"}
                 </button>
               </div>
 
-              {/* Quick Test Barcodes */}
-              <div>
-                <span style={{ fontSize: "11px", fontWeight: 700, color: "#475569", display: "block", marginBottom: "6px" }}>
-                  Häufige Test-Barcodes (1-Klick)
-                </span>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
-                  {testBarcodes.map((item) => (
-                    <button
-                      key={item.code}
-                      type="button"
-                      className="test-barcode-chip"
-                      onClick={() => handleBarcodeScanned(item.code)}
-                    >
-                      <span className="chip-name">{item.name}</span>
-                      <span className="chip-code">{item.code}</span>
-                    </button>
-                  ))}
+              {/* Quick Test Barcodes (Dev only) */}
+              {import.meta.env.DEV && (
+                <div>
+                  <span style={{ fontSize: "11px", fontWeight: 700, color: "#475569", display: "block", marginBottom: "6px" }}>
+                    Häufige Test-Barcodes (1-Klick)
+                  </span>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px" }}>
+                    {testBarcodes.map((item) => (
+                      <button
+                        key={item.code}
+                        type="button"
+                        className="test-barcode-chip"
+                        onClick={() => handleBarcodeScanned(item.code)}
+                      >
+                        <span className="chip-name">{item.name}</span>
+                        <span className="chip-code">{item.code}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
 
@@ -2033,45 +1687,47 @@ export function UnifiedAddModal({
                   <p style={{ margin: "0 0 14px", fontSize: "11px", color: "#64748b", lineHeight: 1.4, maxWidth: "300px", marginLeft: "auto", marginRight: "auto" }}>
                     Mache ein Foto von deinem Einkaufszettel. Die KI erkennt Lebensmittel, Preise und berechnet das <strong>MHD automatisch nach Lebensmittelklasse</strong>.
                   </p>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxWidth: "340px", margin: "0 auto" }}>
-                    <button
-                      type="button"
-                      onClick={handleLoadLidlReceipt}
-                      style={{
-                        background: "linear-gradient(135deg, #059669 0%, #10b981 100%)",
-                        border: "none",
-                        borderRadius: "10px",
-                        padding: "9px 16px",
-                        fontSize: "12px",
-                        fontWeight: 750,
-                        color: "#ffffff",
-                        cursor: "pointer",
-                        boxShadow: "0 2px 6px rgba(5, 150, 105, 0.25)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: "6px",
-                      }}
-                    >
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><Sparkles className="w-3.5 h-3.5" /> Echten Lidl-Bon testen (11 Artikel mit Auto-MHD)</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleLoadDemoReceipt}
-                      style={{
-                        background: "#ffffff",
-                        border: "1px solid #cbd5e1",
-                        borderRadius: "10px",
-                        padding: "7px 14px",
-                        fontSize: "11px",
-                        fontWeight: 700,
-                        color: "#64748b",
-                        cursor: "pointer",
-                      }}
-                    >
-                      Standard-Bon testen (4 Artikel)
-                    </button>
-                  </div>
+                  {import.meta.env.DEV && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxWidth: "340px", margin: "0 auto" }}>
+                      <button
+                        type="button"
+                        onClick={handleLoadLidlReceipt}
+                        style={{
+                          background: "linear-gradient(135deg, #059669 0%, #10b981 100%)",
+                          border: "none",
+                          borderRadius: "10px",
+                          padding: "9px 16px",
+                          fontSize: "12px",
+                          fontWeight: 750,
+                          color: "#ffffff",
+                          cursor: "pointer",
+                          boxShadow: "0 2px 6px rgba(5, 150, 105, 0.25)",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: "6px",
+                        }}
+                      >
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}><Sparkles className="w-3.5 h-3.5" /> Echten Lidl-Bon testen (11 Artikel mit Auto-MHD)</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleLoadDemoReceipt}
+                        style={{
+                          background: "#ffffff",
+                          border: "1px solid #cbd5e1",
+                          borderRadius: "10px",
+                          padding: "7px 14px",
+                          fontSize: "11px",
+                          fontWeight: 700,
+                          color: "#64748b",
+                          cursor: "pointer",
+                        }}
+                      >
+                        Standard-Bon testen (4 Artikel)
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 

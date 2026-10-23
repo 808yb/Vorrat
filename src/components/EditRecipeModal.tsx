@@ -268,6 +268,7 @@ export function EditRecipeModal({
                 src={imageUrl || resolveRecipeFoodImage(title, subtitle)}
                 alt={title}
                 className="w-full h-full object-cover"
+                referrerPolicy="no-referrer"
                 onError={(e) => {
                   (e.currentTarget as HTMLImageElement).src = resolveRecipeFoodImage(title);
                 }}

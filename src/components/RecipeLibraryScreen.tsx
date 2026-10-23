@@ -342,7 +342,7 @@ export function RecipeLibraryScreen({
           });
         }
 
-        if (!pageResult.hasMorePages || pageResult.recipes.length === 0) {
+        if (!pageResult.hasMorePages) {
           break;
         }
 
@@ -442,7 +442,7 @@ export function RecipeLibraryScreen({
           );
         }
 
-        if (!pageResult.hasMorePages || pageResult.recipes.length === 0) {
+        if (!pageResult.hasMorePages) {
           break;
         }
 
@@ -1237,6 +1237,7 @@ export function RecipeLibraryScreen({
                       src={imgUrl}
                       alt={recipe.title}
                       className="saved-grid-thumb-img"
+                      referrerPolicy="no-referrer"
                       onError={(e) => {
                         (e.currentTarget as HTMLImageElement).src = resolveRecipeFoodImage(recipe.title);
                       }}

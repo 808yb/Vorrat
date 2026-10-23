@@ -173,6 +173,7 @@ function SwipeCardContent({
             alt={recipe.title}
             className="swipe-card-img"
             loading="lazy"
+            referrerPolicy="no-referrer"
           />
         ) : (
           <div className="plate">

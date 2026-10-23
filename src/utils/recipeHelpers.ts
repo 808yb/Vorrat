@@ -416,7 +416,11 @@ export function rehydrateRecipe(item: any): CatalogRecipe {
       optional: Boolean(ing.optional),
     }));
 
-  const imageUrl = item.imageUrl || resolveRecipeFoodImage(title, item.imageKeywords);
+  const rawImage = typeof item.imageUrl === "string" ? item.imageUrl.trim() : "";
+  const imageUrl =
+    rawImage && /^(?:https?:\/\/|data:image\/)/i.test(rawImage) && !rawImage.includes("example.com")
+      ? rawImage
+      : resolveRecipeFoodImage(title, item.imageKeywords);
 
   return {
     id: item.id || `recipe-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
