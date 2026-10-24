@@ -85,6 +85,8 @@ export const ALL_STORAGE_KEYS: readonly string[] = [
   "vorrat_dietary_pref",
 ];
 
+import { reportWarning } from "../utils/logger";
+
 /**
  * Completely wipes all application data from localStorage.
  */
@@ -93,7 +95,9 @@ export function wipeAllAppData(): void {
     ALL_STORAGE_KEYS.forEach((key) => {
       try {
         localStorage.removeItem(key);
-      } catch {}
+      } catch (err) {
+        reportWarning(`wipeAllAppData key ${key}`, err);
+      }
     });
     localStorage.clear();
   } catch (err) {

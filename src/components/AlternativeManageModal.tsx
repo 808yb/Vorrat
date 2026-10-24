@@ -10,6 +10,7 @@ import {
 import { ProductMark, getFoodTone } from "./FoodIcons";
 import { type CatalogRecipe } from "../data/recipeCatalog";
 import { STORAGE_KEYS } from "../constants/storage";
+import { reportWarning } from "../utils/logger";
 
 export interface AlternativeManageModalProps {
   isOpen: boolean;
@@ -129,7 +130,9 @@ export const AlternativeManageModal: React.FC<AlternativeManageModalProps> = ({
             localStorage.setItem(STORAGE_KEYS.CUSTOM_RECIPES, JSON.stringify(list));
           }
         }
-      } catch {}
+      } catch (err) {
+        reportWarning("AlternativeManageModal: Failed to persist alternative overrides to localStorage", err);
+      }
     }
   };
 

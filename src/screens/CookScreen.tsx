@@ -84,7 +84,9 @@ export function CookScreen({
     if (isListening) {
       try {
         recognitionRef.current?.stop();
-      } catch { }
+      } catch (err) {
+        console.warn("[CookScreen] Speech recognition stop error:", err);
+      }
       setIsListening(false);
       return;
     }

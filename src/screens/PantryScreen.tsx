@@ -330,7 +330,7 @@ export function PantryScreen({
           </h2>
           <p
             style={{
-              margin: "0 auto 24px",
+              margin: "0 auto 16px",
               fontSize: "13.5px",
               color: "#64748b",
               lineHeight: 1.55,
@@ -339,6 +339,26 @@ export function PantryScreen({
           >
             Scanne deinen ersten Kassenbon oder füge Vorräte hinzu, um passende Rezepte und MHD-Erinnerungen zu erhalten.
           </p>
+
+          <div
+            style={{
+              margin: "0 auto 24px",
+              padding: "10px 14px",
+              background: "#f0fdf4",
+              border: "1px solid #bbf7d0",
+              borderRadius: "10px",
+              fontSize: "12px",
+              color: "#166534",
+              lineHeight: 1.5,
+              maxWidth: "360px",
+              textAlign: "left",
+            }}
+          >
+            <div style={{ fontWeight: 700, marginBottom: "4px" }}>Der smarte Vorrat-Kreislauf:</div>
+            <div><strong>1.</strong> Vorrat per Bon/Scan erfassen</div>
+            <div><strong>2.</strong> Passende Rezepte kochen</div>
+            <div><strong>3.</strong> Fehlende Zutaten automatisch auf die Einkaufsliste</div>
+          </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: "10px", maxWidth: "340px", margin: "0 auto" }}>
             {/* Button 1: Primär (Waldgrün) -> Bon-Scan */}

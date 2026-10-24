@@ -857,22 +857,62 @@ export function deductIngredientFromPantryAmount(
     return Math.max(0, Number((pantryAmount - deductAmount).toFixed(3)));
   }
 
-  // Normalized unit checkers
-  const isGram = (u: string) => u === "g" || u === "gramm" || u === "mg";
-  const isKg = (u: string) => u === "kg" || u === "kilogramm";
-  const isMass = (u: string) => isGram(u) || isKg(u);
+  // Normalized unit definitions
+  const getMassGrams = (amount: number, unit: string): number | null => {
+    switch (unit) {
+      case "kg":
+      case "kilogramm":
+        return amount * 1000;
+      case "g":
+      case "gramm":
+        return amount;
+      case "mg":
+      case "milligramm":
+        return amount * 0.001;
+      default:
+        return null;
+    }
+  };
 
-  const isMl = (u: string) => u === "ml" || u === "milliliter" || u === "cl" || u === "dl";
-  const isLiter = (u: string) => u === "l" || u === "liter";
-  const isVolume = (u: string) => isMl(u) || isLiter(u);
+  const getVolumeMl = (amount: number, unit: string): number | null => {
+    switch (unit) {
+      case "l":
+      case "liter":
+        return amount * 1000;
+      case "dl":
+      case "deziliter":
+        return amount * 100;
+      case "cl":
+      case "zentiliter":
+        return amount * 10;
+      case "ml":
+      case "milliliter":
+        return amount;
+      default:
+        return null;
+    }
+  };
+
+  const isMassUnit = (u: string) => getMassGrams(1, u) !== null;
+  const isVolumeUnit = (u: string) => getVolumeMl(1, u) !== null;
 
   const isEl = (u: string) => u === "el" || u === "esslöffel" || u === "essloeffel";
   const isTl = (u: string) => u === "tl" || u === "teelöffel" || u === "teeloeffel";
   const isPrise = (u: string) => u === "prise" || u === "prisen";
-  const isPackage = (u: string) => u === "packung" || u === "pkg." || u === "pkg" || u === "pck.";
-  const isGlass = (u: string) => u === "glas" || u === "gläser" || u === "glaeser";
-  const isCan = (u: string) => u === "dose" || u === "dosen";
-  const isBottle = (u: string) => u === "flasche" || u === "flaschen" || u === "fl.";
+  const isBulkContainer = (u: string) =>
+    u === "packung" ||
+    u === "pkg." ||
+    u === "pkg" ||
+    u === "pck." ||
+    u === "glas" ||
+    u === "gläser" ||
+    u === "glaeser" ||
+    u === "dose" ||
+    u === "dosen" ||
+    u === "flasche" ||
+    u === "flaschen" ||
+    u === "fl.";
+
   const isPiece = (u: string) =>
     u === "stk" ||
     u === "stk." ||
@@ -895,102 +935,81 @@ export function deductIngredientFromPantryAmount(
     u === "zweig" ||
     u === "zweige";
 
-  let convertedDeduct = deductAmount;
-
-  // Weight conversions: kg <-> g
-  if (isKg(pUnit) && isGram(dUnit)) {
-    convertedDeduct = deductAmount / 1000;
-    return Math.max(0, Number((pantryAmount - convertedDeduct).toFixed(3)));
-  }
-  if (isGram(pUnit) && isKg(dUnit)) {
-    convertedDeduct = deductAmount * 1000;
-    return Math.max(0, Number((pantryAmount - convertedDeduct).toFixed(3)));
+  // Bulk containers: If pantry unit is Packung, Glas, Dose, Flasche without exact weight,
+  // do NOT deduct guessed percentages when recipes ask for grams or ml. Preserve pantry amount!
+  if (isBulkContainer(pUnit) && !isBulkContainer(dUnit)) {
+    return pantryAmount;
   }
 
-  // Volume conversions: l <-> ml
-  if (isLiter(pUnit) && isMl(dUnit)) {
-    convertedDeduct = deductAmount / 1000;
-    return Math.max(0, Number((pantryAmount - convertedDeduct).toFixed(3)));
-  }
-  if (isMl(pUnit) && isLiter(dUnit)) {
-    convertedDeduct = deductAmount * 1000;
-    return Math.max(0, Number((pantryAmount - convertedDeduct).toFixed(3)));
+  // 1. Pure Mass conversion (kg, g, mg)
+  const pMassGrams = getMassGrams(pantryAmount, pUnit);
+  const dMassGrams = getMassGrams(deductAmount, dUnit);
+  if (pMassGrams !== null && dMassGrams !== null) {
+    const remainingGrams = Math.max(0, pMassGrams - dMassGrams);
+    if (pUnit === "kg" || pUnit === "kilogramm") {
+      return Number((remainingGrams / 1000).toFixed(4));
+    }
+    if (pUnit === "mg" || pUnit === "milligramm") {
+      return Number((remainingGrams * 1000).toFixed(2));
+    }
+    return Number(remainingGrams.toFixed(3));
   }
 
-  // Spoons / Prise to grams or ml
+  // 2. Pure Volume conversion (l, dl, cl, ml)
+  const pVolumeMl = getVolumeMl(pantryAmount, pUnit);
+  const dVolumeMl = getVolumeMl(deductAmount, dUnit);
+  if (pVolumeMl !== null && dVolumeMl !== null) {
+    const remainingMl = Math.max(0, pVolumeMl - dVolumeMl);
+    if (pUnit === "l" || pUnit === "liter") {
+      return Number((remainingMl / 1000).toFixed(4));
+    }
+    if (pUnit === "dl" || pUnit === "deziliter") {
+      return Number((remainingMl / 100).toFixed(3));
+    }
+    if (pUnit === "cl" || pUnit === "zentiliter") {
+      return Number((remainingMl / 10).toFixed(3));
+    }
+    return Number(remainingMl.toFixed(3));
+  }
+
+  // 3. Spoons / Prise to mass or volume
+  let spoonEquivalent = 0;
   if (isEl(dUnit)) {
-    if (isGram(pUnit) || isMl(pUnit)) {
-      convertedDeduct = deductAmount * 15;
-    } else if (isKg(pUnit) || isLiter(pUnit)) {
-      convertedDeduct = (deductAmount * 15) / 1000;
-    } else {
-      return pantryAmount;
-    }
-    return Math.max(0, Number((pantryAmount - convertedDeduct).toFixed(3)));
-  }
-  if (isTl(dUnit)) {
-    if (isGram(pUnit) || isMl(pUnit)) {
-      convertedDeduct = deductAmount * 5;
-    } else if (isKg(pUnit) || isLiter(pUnit)) {
-      convertedDeduct = (deductAmount * 5) / 1000;
-    } else {
-      return pantryAmount;
-    }
-    return Math.max(0, Number((pantryAmount - convertedDeduct).toFixed(3)));
-  }
-  if (isPrise(dUnit)) {
-    if (isGram(pUnit) || isMl(pUnit)) {
-      convertedDeduct = deductAmount * 1;
-    } else if (isKg(pUnit) || isLiter(pUnit)) {
-      convertedDeduct = deductAmount / 1000;
-    } else {
-      return pantryAmount;
-    }
-    return Math.max(0, Number((pantryAmount - convertedDeduct).toFixed(3)));
+    spoonEquivalent = deductAmount * 15; // 15g or 15ml
+  } else if (isTl(dUnit)) {
+    spoonEquivalent = deductAmount * 5; // 5g or 5ml
+  } else if (isPrise(dUnit)) {
+    spoonEquivalent = deductAmount * 1; // 1g or 1ml
   }
 
-  // Protection for bulk containers: Packung, Glas, Dose, Flasche
-  if (isPackage(pUnit)) {
-    if (isGram(dUnit)) {
-      convertedDeduct = deductAmount / 500;
-    } else if (isKg(dUnit)) {
-      convertedDeduct = deductAmount / 0.5;
-    } else {
-      return pantryAmount;
+  if (spoonEquivalent > 0) {
+    if (pMassGrams !== null) {
+      const remainingGrams = Math.max(0, pMassGrams - spoonEquivalent);
+      if (pUnit === "kg" || pUnit === "kilogramm") {
+        return Number((remainingGrams / 1000).toFixed(4));
+      }
+      return Number(remainingGrams.toFixed(3));
     }
-    return Math.max(0, Number((pantryAmount - convertedDeduct).toFixed(2)));
-  }
-  if (isCan(pUnit) || isGlass(pUnit)) {
-    if (isGram(dUnit) || isMl(dUnit)) {
-      convertedDeduct = deductAmount / 400;
-    } else {
-      return pantryAmount;
+    if (pVolumeMl !== null) {
+      const remainingMl = Math.max(0, pVolumeMl - spoonEquivalent);
+      if (pUnit === "l" || pUnit === "liter") {
+        return Number((remainingMl / 1000).toFixed(4));
+      }
+      return Number(remainingMl.toFixed(3));
     }
-    return Math.max(0, Number((pantryAmount - convertedDeduct).toFixed(2)));
-  }
-  if (isBottle(pUnit)) {
-    if (isMl(dUnit)) {
-      convertedDeduct = deductAmount / 750;
-    } else if (isLiter(dUnit)) {
-      convertedDeduct = deductAmount / 0.75;
-    } else {
-      return pantryAmount;
-    }
-    return Math.max(0, Number((pantryAmount - convertedDeduct).toFixed(2)));
   }
 
-  // Piece vs Piece (e.g. Stk vs Stück)
+  // 4. Piece vs Piece
   if (isPiece(pUnit) && isPiece(dUnit)) {
     return Math.max(0, Number((pantryAmount - deductAmount).toFixed(3)));
   }
 
-  // Incompatible dimensions check (Mass vs Volume, Piece vs Mass/Volume, etc.)
-  // NEVER blindly subtract raw numbers across incompatible dimensions!
+  // 5. Incompatible dimensions check (Mass vs Volume, Piece vs Mass/Volume)
   if (
-    (isMass(pUnit) && isVolume(dUnit)) ||
-    (isVolume(pUnit) && isMass(dUnit)) ||
-    (isPiece(pUnit) && (isMass(dUnit) || isVolume(dUnit))) ||
-    ((isMass(pUnit) || isVolume(pUnit)) && isPiece(dUnit))
+    (isMassUnit(pUnit) && isVolumeUnit(dUnit)) ||
+    (isVolumeUnit(pUnit) && isMassUnit(dUnit)) ||
+    (isPiece(pUnit) && (isMassUnit(dUnit) || isVolumeUnit(dUnit))) ||
+    ((isMassUnit(pUnit) || isVolumeUnit(pUnit)) && isPiece(dUnit))
   ) {
     return pantryAmount;
   }

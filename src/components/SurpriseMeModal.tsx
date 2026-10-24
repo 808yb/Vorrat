@@ -23,6 +23,7 @@ import {
 import type { CatalogRecipe } from "../data/recipeCatalog";
 import { getRecipePantryBreakdown } from "../utils/pantryMatching";
 import { getSafeIngredientsList } from "../utils/recipeHelpers";
+import { reportWarning } from "../utils/logger";
 
 export interface SurpriseFilters {
   mealType: "dinner" | "breakfast" | "dessert" | "baking" | "snack" | "all";
@@ -228,7 +229,8 @@ export function SurpriseMeModal({
       let ings: Array<{ name: string; amount?: string; optional?: boolean }> = [];
       try {
         ings = typeof r.ingredientsList === "function" ? r.ingredientsList(1) : getSafeIngredientsList(r, 1);
-      } catch {
+      } catch (err) {
+        reportWarning("SurpriseMeModal: Failed to parse recipe ingredientsList", err);
         ings = [];
       }
       const ingsText = Array.isArray(ings) ? ings.map((i) => i?.name || "").join(" ").toLowerCase() : "";
@@ -256,7 +258,8 @@ export function SurpriseMeModal({
           try {
             const breakdown = getRecipePantryBreakdown(r, pantry || [], servings || 1);
             if (breakdown.missing.length > 0) return false;
-          } catch {
+          } catch (err) {
+            reportWarning("SurpriseMeModal: Failed to check pantry100 breakdown", err);
             return false;
           }
         }
@@ -280,7 +283,8 @@ export function SurpriseMeModal({
   const matchingPool = useMemo(() => {
     try {
       return safeRecipes.filter(testRecipeMatch);
-    } catch {
+    } catch (err) {
+      reportWarning("SurpriseMeModal: testRecipeMatch filtering threw error", err);
       return safeRecipes;
     }
   }, [safeRecipes, selectedMealType, selectedGoals, selectedEquipment, pantry, servings]);
@@ -326,7 +330,8 @@ export function SurpriseMeModal({
             }
           }
           return { recipe: r, score };
-        } catch {
+        } catch (err) {
+          reportWarning("SurpriseMeModal: Failed to score recipe candidate", err);
           return { recipe: r, score: 50 };
         }
       });

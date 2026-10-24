@@ -1002,12 +1002,16 @@ export async function fetchWebsiteContent(
 
   let textContent = "";
 
-  // 0. Primärer Scraper: Eigener Serverless Endpoint /api/scrape (bis zu 5 MB)
+  // 0. Primärer Scraper: Eigener Serverless Endpoint POST /api/scrape (bis zu 5 MB)
   try {
-    const scrapeEndpoint = `/api/scrape?url=${encodeURIComponent(targetUrl)}`;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 9000);
-    const res = await fetch(scrapeEndpoint, { signal: controller.signal });
+    const res = await fetch("/api/scrape", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: targetUrl }),
+      signal: controller.signal,
+    });
     clearTimeout(timeoutId);
     if (res.ok) {
       const data = await res.json();
@@ -1520,12 +1524,16 @@ export async function fetchRecipeSubpageDetails(
     rawSteps: [],
   };
 
-  // 0. Primärer Abruf über unseren eigenen /api/scrape Endpoint (CORS-frei, 5 MB Limit)
+  // 0. Primärer Abruf über unseren eigenen /api/scrape Endpoint (POST, CORS-frei, 5 MB Limit)
   try {
-    const scrapeEndpoint = `/api/scrape?url=${encodeURIComponent(card.recipeUrl)}`;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 9000);
-    const res = await fetch(scrapeEndpoint, { signal: controller.signal });
+    const res = await fetch("/api/scrape", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: card.recipeUrl }),
+      signal: controller.signal,
+    });
     clearTimeout(timeoutId);
     if (res.ok) {
       const data = await res.json();

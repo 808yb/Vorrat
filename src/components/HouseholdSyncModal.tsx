@@ -25,6 +25,7 @@ import {
   type VorratSyncPayload,
 } from "../utils/supabaseClient";
 import { STORAGE_KEYS } from "../constants/storage";
+import { reportWarning } from "../utils/logger";
 
 interface HouseholdSyncModalProps {
   isOpen: boolean;
@@ -62,7 +63,8 @@ export function HouseholdSyncModal({
         localStorage.getItem(STORAGE_KEYS.HOUSEHOLD_NAME) ||
         "Unsere Küche (WG & Familie)"
       );
-    } catch {
+    } catch (err) {
+      reportWarning("HouseholdSyncModal: Failed to read HOUSEHOLD_NAME", err);
       return "Unsere Küche (WG & Familie)";
     }
   });
@@ -99,7 +101,8 @@ export function HouseholdSyncModal({
       const email = user?.email || null;
       setCurrentUserEmail(email);
       onAuthChange?.(Boolean(email));
-    } catch {
+    } catch (err) {
+      reportWarning("HouseholdSyncModal: checkUser failed", err);
       setCurrentUserEmail(null);
       onAuthChange?.(false);
     }
@@ -180,7 +183,9 @@ export function HouseholdSyncModal({
     setHouseholdName(newName);
     try {
       localStorage.setItem(STORAGE_KEYS.HOUSEHOLD_NAME, newName);
-    } catch {}
+    } catch (err) {
+      reportWarning("HouseholdSyncModal: Failed to persist householdName", err);
+    }
   };
 
   const handleSaveAnonKey = (keyToSave?: string) => {

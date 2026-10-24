@@ -25,7 +25,7 @@ const CANDIDATE_MODELS = [
   "gemini-flash-latest",
 ] as const;
 
-// In-Memory IP Rate Limiter (max 15 requests / 60 seconds)
+// In-Memory IP Rate Limiter (max 25 requests / 60 seconds)
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 
 function checkRateLimit(ip: string): boolean {
@@ -54,7 +54,7 @@ function checkRateLimit(ip: string): boolean {
     return true;
   }
 
-  if (entry.count >= 120) {
+  if (entry.count >= 25) {
     return false;
   }
 
@@ -71,6 +71,20 @@ function isOriginAllowed(originHeader?: string, refererHeader?: string): boolean
   try {
     const parsed = new URL(target);
     const hostname = parsed.hostname.toLowerCase();
+    const originString = parsed.origin.toLowerCase();
+
+    // Check optional custom domains from ALLOWED_ORIGINS (e.g. "https://vorrat.app,https://www.vorrat.app")
+    const customAllowed = (process.env.ALLOWED_ORIGINS || "")
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
+
+    for (const allowed of customAllowed) {
+      if (originString === allowed || hostname === allowed || allowed.endsWith(hostname)) {
+        return true;
+      }
+    }
+
     return (
       hostname === "localhost" ||
       hostname === "127.0.0.1" ||
@@ -131,7 +145,7 @@ export default async function handler(
 
   if (!checkRateLimit(clientIp)) {
     return res.status(429).json({
-      error: "Too Many Requests: Rate limit exceeded (max 20 requests per minute).",
+      error: "Too Many Requests: Rate limit exceeded (max 25 requests per minute).",
     });
   }
 

@@ -2,6 +2,7 @@ import type { CatalogRecipe, RecipeStep, RecipeCategory } from "../data/recipeCa
 export type { RecipeCategory } from "../data/recipeCatalog";
 export { RECIPE_CATEGORIES } from "../data/recipeCatalog";
 import { resolveRecipeFoodImage } from "./geminiRecipes";
+import { reportWarning } from "./logger";
 
 export interface SafeIngredientItem {
   name: string;
@@ -341,7 +342,9 @@ export function getSafeAvailable(
   if (typeof recipe.available === "function") {
     try {
       return recipe.available(servings);
-    } catch {}
+    } catch (err) {
+      reportWarning("recipeHelpers: recipe.available(servings) threw error", err);
+    }
   }
 
   const list = getSafeIngredientsList(recipe, servings);

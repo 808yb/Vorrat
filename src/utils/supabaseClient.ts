@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient, type User } from "@supabase/supabase-js";
+import { reportWarning } from "./logger";
 
 // Storage keys
 const SUPABASE_URL_KEY = "vorrat_supabase_url";
@@ -35,7 +36,8 @@ export function getSupabaseConfig(): SupabaseConfig {
       isConfigured: Boolean(effectiveUrl && effectiveKey),
       projectId: DEFAULT_SUPABASE_PROJECT_ID,
     };
-  } catch {
+  } catch (err) {
+    reportWarning("supabaseClient: Failed to read Supabase config from localStorage", err);
     return {
       url: DEFAULT_SUPABASE_URL,
       anonKey: "",
@@ -50,7 +52,9 @@ export function saveSupabaseConfig(url: string, anonKey: string): void {
     localStorage.setItem(SUPABASE_URL_KEY, url.trim());
     localStorage.setItem(SUPABASE_ANON_KEY, anonKey.trim());
     _cachedClient = null; // reset client
-  } catch {}
+  } catch (err) {
+    reportWarning("supabaseClient: Failed to save config to localStorage", err);
+  }
 }
 
 let _cachedClient: SupabaseClient | null = null;
@@ -150,7 +154,9 @@ export async function signUpWithEmail(usernameOrEmail: string, pass: string) {
     try {
       const loginRes = await supabase.auth.signInWithPassword({ email, password: pass });
       if (loginRes.data.session) return loginRes.data;
-    } catch {}
+    } catch (loginErr) {
+      reportWarning("supabaseClient: Auto-login after signup failed", loginErr);
+    }
   }
 
   return data;

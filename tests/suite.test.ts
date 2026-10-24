@@ -1415,17 +1415,18 @@ assert(
 );
 
 // 4. Protection for bulk containers (Packung, Glas, Flasche)
+// 4. Bulk containers: Without known weight, Packung/Glas/Flasche must remain unchanged
 assert(
-  deductIngredientFromPantryAmount(1, "Packung", 150, "g") === 0.7,
-  "1 Packung Reis minus 150 g yields 0.7 Packung (does not wipe to 0)"
+  deductIngredientFromPantryAmount(1, "Packung", 150, "g") === 1,
+  "1 Packung Reis minus 150 g keeps 1 Packung (preserves count without guessing package weight)"
 );
 assert(
-  deductIngredientFromPantryAmount(1, "Glas", 100, "g") === 0.75,
-  "1 Glas Pesto minus 100 g yields 0.75 Glas"
+  deductIngredientFromPantryAmount(1, "Glas", 100, "g") === 1,
+  "1 Glas Pesto minus 100 g keeps 1 Glas (preserves count without guessing glass weight)"
 );
 assert(
-  deductIngredientFromPantryAmount(1, "Flasche", 250, "ml") === 0.67,
-  "1 Flasche Öl minus 250 ml yields 0.67 Flasche"
+  deductIngredientFromPantryAmount(1, "Flasche", 250, "ml") === 1,
+  "1 Flasche Öl minus 250 ml keeps 1 Flasche (preserves count without guessing bottle volume)"
 );
 
 // 5. Piece unit deductions
@@ -1656,6 +1657,16 @@ assert(lMinusMl === 0.75, "1 l minus 250 ml = 0.75 l", `Got: ${lMinusMl}`);
 
 const stkMinusStk = deductIngredientFromPantryAmount(6, "Stk.", 2, "Stk.");
 assert(stkMinusStk === 4, "6 Stk. minus 2 Stk. = 4 Stk.", `Got: ${stkMinusStk}`);
+
+// Explicit unit tests for mg, cl, and dl
+const gMinusMg = deductIngredientFromPantryAmount(500, "g", 200, "mg");
+assert(gMinusMg === 499.8, "500 g - 200 mg = 499.8 g (mg correctly converted with 0.001 factor)", `Got: ${gMinusMg}`);
+
+const lMinusCl = deductIngredientFromPantryAmount(1, "l", 5, "cl");
+assert(lMinusCl === 0.95, "1 l - 5 cl = 0.95 l (cl correctly converted with 10 ml factor)", `Got: ${lMinusCl}`);
+
+const mlMinusDl = deductIngredientFromPantryAmount(500, "ml", 2, "dl");
+assert(mlMinusDl === 300, "500 ml - 2 dl = 300 ml (dl correctly converted with 100 ml factor)", `Got: ${mlMinusDl}`);
 
 // -----------------------------------------------------------------------------
 // TEST SUITE 26: 4 SCRAPER BUG FIXES (BUGS A, B, C, D)
