@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useRef } from "react";
-import { motion, AnimatePresence } from "motion/react";
-import type { CatalogRecipe, RecipeStep } from "../data/recipeCatalog";
+import { motion } from "motion/react";
+import type { CatalogRecipe } from "../data/recipeCatalog";
 import { getRecipePantryBreakdown, shouldShowAlternativeHint, isSpiceOrKitchenBasic } from "../utils/pantryMatching";
 import { getSafeSteps, getSafeIngredientsList } from "../utils/recipeHelpers";
-import { askAboutRecipeWithGemini } from "../utils/geminiRecipes";
 import { AlternativeManageModal } from "./AlternativeManageModal";
+import { RecipeStepsAccordion, type RecipeStepsAccordionProps } from "./cooking/RecipeStepsAccordion";
+import { RecipeChefChatModal } from "./cooking/RecipeChefChatModal";
+
+export { RecipeStepsAccordion, type RecipeStepsAccordionProps };
 
 interface CookingModalProps {
   recipe: CatalogRecipe | null;
@@ -54,28 +57,8 @@ export function CookingModal({
 
   // Ask about recipe state
   const [isAskModalOpen, setIsAskModalOpen] = useState(false);
-  const [askInput, setAskInput] = useState("");
-  const [isAsking, setIsAsking] = useState(false);
-  const [askHistory, setAskHistory] = useState<
-    Array<{
-      id: string;
-      question: string;
-      answer: string;
-      stepNumber?: number;
-      stepTitle?: string;
-      timestamp: string;
-    }>
-  >([]);
 
   // Kitchen Timer state
-  const chatBottomRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (isAskModalOpen) {
-      chatBottomRef.current?.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [askHistory, isAsking, isAskModalOpen]);
-
   const [timerSeconds, setTimerSeconds] = useState(180); // 3 mins default
   const [initialTimerDuration, setInitialTimerDuration] = useState(180);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
@@ -94,8 +77,6 @@ export function CookingModal({
       setTimerSeconds(180);
       setInitialTimerDuration(180);
       setIsAskModalOpen(initialOpenAsk || false);
-      setAskInput("");
-      setAskHistory([]);
     }
   }, [isOpen, recipe, initialServings, initialOpenAsk]);
 
@@ -147,52 +128,6 @@ export function CookingModal({
   const handleFinishCooking = () => {
     onCook(recipe.title, servings);
     onClose();
-  };
-
-  const handleSendQuestion = async (queryText?: string) => {
-    const q = (queryText ?? askInput).trim();
-    if (!q || isAsking) return;
-
-    setIsAsking(true);
-    const qId = Date.now().toString();
-    const activeStep = steps[currentStepIndex] || steps[0];
-
-    const pantrySummary = pantry
-      ? pantry.map((p) => p.name).slice(0, 15).join(", ")
-      : undefined;
-
-    const ingredientsSummary = safeIngredients
-      .map((ing) => `${ing.amount} ${ing.name}`)
-      .join(", ");
-
-    try {
-      const answer = await askAboutRecipeWithGemini(q, {
-        recipeTitle: recipe.title,
-        stepNumber: activeStep?.stepNumber,
-        stepTitle: activeStep?.title,
-        stepInstruction: activeStep?.instruction,
-        ingredientsSummary,
-        servings,
-        pantrySummary,
-      });
-
-      setAskHistory((prev) => [
-        ...prev,
-        {
-          id: qId,
-          question: q,
-          answer,
-          stepNumber: activeStep?.stepNumber,
-          stepTitle: activeStep?.title,
-          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        },
-      ]);
-      setAskInput("");
-    } catch (err) {
-      console.error("Error asking about recipe:", err);
-    } finally {
-      setIsAsking(false);
-    }
   };
 
   if (!isOpen || !recipe) return null;
@@ -284,10 +219,10 @@ export function CookingModal({
                 whiteSpace: "nowrap",
                 flexShrink: 0,
               }}
-              title="Ask about recipe"
+              title="KI-Küchenchef fragen"
             >
               <span style={{ fontSize: "13px", color: "#facc15" }}>★</span>
-              <span>Ask recipe</span>
+              <span>Frage zum Rezept</span>
             </button>
 
             {onToggleFavorite && (
@@ -1009,7 +944,7 @@ export function CookingModal({
                         }}
                       >
                         <span style={{ color: "#d97706" }}>★</span>
-                        <span>Ask recipe</span>
+                        <span>Frage zum Rezept</span>
                       </button>
                     </div>
                   </div>
@@ -1100,7 +1035,7 @@ export function CookingModal({
                   }}
                 >
                   <span>★</span>
-                  <span>Ask about recipe</span>
+                  <span>KI-Küchenchef fragen</span>
                 </button>
               </div>
 
@@ -1330,415 +1265,18 @@ export function CookingModal({
         </div>
       </motion.div>
 
-      {/* Ask about recipe Dialog Window Overlay */}
-      <AnimatePresence>
-        {isAskModalOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setIsAskModalOpen(false)}
-            style={{
-              position: "fixed",
-              inset: 0,
-              zIndex: 9999,
-              background: "rgba(15, 23, 42, 0.72)",
-              backdropFilter: "blur(6px)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: "16px",
-            }}
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.94, y: 16 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.94, y: 16 }}
-              transition={{ duration: 0.2 }}
-              onClick={(e) => e.stopPropagation()}
-              style={{
-                width: "100%",
-                maxWidth: "490px",
-                maxHeight: "88vh",
-                background: "#ffffff",
-                borderRadius: "22px",
-                display: "flex",
-                flexDirection: "column",
-                boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.35)",
-                overflow: "hidden",
-                border: "1px solid #e2e8f0",
-              }}
-            >
-              {/* Dialog Header */}
-              <div
-                style={{
-                  padding: "14px 18px",
-                  background: "linear-gradient(135deg, #1e293b, #0f172a)",
-                  color: "#ffffff",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  borderBottom: "1px solid rgba(255,255,255,0.1)",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                  <div
-                    style={{
-                      width: "36px",
-                      height: "36px",
-                      borderRadius: "10px",
-                      background: "linear-gradient(135deg, #f59e0b, #d97706)",
-                      display: "grid",
-                      placeItems: "center",
-                      color: "#ffffff",
-                      fontSize: "19px",
-                      fontWeight: 800,
-                      boxShadow: "0 2px 8px rgba(245, 158, 11, 0.4)",
-                    }}
-                  >
-                    ★
-                  </div>
-                  <div>
-                    <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 750, color: "#ffffff", letterSpacing: "-0.01em" }}>
-                      Ask about recipe
-                    </h3>
-                    <p style={{ margin: "2px 0 0", fontSize: "10.5px", color: "#cbd5e1" }}>
-                      Fragen zum Rezept · Fortschritt bleibt unberührt
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsAskModalOpen(false)}
-                  style={{
-                    width: "30px",
-                    height: "30px",
-                    borderRadius: "50%",
-                    background: "rgba(255,255,255,0.15)",
-                    border: 0,
-                    color: "#ffffff",
-                    display: "grid",
-                    placeItems: "center",
-                    cursor: "pointer",
-                    fontSize: "15px",
-                  }}
-                  title="Zurück zum Kochen"
-                >
-                  ✕
-                </button>
-              </div>
-
-              {/* Dialog Scrollable Body */}
-              <div
-                style={{
-                  padding: "16px",
-                  overflowY: "auto",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "12px",
-                  background: "#f8fafc",
-                  flex: 1,
-                  minHeight: "180px",
-                }}
-              >
-                {/* Active Step Context Card */}
-                <div
-                  style={{
-                    padding: "10px 12px",
-                    background: "#ecfdf5",
-                    border: "1px solid #a7f3d0",
-                    borderRadius: "12px",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "4px",
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <span
-                      style={{
-                        fontSize: "9.5px",
-                        fontWeight: 750,
-                        textTransform: "uppercase",
-                        color: "#065f46",
-                        background: "#d1fae5",
-                        padding: "2px 6px",
-                        borderRadius: "4px",
-                      }}
-                    >
-                      Schritt {currentStep.stepNumber} von {steps.length}
-                    </span>
-                    <span style={{ fontSize: "10px", color: "#047857", fontWeight: 650 }}>
-                      {recipe.title}
-                    </span>
-                  </div>
-                  <strong style={{ fontSize: "12px", color: "#064e3b" }}>
-                    {currentStep.title}
-                  </strong>
-                  <p style={{ margin: 0, fontSize: "11px", color: "#047857", lineHeight: 1.45 }}>
-                    „{currentStep.instruction}“
-                  </p>
-                </div>
-
-                {/* 1-Click Quick Question Suggestion Chips */}
-                <div>
-                  <span
-                    style={{
-                      fontSize: "10px",
-                      fontWeight: 700,
-                      color: "#64748b",
-                      textTransform: "uppercase",
-                      letterSpacing: "0.04em",
-                      display: "block",
-                      marginBottom: "6px",
-                    }}
-                  >
-                    Schnellfragen (1-Klick)
-                  </span>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-                    {[
-                      "★ Alternative für eine Zutat?",
-                      "★ Welche Herd-Stufe / Hitze?",
-                      "★ Wie lange genau zubereiten?",
-                      "★ Konsistenz & Profi-Tipp?",
-                    ].map((chip) => {
-                      const qText = chip.replace(/^★\s*/, "");
-                      return (
-                        <button
-                          key={chip}
-                          type="button"
-                          onClick={() => handleSendQuestion(qText)}
-                          disabled={isAsking}
-                          style={{
-                            padding: "5px 10px",
-                            background: "#fffbeb",
-                            border: "1px solid #fde68a",
-                            borderRadius: "99px",
-                            color: "#92400e",
-                            fontSize: "10.5px",
-                            fontWeight: 650,
-                            cursor: isAsking ? "not-allowed" : "pointer",
-                            transition: "all 120ms ease",
-                          }}
-                        >
-                          {chip}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Q&A History */}
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "10px",
-                    flex: 1,
-                  }}
-                >
-                  {askHistory.length === 0 ? (
-                    <div
-                      style={{
-                        padding: "20px 14px",
-                        textAlign: "center",
-                        background: "#ffffff",
-                        borderRadius: "14px",
-                        border: "1px dashed #cbd5e1",
-                      }}
-                    >
-                      <div style={{ fontSize: "28px", marginBottom: "6px" }}>👨‍🍳</div>
-                      <strong style={{ fontSize: "12.5px", color: "#334155", display: "block", marginBottom: "4px" }}>
-                        Frage deinen KI-Küchenchef
-                      </strong>
-                      <p style={{ margin: 0, fontSize: "11px", color: "#64748b", lineHeight: 1.45 }}>
-                        Unsicher bei Zutaten, Mengen oder Zubereitung? Frag z. B.:
-                        <br />
-                        <span style={{ fontStyle: "italic", color: "#0f172a" }}>„Was kann ich als Alternative nehmen?“ oder „Welche Herd-Stufe ist optimal?“</span>
-                        <br />
-                        <span style={{ color: "#059669", fontWeight: 650, display: "inline-block", marginTop: "4px" }}>
-                          ✓ Dein Rezept-Fortschritt & Timer bleiben voll erhalten!
-                        </span>
-                      </p>
-                    </div>
-                  ) : (
-                    askHistory.map((item) => (
-                      <div key={item.id} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                        {/* User Question Bubble */}
-                        <div
-                          style={{
-                            alignSelf: "flex-end",
-                            maxWidth: "88%",
-                            background: "#047857",
-                            color: "#ffffff",
-                            padding: "8px 12px",
-                            borderRadius: "14px 14px 2px 14px",
-                            fontSize: "11.5px",
-                            lineHeight: 1.4,
-                            boxShadow: "0 2px 5px rgba(4, 120, 87, 0.15)",
-                          }}
-                        >
-                          <div style={{ fontSize: "9px", opacity: 0.8, marginBottom: "2px" }}>
-                            Du · Schritt {item.stepNumber || currentStepIndex + 1} ({item.timestamp})
-                          </div>
-                          <div>{item.question}</div>
-                        </div>
-
-                        {/* Chef Answer Bubble */}
-                        <div
-                          style={{
-                            alignSelf: "flex-start",
-                            maxWidth: "94%",
-                            background: "#ffffff",
-                            border: "1px solid #e2e8f0",
-                            borderRadius: "14px 14px 14px 2px",
-                            padding: "10px 14px",
-                            fontSize: "11.5px",
-                            lineHeight: 1.5,
-                            color: "#1e293b",
-                            boxShadow: "0 2px 8px rgba(15, 23, 42, 0.04)",
-                          }}
-                        >
-                          <div style={{ display: "flex", alignItems: "center", gap: "5px", marginBottom: "4px" }}>
-                            <span style={{ color: "#f59e0b", fontSize: "12px" }}>★</span>
-                            <strong style={{ fontSize: "10.5px", color: "#0f172a" }}>Küchenchef Antwort</strong>
-                          </div>
-                          <div style={{ whiteSpace: "pre-line" }}>{item.answer}</div>
-                        </div>
-                      </div>
-                    ))
-                  )}
-
-                  {isAsking && (
-                    <div
-                      style={{
-                        alignSelf: "flex-start",
-                        padding: "10px 14px",
-                        background: "#ffffff",
-                        border: "1px solid #e2e8f0",
-                        borderRadius: "12px",
-                        fontSize: "11px",
-                        color: "#475569",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "8px",
-                      }}
-                    >
-                      <span style={{ animation: "pulse 1s infinite" }}>⏳</span>
-                      <span>Chefkoch überlegt...</span>
-                    </div>
-                  )}
-
-                  {/* Auto-scroll anchor */}
-                  <div ref={chatBottomRef} />
-                </div>
-              </div>
-
-              {/* Pinned Input Form Bar (stays neatly docked above footer) */}
-              <div
-                style={{
-                  padding: "10px 14px",
-                  background: "#ffffff",
-                  borderTop: "1px solid #e2e8f0",
-                  flexShrink: 0,
-                }}
-              >
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    handleSendQuestion();
-                  }}
-                  style={{
-                    display: "flex",
-                    gap: "8px",
-                    alignItems: "center",
-                  }}
-                >
-                  <input
-                    type="text"
-                    value={askInput}
-                    onChange={(e) => setAskInput(e.target.value)}
-                    placeholder="Frage zu Zutaten, Alternativen oder Zubereitung..."
-                    disabled={isAsking}
-                    style={{
-                      flex: 1,
-                      padding: "9px 12px",
-                      borderRadius: "10px",
-                      border: "1px solid #cbd5e1",
-                      fontSize: "12px",
-                      outline: "none",
-                      background: "#f8fafc",
-                    }}
-                  />
-                  <button
-                    type="submit"
-                    disabled={!askInput.trim() || isAsking}
-                    style={{
-                      padding: "0 14px",
-                      height: "36px",
-                      borderRadius: "10px",
-                      background:
-                        !askInput.trim() || isAsking
-                          ? "#cbd5e1"
-                          : "linear-gradient(135deg, #f59e0b, #d97706)",
-                      color: "#ffffff",
-                      border: 0,
-                      fontWeight: 750,
-                      fontSize: "11px",
-                      cursor: !askInput.trim() || isAsking ? "not-allowed" : "pointer",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "4px",
-                      whiteSpace: "nowrap",
-                      flexShrink: 0,
-                    }}
-                  >
-                    <span>★</span>
-                    <span>Fragen</span>
-                  </button>
-                </form>
-              </div>
-
-              {/* Dialog Footer (pinned) */}
-              <div
-                style={{
-                  padding: "10px 18px",
-                  background: "#f8fafc",
-                  borderTop: "1px solid #e2e8f0",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  gap: "10px",
-                  flexShrink: 0,
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                  <span style={{ color: "#059669", fontSize: "12px" }}>✓</span>
-                  <span style={{ fontSize: "10px", color: "#64748b" }}>
-                    Fortschritt bleibt erhalten
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsAskModalOpen(false)}
-                  style={{
-                    padding: "8px 14px",
-                    borderRadius: "10px",
-                    background: "#047857",
-                    color: "#ffffff",
-                    border: 0,
-                    fontSize: "11px",
-                    fontWeight: 750,
-                    cursor: "pointer",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  ← Zurück zum Kochen (Schritt {currentStepIndex + 1})
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* KI-Küchenchef-Frage-Modal Overlay */}
+      <RecipeChefChatModal
+        isOpen={isAskModalOpen}
+        onClose={() => setIsAskModalOpen(false)}
+        recipe={recipe}
+        currentStep={currentStep}
+        currentStepIndex={currentStepIndex}
+        stepsCount={steps.length}
+        servings={servings}
+        safeIngredients={safeIngredients}
+        pantry={pantry}
+      />
 
       {/* Alternative Ingredient Manager Modal */}
       <AlternativeManageModal
@@ -1752,292 +1290,6 @@ export function CookingModal({
         currentMatchedPantryName={selectedAltIng?.currentMatch}
         pantryItems={pantry || []}
       />
-    </div>
-  );
-}
-
-/**
- * Inline Accordion inside the recipe card on CookScreen
- */
-interface RecipeStepsAccordionProps {
-  recipe: CatalogRecipe;
-  servings: number;
-  isOpen: boolean;
-  pantry?: Array<{ name: string; amount?: number; unit?: string; isUnlimited?: boolean }>;
-  onToggle: () => void;
-  onOpenModal: () => void;
-  onCook?: (recipeTitle: string, servings: number) => void;
-  onBookmark?: (recipeId: string, recipeTitle: string) => void;
-  isBookmarked?: boolean;
-  onAddMissingToGroceries?: (items: Array<{ name: string; amount?: string }>) => void;
-}
-
-export function RecipeStepsAccordion({
-  recipe,
-  servings,
-  isOpen,
-  pantry,
-  onToggle,
-  onOpenModal,
-  onCook,
-  onBookmark,
-  isBookmarked,
-  onAddMissingToGroceries,
-}: RecipeStepsAccordionProps) {
-  const [completedSteps, setCompletedSteps] = useState<Record<number, boolean>>({});
-
-  const steps = getSafeSteps(recipe);
-
-  const toggleStep = (stepNum: number, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setCompletedSteps((prev) => ({ ...prev, [stepNum]: !prev[stepNum] }));
-  };
-
-  const completedCount = Object.values(completedSteps).filter(Boolean).length;
-
-  return (
-    <div style={{ marginTop: "10px", borderTop: "1px solid #f1f5f9", paddingTop: "10px" }}>
-      {/* Accordion Trigger Button */}
-      <button
-        type="button"
-        onClick={onToggle}
-        style={{
-          width: "100%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "8px 10px",
-          background: isOpen ? "#ecfdf5" : "#f8fafc",
-          border: isOpen ? "1px solid #a7f3d0" : "1px solid #e2e8f0",
-          borderRadius: "10px",
-          cursor: "pointer",
-          transition: "all 150ms ease",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: "7px" }}>
-          <span
-            style={{
-              fontSize: "11px",
-              fontWeight: 750,
-              color: isOpen ? "#047857" : "#334155",
-            }}
-          >
-            Zubereitung & Anleitung ({steps.length} Schritte)
-          </span>
-          {completedCount > 0 && (
-            <span
-              style={{
-                fontSize: "9px",
-                background: "#059669",
-                color: "white",
-                padding: "1px 6px",
-                borderRadius: "99px",
-                fontWeight: 700,
-              }}
-            >
-              {completedCount}/{steps.length} ✓
-            </span>
-          )}
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-          <span style={{ fontSize: "9.5px", color: isOpen ? "#047857" : "#94a3b8", fontWeight: 650 }}>
-            {isOpen ? "Einklappen" : "Schritte anzeigen"}
-          </span>
-          <span
-            style={{
-              display: "inline-block",
-              transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
-              transition: "transform 200ms ease",
-              color: isOpen ? "#047857" : "#64748b",
-              fontSize: "11px",
-              fontWeight: 700,
-            }}
-          >
-            ▼
-          </span>
-        </div>
-      </button>
-
-      {/* Expandable Step-by-Step Content */}
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.2, ease: "easeOut" }}
-            style={{ overflow: "hidden" }}
-          >
-            <div style={{ display: "flex", flexDirection: "column", gap: "8px", paddingTop: "10px" }}>
-              {steps.map((step) => {
-                const isChecked = !!completedSteps[step.stepNumber];
-                return (
-                  <div
-                    key={step.stepNumber}
-                    onClick={(e) => toggleStep(step.stepNumber, e)}
-                    style={{
-                      display: "flex",
-                      alignItems: "flex-start",
-                      gap: "9px",
-                      padding: "8px 10px",
-                      borderRadius: "10px",
-                      background: isChecked ? "#f0fdf4" : "#ffffff",
-                      border: isChecked ? "1px solid #86efac" : "1px solid #f1f5f9",
-                      cursor: "pointer",
-                      transition: "all 120ms ease",
-                    }}
-                  >
-                    <span
-                      style={{
-                        width: "22px",
-                        height: "22px",
-                        flexShrink: 0,
-                        borderRadius: "50%",
-                        background: isChecked ? "#059669" : "#f8fafc",
-                        border: isChecked ? "1.5px solid #059669" : "1.5px solid #cbd5e1",
-                        color: isChecked ? "#ffffff" : "#334155",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: "10.5px",
-                        fontWeight: 800,
-                        lineHeight: 1,
-                        marginTop: "1px",
-                        boxSizing: "border-box",
-                      }}
-                    >
-                      {isChecked ? "✓" : step.stepNumber}
-                    </span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "2px" }}>
-                        <strong
-                          style={{
-                            fontSize: "11.5px",
-                            color: isChecked ? "#15803d" : "#0f172a",
-                            textDecoration: isChecked ? "line-through" : "none",
-                          }}
-                        >
-                          {step.title}
-                        </strong>
-                        {step.duration && (
-                          <span style={{ fontSize: "9px", color: "#64748b", background: "#f8fafc", padding: "1px 5px", borderRadius: "4px" }}>
-                            {step.duration}
-                          </span>
-                        )}
-                      </div>
-                      <p
-                        style={{
-                          margin: 0,
-                          fontSize: "11px",
-                          lineHeight: 1.45,
-                          color: isChecked ? "#64748b" : "#334155",
-                        }}
-                      >
-                        {step.instruction}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
-
-              {/* Chef-Tipp banner */}
-              <div
-                style={{
-                  padding: "8px 10px",
-                  background: "#fffbeb",
-                  borderRadius: "10px",
-                  border: "1px solid #fef3c7",
-                  display: "flex",
-                  alignItems: "flex-start",
-                  gap: "7px",
-                  fontSize: "10px",
-                  color: "#78350f",
-                  lineHeight: 1.4,
-                }}
-              >
-                <div>
-                  <strong style={{ color: "#b45309", display: "block", fontSize: "9px", textTransform: "uppercase" }}>
-                    Profi-Tipp
-                  </strong>
-                  {recipe.chefTip}
-                </div>
-              </div>
-
-              {/* Action buttons */}
-              <div style={{ display: "flex", gap: "6px", marginTop: "4px" }}>
-                <button
-                  type="button"
-                  onClick={onOpenModal}
-                  style={{
-                    flex: 1,
-                    height: "36px",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: "5px",
-                    background: "#ecfdf5",
-                    border: "1px solid #a7f3d0",
-                    borderRadius: "9px",
-                    color: "#047857",
-                    fontSize: "10.5px",
-                    fontWeight: 750,
-                    cursor: "pointer",
-                  }}
-                >
-                  <span>Koch-Modus & Timer öffnen</span>
-                </button>
-                {onBookmark ? (
-                  <button
-                    type="button"
-                    onClick={() => onBookmark(recipe.id, recipe.title)}
-                    style={{
-                      padding: "0 14px",
-                      height: "36px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: "4px",
-                      background: isBookmarked ? "#047857" : "#059669",
-                      border: 0,
-                      borderRadius: "9px",
-                      color: "#ffffff",
-                      fontSize: "10.5px",
-                      fontWeight: 750,
-                      cursor: "pointer",
-                      boxShadow: "0 2px 6px rgba(5, 150, 105, 0.2)",
-                    }}
-                    title="Mahlzeit merken"
-                  >
-                    <span>{isBookmarked ? "Gemerkt" : "Merken"}</span>
-                  </button>
-                ) : onCook ? (
-                  <button
-                    type="button"
-                    onClick={() => onCook(recipe.title, servings)}
-                    style={{
-                      padding: "0 12px",
-                      height: "36px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: "4px",
-                      background: "#059669",
-                      border: 0,
-                      borderRadius: "9px",
-                      color: "#ffffff",
-                      fontSize: "10.5px",
-                      fontWeight: 750,
-                      cursor: "pointer",
-                    }}
-                  >
-                    <span>Kochen</span>
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

@@ -17,6 +17,7 @@ import { getFoodTone } from "../components/FoodIcons";
 import { decomposeCompositeIngredients } from "../utils/recipeHelpers";
 import { STORAGE_KEYS, wipeAllAppData } from "../constants/storage";
 import type { CatalogRecipe } from "../data/recipeCatalog";
+import { reportWarning } from "../utils/logger";
 
 interface UsePantryManagerProps {
   allRecipes: CatalogRecipe[];
@@ -46,8 +47,8 @@ export function usePantryManager({ allRecipes, notify }: UsePantryManagerProps) 
         });
         return deduplicatePantry(enhanced);
       }
-    } catch {
-      // LocalStorage error fallback
+    } catch (err) {
+      reportWarning("usePantryManager: Failed to read PANTRY from localStorage", err);
     }
     return [];
   });
@@ -55,8 +56,8 @@ export function usePantryManager({ allRecipes, notify }: UsePantryManagerProps) 
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEYS.PANTRY, JSON.stringify(pantry));
-    } catch {
-      // Storage quota fallback
+    } catch (err) {
+      reportWarning("usePantryManager: Failed to persist PANTRY to localStorage", err);
     }
   }, [pantry]);
 
@@ -70,8 +71,8 @@ export function usePantryManager({ allRecipes, notify }: UsePantryManagerProps) 
           return decomposeCompositeIngredients(parsed);
         }
       }
-    } catch {
-      // LocalStorage error fallback
+    } catch (err) {
+      reportWarning("usePantryManager: Failed to read GROCERIES from localStorage", err);
     }
     return [];
   });
@@ -79,8 +80,8 @@ export function usePantryManager({ allRecipes, notify }: UsePantryManagerProps) 
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEYS.GROCERIES, JSON.stringify(groceries));
-    } catch {
-      // Storage quota fallback
+    } catch (err) {
+      reportWarning("usePantryManager: Failed to persist GROCERIES to localStorage", err);
     }
   }, [groceries]);
 
@@ -94,8 +95,8 @@ export function usePantryManager({ allRecipes, notify }: UsePantryManagerProps) 
           return parsed;
         }
       }
-    } catch {
-      // LocalStorage error fallback
+    } catch (err) {
+      reportWarning("usePantryManager: Failed to read FOOD_WASTE from localStorage", err);
     }
     return { count: 0, money: 0 };
   });
@@ -211,8 +212,8 @@ export function usePantryManager({ allRecipes, notify }: UsePantryManagerProps) 
       try {
         const prevSpent = parseFloat(localStorage.getItem(STORAGE_KEYS.RECEIPT_EXPENSES) || "0") || 0;
         localStorage.setItem(STORAGE_KEYS.RECEIPT_EXPENSES, (prevSpent + result.totalSpent).toFixed(2));
-      } catch {
-        // LocalStorage fallback
+      } catch (err) {
+        reportWarning("usePantryManager: Failed to persist RECEIPT_EXPENSES to localStorage", err);
       }
     }
 
@@ -302,8 +303,8 @@ export function usePantryManager({ allRecipes, notify }: UsePantryManagerProps) 
     setGroceries([]);
     try {
       localStorage.setItem(STORAGE_KEYS.GROCERIES, JSON.stringify([]));
-    } catch {
-      // LocalStorage fallback
+    } catch (err) {
+      reportWarning("usePantryManager: Failed to clear GROCERIES in localStorage", err);
     }
     notify("Einkaufsliste geleert");
   }, [notify]);
@@ -350,8 +351,8 @@ export function usePantryManager({ allRecipes, notify }: UsePantryManagerProps) 
         };
         try {
           localStorage.setItem(STORAGE_KEYS.FOOD_WASTE, JSON.stringify(next));
-        } catch {
-          // LocalStorage fallback
+        } catch (err) {
+          reportWarning("usePantryManager: Failed to persist FOOD_WASTE to localStorage", err);
         }
         return next;
       });
@@ -388,8 +389,8 @@ export function usePantryManager({ allRecipes, notify }: UsePantryManagerProps) 
     try {
       localStorage.setItem(STORAGE_KEYS.PANTRY, JSON.stringify(defaultPantry));
       localStorage.setItem(STORAGE_KEYS.GROCERIES, JSON.stringify(defaultGroceries));
-    } catch {
-      // LocalStorage fallback
+    } catch (err) {
+      reportWarning("usePantryManager: Failed to reset demo data in localStorage", err);
     }
     notify("Standard-Demo Vorrat & Einkaufsliste wiederhergestellt!");
   }, [notify]);
@@ -398,8 +399,8 @@ export function usePantryManager({ allRecipes, notify }: UsePantryManagerProps) 
     setPantry([]);
     try {
       localStorage.setItem(STORAGE_KEYS.PANTRY, JSON.stringify([]));
-    } catch {
-      // LocalStorage fallback
+    } catch (err) {
+      reportWarning("usePantryManager: Failed to clear PANTRY in localStorage", err);
     }
     notify("Vorrat komplett geleert (0 Produkte)");
   }, [notify]);
@@ -409,8 +410,8 @@ export function usePantryManager({ allRecipes, notify }: UsePantryManagerProps) 
       const cleaned = deduplicatePantry(prev);
       try {
         localStorage.setItem(STORAGE_KEYS.PANTRY, JSON.stringify(cleaned));
-      } catch {
-        // LocalStorage fallback
+      } catch (err) {
+        reportWarning("usePantryManager: Failed to persist deduplicated PANTRY to localStorage", err);
       }
       return cleaned;
     });
@@ -425,8 +426,8 @@ export function usePantryManager({ allRecipes, notify }: UsePantryManagerProps) 
       wipeAllAppData();
       localStorage.setItem(STORAGE_KEYS.PANTRY, JSON.stringify([]));
       localStorage.setItem(STORAGE_KEYS.GROCERIES, JSON.stringify([]));
-    } catch {
-      // LocalStorage fallback
+    } catch (err) {
+      reportWarning("usePantryManager: Failed to wipe all app data in localStorage", err);
     }
     notify("Gesamter Vorrat & Einkaufsliste komplett geleert!");
   }, [notify]);

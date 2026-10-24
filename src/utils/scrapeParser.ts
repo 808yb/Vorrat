@@ -215,9 +215,27 @@ export function extractHtmlInstructionSteps(html: string): ExtractedStep[] {
   return steps;
 }
 
-function getRootDomain(hostname: string): string {
-  const parts = hostname.toLowerCase().split(".");
-  if (parts.length <= 2) return hostname.toLowerCase();
+const TWO_PART_TLDS = new Set([
+  "co.uk",
+  "org.uk",
+  "me.uk",
+  "com.au",
+  "co.at",
+  "co.jp",
+  "co.nz",
+  "com.br",
+]);
+
+export function getRootDomain(hostname: string): string {
+  const clean = hostname.toLowerCase().trim();
+  const parts = clean.split(".");
+  if (parts.length <= 2) return clean;
+
+  const lastTwo = parts.slice(-2).join(".");
+  if (TWO_PART_TLDS.has(lastTwo) && parts.length >= 3) {
+    return parts.slice(-3).join(".");
+  }
+
   return parts.slice(-2).join(".");
 }
 

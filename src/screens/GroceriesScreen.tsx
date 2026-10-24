@@ -16,12 +16,12 @@ export function GroceriesScreen({
   groceries,
   onComplete,
   onToggleItem,
-  onDeleteGrocery: _onDeleteGrocery,
+  onDeleteGrocery,
   onClearGroceries,
   onNavigateToPlanner,
   onNotify,
 }: GroceriesScreenProps) {
-  const [checked, setChecked] = useState<number[]>([1, 2]);
+  const [checked, setChecked] = useState<number[]>([]);
 
   const activeChecked = checked.filter((id) => groceries.some((g) => g.id === id));
   const groups = Array.from(new Set(groceries.map((item) => item.category)));
@@ -190,7 +190,7 @@ export function GroceriesScreen({
                       return (
                         <div
                           key={item.id}
-                          style={{ position: "relative", display: "flex", alignItems: "center" }}
+                          style={{ position: "relative", display: "flex", alignItems: "center", gap: "6px" }}
                         >
                           <button
                             className={`grocery-item ${isChecked ? "checked" : ""}`}
@@ -213,6 +213,34 @@ export function GroceriesScreen({
                               </span>
                             </span>
                           </button>
+                          {onDeleteGrocery && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onDeleteGrocery(item.id);
+                              }}
+                              title="Artikel löschen"
+                              aria-label={`${item.name} löschen`}
+                              style={{
+                                background: "transparent",
+                                border: "none",
+                                color: "#94a3b8",
+                                cursor: "pointer",
+                                padding: "8px 10px",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                borderRadius: "8px",
+                                fontSize: "16px",
+                                lineHeight: 1,
+                                fontWeight: 700,
+                                flexShrink: 0,
+                              }}
+                            >
+                              ✕
+                            </button>
+                          )}
                         </div>
                       );
                     })}

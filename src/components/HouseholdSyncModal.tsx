@@ -25,7 +25,7 @@ import {
   type VorratSyncPayload,
 } from "../utils/supabaseClient";
 import { STORAGE_KEYS } from "../constants/storage";
-import { reportWarning } from "../utils/logger";
+import { reportWarning, reportUserError } from "../utils/logger";
 
 interface HouseholdSyncModalProps {
   isOpen: boolean;
@@ -133,7 +133,7 @@ export function HouseholdSyncModal({
       downloadAnchor.remove();
       if (onNotify) onNotify("Lokales Backup als JSON heruntergeladen!");
     } catch (err) {
-      console.error(err);
+      reportUserError("HouseholdSyncModal.exportJson", "Fehler beim Erstellen des Backups.", err);
       if (onNotify) onNotify("Fehler beim Erstellen des Backups.");
     }
   };
@@ -165,8 +165,8 @@ export function HouseholdSyncModal({
           onNotify("Lokales Backup erfolgreich eingespielt!");
         }
       } catch (err: unknown) {
-        console.error(err);
         const msg = err instanceof Error ? err.message : "Ungültige Datei";
+        reportUserError("HouseholdSyncModal.importJson", `Fehler beim JSON-Import: ${msg}`, err);
         if (onNotify) {
           onNotify(`Fehler beim JSON-Import: ${msg}`);
         }

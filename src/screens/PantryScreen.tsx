@@ -12,6 +12,7 @@ import {
   getAmbiguousIngredientTag,
   isSpiceOrKitchenBasic,
 } from "../utils/pantryMatching";
+import { defaultPantry } from "../utils/pantryHelpers";
 
 export const PANTRY_CATEGORY_GROUPS: Array<{
   id: string;
@@ -427,7 +428,7 @@ export function PantryScreen({
                   textUnderlineOffset: "3px",
                 }}
               >
-                🧪 Beispiel-Vorrat zum Testen laden (34 Artikel)
+                🧪 Beispiel-Vorrat zum Testen laden ({defaultPantry.length} Artikel)
               </button>
             )}
           </div>

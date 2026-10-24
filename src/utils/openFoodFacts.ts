@@ -710,7 +710,7 @@ Antworte NUR mit reinem JSON im folgenden Schema:
 
     const { callGeminiProxy, extractTextFromGeminiResponse } = await import('./geminiProxy');
     const data = await callGeminiProxy({
-      model: "gemini-2.5-flash",
+      model: "gemini-3.5-flash-lite",
       contents: prompt,
       config: { responseMimeType: "application/json" },
     });

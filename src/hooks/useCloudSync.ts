@@ -5,6 +5,7 @@ import {
   backupUserDataToSupabase,
 } from "../utils/supabaseClient";
 import { rehydrateCustomRecipe } from "../utils/geminiRecipes";
+import { reportWarning, reportUserError } from "../utils/logger";
 import type { PantryItem, GroceryItem } from "../App";
 import type { CatalogRecipe } from "../data/recipeCatalog";
 import type { PlannedMeal } from "../components/WeeklyMealPlannerScreen";
@@ -105,7 +106,7 @@ export function useCloudSync({
         isInitialCloudLoadedRef.current = true;
       }
     } catch (err) {
-      console.warn("[CloudSync] Session check error:", err);
+      reportWarning("CloudSync.checkUserSession", err);
       setHasCloudUser(false);
     }
   }, []);
@@ -154,7 +155,7 @@ export function useCloudSync({
           isInitialCloudLoadedRef.current = true;
         }
       } catch (err) {
-        console.warn("[CloudSync] Initial fetch error:", err);
+        reportWarning("CloudSync.initialFetch", err);
         if (isMounted) {
           setSyncStatus("error");
           // DO NOT mark initial load as completed on failure to prevent wiping cloud data
@@ -189,7 +190,7 @@ export function useCloudSync({
           new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
         );
       } catch (err) {
-        console.warn("[CloudSync] Auto-save error:", err);
+        reportWarning("CloudSync.autoSave", err);
         setSyncStatus("error");
       }
     }, 2000);
@@ -217,7 +218,7 @@ export function useCloudSync({
         new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
       );
     } catch (err) {
-      console.warn("[CloudSync] Manual sync error:", err);
+      reportUserError("CloudSync.manualSync", "Cloud-Synchronisation fehlgeschlagen.", err);
       setSyncStatus("error");
       throw err;
     }

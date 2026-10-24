@@ -10,7 +10,7 @@
  * 4. Manual redirect loop (max 3) with re-validation on every step.
  * 5. Content-Type check (only text/html, text/plain, application/xhtml+xml).
  * 6. Stream size cap (max 5 MB with stream truncation instead of 413 error).
- * 7. Support for POST with JSON body `{ url }` (primary) and GET `?url=` (fallback).
+ * 7. Support for POST with JSON body `{ url }`.
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
@@ -25,8 +25,9 @@ import {
   extractJsonLdData,
   extractRecipeCardsAndLinks,
   extractNextPageUrl,
+  getRootDomain,
   type ExtractedStep,
-} from "../src/utils/scrapeParser.ts";
+} from "../src/utils/scrapeParser";
 
 export {
   extractInstructionsFromJsonLd,
@@ -37,6 +38,7 @@ export {
   extractJsonLdData,
   extractRecipeCardsAndLinks,
   extractNextPageUrl,
+  getRootDomain,
   type ExtractedStep,
 };
 
@@ -93,7 +95,8 @@ function isOriginAllowed(originHeader?: string, refererHeader?: string): boolean
       .filter(Boolean);
 
     for (const allowed of customAllowed) {
-      if (originString === allowed || hostname === allowed || allowed.endsWith(hostname)) {
+      const allowedHost = allowed.replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
+      if (originString === allowed || hostname === allowedHost) {
         return true;
       }
     }
@@ -101,8 +104,7 @@ function isOriginAllowed(originHeader?: string, refererHeader?: string): boolean
     return (
       hostname === "localhost" ||
       hostname === "127.0.0.1" ||
-      hostname === "vercel.app" ||
-      hostname.endsWith(".vercel.app")
+      (hostname.endsWith(".vercel.app") && hostname.includes("vorrat"))
     );
   } catch {
     return false;
@@ -169,15 +171,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 
-  let targetUrl = "";
-  if (req.method === "POST") {
-    targetUrl = String((req.body as any)?.url || "").trim();
-  } else if (req.method === "GET") {
-    targetUrl = String(req.query.url || "").trim();
-  } else {
-    res.setHeader("Allow", "POST, GET");
-    return res.status(405).json({ error: "Method Not Allowed" });
+  if (req.method === "OPTIONS") {
+    res.setHeader("Allow", "POST, OPTIONS");
+    return res.status(204).end();
   }
+
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST, OPTIONS");
+    return res.status(405).json({ error: "Method Not Allowed. Nur POST-Anfragen sind gestattet." });
+  }
+
+  let targetUrl = String((req.body as any)?.url || "").trim();
 
   if (!targetUrl) {
     return res.status(400).json({ error: "Fehlender 'url'-Parameter." });

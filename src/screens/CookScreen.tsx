@@ -30,7 +30,6 @@ export interface CookScreenProps {
   onBookmark: (recipeId: string, recipeTitle: string) => void;
   onCook: (recipeTitle: string, servings: number) => void;
   onNavigateToCook: () => void;
-  onMicTrigger: () => void;
   onNotify?: (message: string) => void;
   onAddMissingToGroceries?: (items: Array<{ name: string; amount?: string }>) => void;
   onOpenImportRecipe?: () => void;
@@ -50,7 +49,6 @@ export function CookScreen({
   onBookmark,
   onCook,
   onNavigateToCook,
-  onMicTrigger,
   onNotify,
   onAddMissingToGroceries,
   onOpenImportRecipe,

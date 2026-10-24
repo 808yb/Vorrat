@@ -44,41 +44,30 @@ Sämtliche Kernlogik ist modularisiert in zuständige Utility-Dateien ausgelager
     - `extractRecipeCardsAndLinks`: Erkennt bis zu 40 Rezeptkarten aus `<article>`- und Link-Strukturen.
     - `isValidRecipeUrl` & `extractNextPageUrl`: Domain-Checks und Paginierung.
 - **`src/utils/logger.ts`**
-  - **Thema:** Zentrales diagnostisches Logging & Warning-Reporting.
-  - **Funktionen:** `reportWarning(context, error)` zur Vermeidung unbemerkter leerer `catch {}`-Blöcke mit aussagekräftigem Kontext in Dev & Prod.
-- **`src/utils/pantryHelpers.ts`**
-  - **Thema:** Kern-Hilfsfunktionen für Vorratsverwaltung, MHD-Berechnung, Portions-Nährwerte und Rezept-Abrechnung.
+  - **Thema:** Zentrales diagnostisches Logging, Warning-Reporting & User-Error-Dispatch.
   - **Funktionen:**
-    - `defaultPantry` & `defaultGroceries`: Standard-Fallback-Datensätze für Demo-Modus und Unit-Tests.
-    - `deduplicatePantry(items)`: Führt Duplikate im Vorrat automatisch zusammen (Mengen addieren, unbegrenzte Artikel wie Wasser schützen).
-    - `formatMhdDisplay(mhd)` & `getMhdStatus(mhd)`: Berechnet exakten MHD-Status (`ok`, `soon`, `expired`, `missing`) und formatiert Datumsangaben.
-    - `isItemExpiringSoonOrCritical(item)`: Single Source of Truth für MHD-Ampeln und Badge-Zähler.
-    - `getItemNutrientSpecs(item)` & `calculateItemTotalNutrients(item)`: Berechnet Kalorien und Makronährstoffe (Protein, Kohlenhydrate, Fett).
-    - `applyCookingDeduction(...)` & `confirmCookingCompletion(...)`: Einheiten-sicherer Vorrats-Abzug nach dem Kochen ohne Totalverlust von Vorratspaketen.
-    - `processReceiptImport(...)`: Integriert importierte Kassenbon-Positionen, gleicht offene Einkäufe ab und trackt Ausgaben.
-    - `parseGroceryQuantity(str, name)`: Parst Mengenangaben aus Einkaufslisten flexibel in standardisierte Einheiten.
-- **`src/utils/pantryMatching.ts`**
-  - **Thema:** Intelligentes Zutaten-Matching & kulinarische Domänenlogik.
+    - `reportWarning(context, error)`: Logging nicht-kritischer Fehler/Warnungen zur Vermeidung unbemerkter leerer `catch {}`-Blöcke.
+    - `reportUserError(context, userMessage, error)`: Loggt Fehler via `console.warn` und dispatcht synchron ein `window.dispatchEvent("vorrat:toast")` für 4-Sekunden UI-Error-Toasts.
+- **`src/utils/recipeScraper.ts`**
+  - **Thema:** Eigenständiges Modul für Web-Scraping, 2-Phasen Batch-Extraktion & Web-Crawler.
   - **Funktionen:**
-    - `findMatchingPantryItem(name, pantry)`: Findet Vorratsartikel via Synonym-Wörterbuch, Lemmatisierung und Substring-Matching.
-    - `getRecipePantryBreakdown(recipe, pantry)`: Detaillierte Analyse vorhandener vs. fehlender Zutaten, Trennung von Hauptzutaten und Gewürzen.
-    - `deductIngredientFromPantryAmount(...)`: Subtrahiert benötigte Mengen sicher mit exakten Faktoren für Masse (`kg`, `g`, `mg` = 0.001 g) und Volumen (`l`, `dl` = 100 ml, `cl` = 10 ml, `ml`). Unbestimmte Gebinde (`Packung`, `Glas`, `Dose`, `Flasche`) ohne Gramm-Angabe werden bei Grammanforderungen nicht geraten, sondern bleiben unberührt.
-- **`src/utils/receiptOcr.ts`**
-  - **Thema:** Kassenbon-Erkennung & Vorrats-Import.
-  - **Funktionen:**
-    - `scanReceiptWithGemini(base64Image, mimeType)`: Extrahiert Einkaufsartikel via Gemini Multimodal Vision API.
-    - Non-Food-Filter (Ausschluss von Drogerieartikeln, Kosmetik, Tabak, etc.).
-    - MHD-Schätzungs-Matrix für frische Produkte (Obst, Gemüse, Fleisch, Molkerei).
-    - Mengen- und Preis-Normalisierung.
+    - `fetchWebsiteContent(url, page)`: Ruft Webseiteninhalte über serverseitigen Scraper via `POST /api/scrape` oder Jina-Fallback ab.
+    - `extractRecipeCardsFromListing(content, baseUrl)`: Erkennt Rezeptkarten mit striktem Domain-Check (Zweiteilige TLDs wie `.co.uk`).
+    - `fetchRecipeSubpageDetails(card)`: Extrahiert Schema.org JSON-LD Details via `POST /api/scrape`.
+    - `extractInstructionsFromJsonLd(...)`: 1:1 Rekursive Extraktion von `HowToSection` und `HowToStep`.
+    - `isGermanRecipeText(title, steps)` & `extractStepDuration(text)`: Intelligente Erkennung deutscher Rezepte für 1:1 direkte Schrittübernahme.
+    - `processBatchWithGemini(...)`: Verarbeitet Rezeptkarten in Batches (Größe 2) mit striktem Verbot von Zusammenfassungen sowie hartem Code-Guard für garantierten 1:1-Erhalt aller Originalschritte.
+    - `scrapeSinglePageFromWebsiteWithGemini(...)`: 2-Phasen-Scanner für eine einzelne Übersichtsseite mit Live-Progress-Callbacks.
+    - `scrapeRecipesFromWebsiteWithGemini(...)` / `crawlRecipeWebsiteWithGemini(...)`: Vollautomatischer rekursiver Crawler über alle Paginierungsseiten.
+    - `extractRecipeFromWebsite(url, pantry)`: Direkter Extraktionshelfer für Einzelrezepte.
 - **`src/utils/geminiRecipes.ts`**
-  - **Thema:** KI-Rezept-Generierung & 2-Phasen Web-Scraper.
+  - **Thema:** KI-Rezept-Generierung & Rezept-Chat (Scraper-Funktionen werden sauber aus `recipeScraper.ts` re-exportiert).
   - **Funktionen:**
     - `generateRecipeWithGemini(userQuery, pantry)`: Generiert maßgeschneiderte Rezepte passend zum Vorrat.
-    - `fetchWebsiteContent(url, page)`: Ruft Webseiteninhalte über serverseitigen Scraper via `POST /api/scrape` mit JSON-Body `{ url }` oder Jina-Fallback ab (kein `allorigins.win`).
-    - `fetchRecipeSubpageDetails(card)`: Extrahiert Schema.org JSON-LD Details via `POST /api/scrape`.
-    - `isGermanRecipeText(title, steps)` & `extractStepDuration(text)`: Intelligente Erkennung deutscher Rezepte für 1:1 direkte Schrittübernahme ohne Umformulierung.
-    - `processBatchWithGemini(...)`: Verarbeitet Rezeptkarten in Batches (Größe 2) mit striktem Verbot von Zusammenfassungen sowie hartem Code-Guard für garantierten 1:1-Erhalt aller Originalschritte.
-    - `scrapeRecipesFromWebsiteWithGemini(...)`: Vollautomatischer Crawler über alle Seiten hinweg entlang von `nextPageUrl` mit striktem Domain- und Asset-Filter.
+    - `importRecipeFromTextOrUrlWithGemini(...)`: Importiert Freitext oder URL-Inhalte in strukturierte CatalogRecipes.
+    - `importRecipeFromVideoWithGemini(...)`: Video-Rezept-Extraktion via Gemini.
+    - `askAboutRecipeWithGemini(...)`: Interaktiver KI-Küchenchef-Assistent während des Kochens.
+    - Re-exportiert alle Web-Scraper- und Crawler-Funktionen für rückwärtskompatible Imports.
 - **`src/utils/recipeHelpers.ts`**
   - **Thema:** Rezept-Hilfsfunktionen & Zutaten-Dekomposition.
   - **Funktionen:**
@@ -157,6 +146,9 @@ Sämtliche Kernlogik ist modularisiert in zuständige Utility-Dateien ausgelager
   - **`src/components/add-modal/BarcodeScanTab.tsx`**: Hardware-beschleunigter EAN-Scanner mit ZXing-Fallback, Multi-Scan-Tray und Open Food Facts Anbindung.
   - **`src/components/add-modal/ReceiptScanTab.tsx`**: Kassenbon-Fotoupload, Gemini Vision OCR, Frische-Klassen-Ampel, automatische MHD-Zuweisung und Einkaufslisten-Abgleich.
 - **`src/components/ActiveRecipeModal.tsx`**: Interaktive Vollbild-Kochanleitung mit Portionenrechner, Zutaten-Abhaken, Timer und Schrittnavigation.
+- **`src/components/CookingModal.tsx`**: Modales Koch-Erlebnis mit Fokus- & Gesamtschrittansicht, Zutaten-Checkliste und integriertem Küchen-Timer.
+  - **`src/components/cooking/RecipeStepsAccordion.tsx`**: Ausklappbares Akkordeon für Zubereitungsschritte mit Checkboxen, Fortschrittszähler und Direkt-Aktionen auf Rezeptkarten.
+  - **`src/components/cooking/RecipeChefChatModal.tsx`**: Interaktives Overlay für Fragen an den KI-Küchenchef während des Kochens mit 1-Klick-Schnellfragen und Chatverlauf.
 - **`src/components/EditRecipeModal.tsx`**: Modal zur manuellen Bearbeitung von Rezeptdetails, Zutaten und Zubereitungsschritten.
 - **`src/components/HouseholdSyncModal.tsx`**: Account-Login & Cloud-Sync-Status-Übersicht.
 - **`src/components/AuthModal.tsx`**: Registrierung und Anmeldung mit E-Mail / Passwort.

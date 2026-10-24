@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { defaultPantry } from "./utils/pantryHelpers";
 import { rehydrateCustomRecipe } from "./utils/geminiRecipes";
 import { type AddMode } from "./components/UnifiedAddModal";
@@ -50,12 +50,26 @@ export {
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>("discover");
-  const [toast, setToast] = useState("");
+  const [toast, setToast] = useState<{ message: string; type?: "info" | "success" | "error" } | null>(null);
 
-  const notify = (message: string) => {
-    setToast(message);
-    window.setTimeout(() => setToast(""), 2800);
+  const notify = (message: string, type: "info" | "success" | "error" = "success") => {
+    setToast({ message, type });
+    const duration = type === "error" ? 4000 : 2800;
+    window.setTimeout(() => {
+      setToast((curr) => (curr?.message === message ? null : curr));
+    }, duration);
   };
+
+  useEffect(() => {
+    const handleToastEvent = (e: Event) => {
+      const custom = e as CustomEvent<{ message: string; type?: "info" | "success" | "error" }>;
+      if (custom.detail?.message) {
+        notify(custom.detail.message, custom.detail.type || "error");
+      }
+    };
+    window.addEventListener("vorrat:toast", handleToastEvent);
+    return () => window.removeEventListener("vorrat:toast", handleToastEvent);
+  }, []);
 
   // Recipe, favorites and weekly planner state & handlers
   const {
@@ -89,6 +103,7 @@ export default function App() {
     handleClearExpiringFilter,
     handleSaveImportedRecipe,
     handleWipeRecipes,
+    handleResetDemoRecipes,
   } = useRecipeManager({
     notify,
     onAddMissingToGroceries: (missing) => handleAddMissingToGroceries(missing),
@@ -118,6 +133,11 @@ export default function App() {
     handleFullReset,
     handleWipeEverything: wipePantryEverything,
   } = usePantryManager({ allRecipes, notify });
+
+  const handleRestoreAllDemo = () => {
+    handleResetDemo();
+    handleResetDemoRecipes();
+  };
 
   const syncWeeklyShopping = (newItems: import("./utils/pantryHelpers").GroceryItem[]) => {
     setGroceries((prev) => {
@@ -166,6 +186,11 @@ export default function App() {
     setIsAddModalOpen(true);
   };
 
+  const handleFullResetCombined = () => {
+    handleFullReset();
+    handleWipeRecipes();
+  };
+
   const handleWipeEverything = () => {
     wipePantryEverything();
     handleWipeRecipes();
@@ -191,7 +216,7 @@ export default function App() {
           onDeleteItem={handleDeletePantryItem}
           onOpenReset={() => setIsResetModalOpen(true)}
           onCookFromExpiring={(urgentItems) => handleCookFromExpiring(urgentItems, () => setActiveTab("discover"))}
-          onResetDemo={handleResetDemo}
+          onResetDemo={handleRestoreAllDemo}
           savedWasteStats={foodWasteSaved}
           onAddToGroceries={(name, amount) => handleAddMissingToGroceries([{ name, amount: amount || "1 Glas" }])}
         />
@@ -214,9 +239,6 @@ export default function App() {
           expiringSearchIngredients={expiringSearchIngredients}
           onClearExpiringFilter={handleClearExpiringFilter}
           onDeleteRecipe={handleDeleteRecipe}
-          onMicTrigger={() => {
-            notify("Sprachnotiz: 'Reis & Eier schnell'");
-          }}
           onNotify={notify}
         />
       )}
@@ -285,7 +307,7 @@ export default function App() {
         onChange={setActiveTab}
       />
 
-      <ToastBanner message={toast} />
+      <ToastBanner message={toast?.message || ""} type={toast?.type} />
 
       <AppModals
         isHouseholdModalOpen={isHouseholdModalOpen}
@@ -301,10 +323,10 @@ export default function App() {
         isResetModalOpen={isResetModalOpen}
         onCloseResetModal={() => setIsResetModalOpen(false)}
         onOpenResetModal={() => setIsResetModalOpen(true)}
-        onResetDemo={handleResetDemo}
+        onResetDemo={handleRestoreAllDemo}
         onClearPantry={handleClearPantry}
         onDeduplicatePantry={handleDeduplicatePantry}
-        onFullReset={handleFullReset}
+        onFullReset={handleFullResetCombined}
         onWipeEverything={handleWipeEverything}
         isAddModalOpen={isAddModalOpen}
         onCloseAddModal={() => setIsAddModalOpen(false)}

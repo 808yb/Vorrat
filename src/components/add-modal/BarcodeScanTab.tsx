@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { BrowserMultiFormatReader } from "@zxing/library";
 import { ProductMark, getFoodTone } from "../FoodIcons";
 import { lookupBarcodeFromOFF, type OFFProduct } from "../../utils/openFoodFacts";
+import { reportWarning, reportUserError } from "../../utils/logger";
 import type { ScannedMultiItem } from "../UnifiedAddModal";
 
 export interface BarcodeScanTabProps {
@@ -37,8 +38,8 @@ export const BarcodeScanTab: React.FC<BarcodeScanTabProps> = ({
         stream.getTracks().forEach((track) => track.stop());
         videoRef.current.srcObject = null;
       }
-    } catch {
-      // Ignore cleanup error
+    } catch (err) {
+      reportWarning("BarcodeScanTab.stopCamera", err);
     }
     setIsLiveCameraActive(false);
     setIsTorchOn(false);
@@ -109,7 +110,8 @@ export const BarcodeScanTab: React.FC<BarcodeScanTabProps> = ({
           prev.map((item) => (item.id === tempId ? { ...item, isLoading: false } : item))
         );
       }
-    } catch {
+    } catch (err) {
+      reportWarning("BarcodeScanTab.lookupBarcode", err);
       setMultiScannedItems((prev) =>
         prev.map((item) => (item.id === tempId ? { ...item, isLoading: false } : item))
       );
@@ -142,7 +144,9 @@ export const BarcodeScanTab: React.FC<BarcodeScanTabProps> = ({
         );
       }
     } catch (err: any) {
-      setCameraError(err?.message || "Kamera-Zugriff verweigert.");
+      const errorMsg = err?.message || "Kamera-Zugriff verweigert.";
+      setCameraError(errorMsg);
+      reportUserError("BarcodeScanTab.startCamera", "Kamera-Zugriff fehlgeschlagen.", err);
       setIsLiveCameraActive(false);
     }
   };

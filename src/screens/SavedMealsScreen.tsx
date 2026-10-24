@@ -739,10 +739,10 @@ export function SavedMealsScreen({
                                 whiteSpace: "nowrap",
                                 flexShrink: 0,
                               }}
-                              title="Ask about recipe"
+                              title="KI-Küchenchef fragen"
                             >
                               <span style={{ color: "#d97706", fontSize: "12px" }}>★</span>
-                              <span>Ask recipe</span>
+                              <span>Frage zum Rezept</span>
                             </button>
                             <span className="step-counter-pill">
                               {Object.values(completedSteps[activeRecipe.id] || {}).filter(Boolean).length} / {safeSteps.length} erledigt

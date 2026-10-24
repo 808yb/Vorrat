@@ -27,6 +27,7 @@ import { getSafeIngredientsList, getSafeSteps, getSafeAvailable, rehydrateRecipe
 import { extractIngredientsFromDishText, resolveRecipeFoodImage, askAboutRecipeWithGemini, rehydrateCustomRecipe, convertRawToCatalogRecipe } from "../src/utils/geminiRecipes";
 import { STORAGE_KEYS, migrateLegacyStorageKeys } from "../src/constants/storage";
 import { applyCloudDataToState } from "../src/hooks/useCloudSync";
+import { parseRawIngredientStrings } from "../src/utils/recipeScraper";
 
 let passedCount = 0;
 let failedCount = 0;
@@ -1696,16 +1697,18 @@ assert(Boolean(convertedFallback.imageUrl && (convertedFallback.imageUrl.startsW
 // Bug B: Detailed recipe instructions & prompt integrity
 const fs = await import("node:fs");
 const geminiCode = fs.readFileSync("src/utils/geminiRecipes.ts", "utf-8");
+const scraperCode = fs.readFileSync("src/utils/recipeScraper.ts", "utf-8");
+const combinedRecipeCode = geminiCode + "\n" + scraperCode;
 assert(
-  geminiCode.includes("Kürze oder vereinfache die Zubereitungsschritte der Webseite NIEMALS!"),
+  combinedRecipeCode.includes("Kürze oder vereinfache die Zubereitungsschritte der Webseite NIEMALS!"),
   "Bug B: Prompt forbids shortening or simplifying recipe steps"
 );
 assert(
-  geminiCode.includes("Übernimm ALLE detaillierten Schritte, Garzeiten, Temperaturen und Mengenangaben"),
+  combinedRecipeCode.includes("Übernimm ALLE detaillierten Schritte, Garzeiten, Temperaturen und Mengenangaben"),
   "Bug B: Prompt enforces full retention of times, temps and amounts"
 );
 assert(
-  geminiCode.includes("übersetze jeden Schritt Detail für Detail ins Deutsche"),
+  combinedRecipeCode.includes("übersetze jeden Schritt Detail für Detail ins Deutsche"),
   "Bug B: Prompt enforces step-by-step translation without summarizing"
 );
 
@@ -1718,11 +1721,11 @@ assert(viteCode.includes("'/api/scrape'"), "Bug C: vite.config.ts configures mid
 const scrapeApiCode = fs.readFileSync("api/scrape.ts", "utf-8");
 assert(scrapeApiCode.includes("extractNextPageUrl"), "Bug D: api/scrape.ts implements robust extractNextPageUrl");
 assert(
-  geminiCode.includes("currentTargetUrl = pageResult.nextPageUrl"),
+  combinedRecipeCode.includes("currentTargetUrl = pageResult.nextPageUrl"),
   "Bug D: Scraper automatically follows pageResult.nextPageUrl"
 );
 assert(
-  !geminiCode.includes("if (!pageResult.hasMorePages || pageResult.recipes.length === 0)"),
+  !combinedRecipeCode.includes("if (!pageResult.hasMorePages || pageResult.recipes.length === 0)"),
   "Bug D: Scraper does NOT prematurely abort when a page has 0 new recipes but hasMorePages is true"
 );
 
@@ -1835,6 +1838,177 @@ assert(extractedMoribyanCards.length === 1, "extractRecipeCardsAndLinks finds ar
 assert(extractedMoribyanCards[0].url === "https://moribyan.com/pumpkin-cinnamon-roll-pancakes/", "extractRecipeCardsAndLinks selects recipe URL (not category link)", `Got: ${extractedMoribyanCards[0]?.url}`);
 assert(extractedMoribyanCards[0].title === "Pumpkin Cinnamon Roll Pancakes", "extractRecipeCardsAndLinks selects correct recipe title", `Got: ${extractedMoribyanCards[0]?.title}`);
 assert(extractedMoribyanCards[0].imageUrl === "https://moribyan.com/wp-content/uploads/2026/09/IMG_0558.jpg", "extractRecipeCardsAndLinks extracts image URL from article", `Got: ${extractedMoribyanCards[0]?.imageUrl}`);
+
+// -----------------------------------------------------------------------------
+// TEST SUITE 29: TWO-PART TLD DOMAIN PARSING (getRootDomain Fix)
+// -----------------------------------------------------------------------------
+console.log("\n🌐 29. Testing getRootDomain with Two-Part TLDs (.co.uk, .com.au, .co.at etc.)...");
+
+const { getRootDomain } = await import("../src/utils/scrapeParser");
+
+assert(getRootDomain("bbc.co.uk") === "bbc.co.uk", "getRootDomain('bbc.co.uk') retains bbc.co.uk");
+assert(getRootDomain("news.bbc.co.uk") === "bbc.co.uk", "getRootDomain('news.bbc.co.uk') yields bbc.co.uk");
+assert(getRootDomain("food.bbc.co.uk") === "bbc.co.uk", "getRootDomain('food.bbc.co.uk') yields bbc.co.uk");
+assert(getRootDomain("recipe.example.com.au") === "example.com.au", "getRootDomain('recipe.example.com.au') yields example.com.au");
+assert(getRootDomain("sub.domain.co.at") === "domain.co.at", "getRootDomain('sub.domain.co.at') yields domain.co.at");
+assert(getRootDomain("portal.recipe.org.uk") === "recipe.org.uk", "getRootDomain('portal.recipe.org.uk') yields recipe.org.uk");
+assert(getRootDomain("co.uk") === "co.uk", "getRootDomain('co.uk') safe fallback on short domain");
+assert(getRootDomain("www.chefkoch.de") === "chefkoch.de", "getRootDomain('www.chefkoch.de') yields chefkoch.de");
+assert(getRootDomain("chefkoch.de") === "chefkoch.de", "getRootDomain('chefkoch.de') yields chefkoch.de");
+
+// -----------------------------------------------------------------------------
+// TEST SUITE 30: BON-ZU-EINKAUFSLISTE INTEGRATION CYCLE
+// -----------------------------------------------------------------------------
+console.log("\n🧾 30. Testing Receipt-to-Grocery-List Integration Reconciliation Cycle...");
+
+// Ausgangslage:
+// Vorrat hat ["500 g Mehl"]
+const startingPantry: PantryItem[] = [
+  { id: 101, name: "Mehl", amount: 500, total: 500, unit: "g", category: "Vorrat", tone: "grain" },
+];
+
+// Einkaufsliste hat offen ["Vollmilch", "Bio Eier", "Butter"] und bereits erledigt ["Salz"]
+const startingGroceries = [
+  { id: "g1", name: "Vollmilch", amount: "1L", checked: false, category: "Kühl" },
+  { id: "g2", name: "Bio Eier", amount: "10er", checked: false, category: "Kühl" },
+  { id: "g3", name: "Butter", amount: "250g", checked: false, category: "Kühl" },
+  { id: "g4", name: "Salz", amount: "500g", checked: true, category: "Gewürze" },
+];
+
+// Aktion: Kassenbon parsen
+const receiptOcrRaw = `
+REWE MARKT GMBH
+Frische Vollmilch 1L 1,19 A
+Freiland Eier 10er 2,99 A
+Pfand 0,25 B
+SUMME 4,43
+`.trim();
+
+const bonCycleReceiptItems = parseReceiptFallback(receiptOcrRaw);
+
+// Assertion 1: Pfand wird als Non-Food herausgefiltert
+const hasPfand = bonCycleReceiptItems.some((i) => i.name.toLowerCase().includes("pfand"));
+assert(!hasPfand, "1. Pfand wird als Non-Food herausgefiltert");
+assert(bonCycleReceiptItems.length === 2, "1. Genau 2 Lebensmittel auf Bon erkannt (Vollmilch & Eier)", `Got: ${bonCycleReceiptItems.length}`);
+
+// Abgleich mit Vorrat und Einkaufsliste durchführen
+const reconcileResult = processReceiptImport(bonCycleReceiptItems, startingPantry, startingGroceries);
+
+// Assertion 2: Vollmilch und Eier werden in den Vorrat gebucht
+const hasMilchInPantry = reconcileResult.updatedPantry.some((p) => p.name.toLowerCase().includes("milch"));
+const hasEierInPantry = reconcileResult.updatedPantry.some((p) => p.name.toLowerCase().includes("eier"));
+assert(hasMilchInPantry, "2. Vollmilch wird in den Vorrat gebucht");
+assert(hasEierInPantry, "2. Eier werden in den Vorrat gebucht");
+
+// Assertion 3: Auf der Einkaufsliste werden Vollmilch und Bio Eier automatisch erkannt und entfernt, Butter bleibt offen, Salz bleibt erledigt
+assert(reconcileResult.checkedGroceriesCount === 2, "3. Genau 2 Einkaufsartikel automatisch erledigt (Vollmilch & Bio Eier)");
+const openMilchRemaining = reconcileResult.updatedGroceries.some((g) => !g.checked && g.name.toLowerCase().includes("vollmilch"));
+const openEierRemaining = reconcileResult.updatedGroceries.some((g) => !g.checked && g.name.toLowerCase().includes("eier"));
+const openButterRemaining = reconcileResult.updatedGroceries.some((g) => !g.checked && g.name.toLowerCase().includes("butter"));
+const checkedSalzRemaining = reconcileResult.updatedGroceries.some((g) => g.checked && g.name.toLowerCase().includes("salz"));
+
+assert(!openMilchRemaining, "3. Vollmilch von offener Einkaufsliste entfernt");
+assert(!openEierRemaining, "3. Bio Eier von offener Einkaufsliste entfernt");
+assert(openButterRemaining, "3. Butter bleibt offen auf der Einkaufsliste");
+assert(checkedSalzRemaining, "3. Erledigtes Salz bleibt auf der Einkaufsliste erhalten");
+
+// Assertion 4: Keine doppelten Buchungen im Vorrat und Gesamtsumme korrekt berechnet
+assert(reconcileResult.updatedPantry.length === 3, "4. Vorrat enthält genau 3 Positionen (Mehl + Vollmilch + Eier, keine Duplikate)");
+assert(Math.abs(reconcileResult.totalSpent - 4.18) < 0.001, "4. Summe (1,19 € + 2,99 €) = 4,18 € korrekt berechnet", `Got: ${reconcileResult.totalSpent}`);
+
+// Test idempotency: Zweiter Import derselben Artikel erzeugt keine Duplikate
+const secondImportResult = processReceiptImport(bonCycleReceiptItems, reconcileResult.updatedPantry, reconcileResult.updatedGroceries);
+assert(secondImportResult.updatedPantry.length === 3, "4. Wiederholter Bon-Import erzeugt keine Duplikate (Vorrat bleibt bei 3 Artikeln)");
+
+// -----------------------------------------------------------------------------
+// TEST SUITE 31: RAW INGREDIENT STRING PARSER & US-UNIT CONVERSION (1-PORTION SCALING)
+// -----------------------------------------------------------------------------
+console.log("\n🥣 31. Testing Raw Ingredient Parser & US-Unit Conversion...");
+
+// 1. Unquantified spice/salt/pepper -> 1 Prise (NOT 100g!)
+const parsedSalz = parseRawIngredientStrings(["Salz nach Geschmack"], 2);
+assert(
+  parsedSalz.length === 1 && parsedSalz[0].baseAmountPerPortion === 1 && parsedSalz[0].unit === "Prise",
+  "Unquantified 'Salz nach Geschmack' parses to 1 Prise (not 100g!)",
+  JSON.stringify(parsedSalz[0])
+);
+
+const parsedPepper = parseRawIngredientStrings(["Freshly ground black pepper"], 2);
+assert(
+  parsedPepper[0].baseAmountPerPortion === 1 && parsedPepper[0].unit === "Prise",
+  "'Freshly ground black pepper' parses to 1 Prise",
+  JSON.stringify(parsedPepper[0])
+);
+
+// 2. Unquantified non-spice -> 1 Stk. (NOT 100g!)
+const parsedApple = parseRawIngredientStrings(["Apfel"], 2);
+assert(
+  parsedApple[0].baseAmountPerPortion === 1 && parsedApple[0].unit === "Stk.",
+  "Unquantified 'Apfel' parses to 1 Stk. (not 100g!)",
+  JSON.stringify(parsedApple[0])
+);
+
+// 3. US Cups with dry baking ingredient (flour, sugar, oats, etc.) -> 125g per cup
+// 2 cups flour for 2 original servings -> 2 * 125 = 250g / 2 servings = 125g per portion
+const parsedFlour = parseRawIngredientStrings(["2 cups flour"], 2);
+assert(
+  parsedFlour[0].baseAmountPerPortion === 125 && parsedFlour[0].unit === "g",
+  "2 cups flour for 2 servings yields 125 g per portion",
+  JSON.stringify(parsedFlour[0])
+);
+
+// 4. US Cups with liquid/other ingredient -> 240ml per cup
+// 1 cup milk for 2 servings -> 240ml / 2 = 120ml per portion
+const parsedMilk = parseRawIngredientStrings(["1 cup milk"], 2);
+assert(
+  parsedMilk[0].baseAmountPerPortion === 120 && parsedMilk[0].unit === "ml",
+  "1 cup milk for 2 servings yields 120 ml per portion",
+  JSON.stringify(parsedMilk[0])
+);
+
+// 5. US Tablespoon (tbsp) -> EL & portion scaling
+// 4 tbsp olive oil for 4 servings -> 4 EL / 4 = 1 EL per portion
+const parsedOil = parseRawIngredientStrings(["4 tbsp olive oil"], 4);
+assert(
+  parsedOil[0].baseAmountPerPortion === 1 && parsedOil[0].unit === "EL",
+  "4 tbsp olive oil for 4 servings yields 1 EL per portion",
+  JSON.stringify(parsedOil[0])
+);
+
+// 6. US Teaspoon (tsp) -> TL & portion scaling
+// 2 tsp cinnamon for 2 servings -> 2 TL / 2 = 1 TL per portion
+const parsedCinnamon = parseRawIngredientStrings(["2 tsp cinnamon"], 2);
+assert(
+  parsedCinnamon[0].baseAmountPerPortion === 1 && parsedCinnamon[0].unit === "TL",
+  "2 tsp cinnamon for 2 servings yields 1 TL per portion",
+  JSON.stringify(parsedCinnamon[0])
+);
+
+// 7. US Weight units: oz -> 28g, lb -> 450g
+// 10 oz beef for 2 servings -> 280g / 2 = 140g per portion
+const parsedBeef = parseRawIngredientStrings(["10 oz beef"], 2);
+assert(
+  parsedBeef[0].baseAmountPerPortion === 140 && parsedBeef[0].unit === "g",
+  "10 oz beef for 2 servings yields 140 g per portion",
+  JSON.stringify(parsedBeef[0])
+);
+
+// 1 lb pasta for 4 servings -> 450g / 4 = 112.5g per portion
+const parsedPasta = parseRawIngredientStrings(["1 lb pasta"], 4);
+assert(
+  parsedPasta[0].baseAmountPerPortion === 112.5 && parsedPasta[0].unit === "g",
+  "1 lb pasta for 4 servings yields 112.5 g per portion",
+  JSON.stringify(parsedPasta[0])
+);
+
+// 8. Metric ingredients with originalServings scaling
+// 400g Mehl for 4 servings -> 100g per portion
+const parsedMetric = parseRawIngredientStrings(["400g Mehl"], 4);
+assert(
+  parsedMetric[0].baseAmountPerPortion === 100 && parsedMetric[0].unit === "g",
+  "400g Mehl for 4 servings yields 100 g per portion",
+  JSON.stringify(parsedMetric[0])
+);
 
 // -----------------------------------------------------------------------------
 // SUMMARY

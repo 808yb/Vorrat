@@ -44,6 +44,15 @@ export interface GroceryItem {
   checked?: boolean;
 }
 
+export function getRelativeMhd(daysAhead: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + daysAhead);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export const defaultPantry: PantryItem[] = [
   {
     id: 1,
@@ -67,7 +76,7 @@ export const defaultPantry: PantryItem[] = [
     total: 10,
     unit: "Stk.",
     tone: "egg",
-    mhd: "2026-10-18",
+    mhd: getRelativeMhd(9),
     minAmount: 4,
     caloriesPer100g: 140,
     proteinPer100g: 12.5,
@@ -82,7 +91,7 @@ export const defaultPantry: PantryItem[] = [
     total: 250,
     unit: "ml",
     tone: "sauce",
-    mhd: "2027-04-01",
+    mhd: getRelativeMhd(180),
     minAmount: 50,
     caloriesPer100g: 65,
     proteinPer100g: 10.5,
@@ -111,7 +120,7 @@ export const defaultPantry: PantryItem[] = [
     total: 5,
     unit: "Stk.",
     tone: "onion",
-    mhd: "2026-10-15",
+    mhd: getRelativeMhd(3),
     minAmount: 2,
     caloriesPer100g: 34,
     proteinPer100g: 1.9,
@@ -126,7 +135,7 @@ export const defaultPantry: PantryItem[] = [
     total: 400,
     unit: "g",
     tone: "chicken",
-    mhd: "2026-10-14",
+    mhd: getRelativeMhd(2),
     minAmount: 200,
     caloriesPer100g: 110,
     proteinPer100g: 24.0,

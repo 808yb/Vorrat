@@ -18,6 +18,7 @@ import {
   type RawGeminiIngredient,
 } from "../utils/geminiRecipes";
 import { findMatchingPantryItem } from "../utils/pantryMatching";
+import { reportUserError } from "../utils/logger";
 
 interface RecipeImportModalProps {
   isOpen: boolean;
@@ -149,9 +150,9 @@ export function RecipeImportModal({
       });
       onNotify("Rezept erfolgreich analysiert!");
     } catch (err: unknown) {
-      console.error(err);
       const msg = err instanceof Error ? err.message : "Fehler beim Analysieren des Rezepts.";
       setError(msg);
+      reportUserError("RecipeImportModal.analyze", msg, err);
     } finally {
       setIsLoading(false);
     }

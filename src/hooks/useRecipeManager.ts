@@ -57,6 +57,7 @@ export interface UseRecipeManagerReturn {
     missingItems: Array<{ name: string; amount?: string }>
   ) => void;
   handleWipeRecipes: () => void;
+  handleResetDemoRecipes: () => void;
 }
 
 export function useRecipeManager({
@@ -111,7 +112,7 @@ export function useRecipeManager({
     } catch (err) {
       reportWarning("useRecipeManager: Failed to read favorites from localStorage", err);
     }
-    return ["r1", "r2"];
+    return [];
   });
 
   useEffect(() => {
@@ -157,12 +158,7 @@ export function useRecipeManager({
     } catch (err) {
       reportWarning("useRecipeManager: Failed to read plannedMeals from localStorage", err);
     }
-    return [
-      { id: "p1", recipeId: "r1", recipeTitle: "Egg Fried Rice Deluxe", dayId: "mo", mealSlot: "dinner", servings: 2 },
-      { id: "p2", recipeId: "r2", recipeTitle: "Grüne Reis-Bowl", dayId: "di", mealSlot: "lunch", servings: 2 },
-      { id: "p3", recipeId: "r3", recipeTitle: "Zitronen-Hähnchen mit Basmatireis", dayId: "do", mealSlot: "dinner", servings: 2 },
-      { id: "p4", recipeId: "r5", recipeTitle: "Schnelles Wok-Gemüse mit Ei", dayId: "sa", mealSlot: "dinner", servings: 2 },
-    ];
+    return [];
   });
 
   useEffect(() => {
@@ -282,6 +278,24 @@ export function useRecipeManager({
     setExpiringSearchIngredients([]);
   };
 
+  const handleResetDemoRecipes = () => {
+    const demoFavs = ["r1", "r2"];
+    const demoPlan: PlannedMeal[] = [
+      { id: "p1", recipeId: "r1", recipeTitle: "Egg Fried Rice Deluxe", dayId: "mo", mealSlot: "dinner", servings: 2 },
+      { id: "p2", recipeId: "r2", recipeTitle: "Grüne Reis-Bowl", dayId: "di", mealSlot: "lunch", servings: 2 },
+      { id: "p3", recipeId: "r3", recipeTitle: "Zitronen-Hähnchen mit Basmatireis", dayId: "do", mealSlot: "dinner", servings: 2 },
+      { id: "p4", recipeId: "r5", recipeTitle: "Schnelles Wok-Gemüse mit Ei", dayId: "sa", mealSlot: "dinner", servings: 2 },
+    ];
+    setFavorites(demoFavs);
+    setPlannedMeals(demoPlan);
+    try {
+      localStorage.setItem(STORAGE_KEYS.FAVORITES, JSON.stringify(demoFavs));
+      localStorage.setItem(STORAGE_KEYS.WEEKLY_PLAN, JSON.stringify(demoPlan));
+    } catch (err) {
+      reportWarning("useRecipeManager: Failed to write demo favorites/plannedMeals", err);
+    }
+  };
+
   return {
     customRecipes,
     setCustomRecipes,
@@ -316,5 +330,6 @@ export function useRecipeManager({
     handleClearExpiringFilter,
     handleSaveImportedRecipe,
     handleWipeRecipes,
+    handleResetDemoRecipes,
   };
 }

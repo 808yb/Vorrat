@@ -80,7 +80,8 @@ function isOriginAllowed(originHeader?: string, refererHeader?: string): boolean
       .filter(Boolean);
 
     for (const allowed of customAllowed) {
-      if (originString === allowed || hostname === allowed || allowed.endsWith(hostname)) {
+      const allowedHost = allowed.replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
+      if (originString === allowed || hostname === allowedHost) {
         return true;
       }
     }
@@ -88,8 +89,7 @@ function isOriginAllowed(originHeader?: string, refererHeader?: string): boolean
     return (
       hostname === "localhost" ||
       hostname === "127.0.0.1" ||
-      hostname === "vercel.app" ||
-      hostname.endsWith(".vercel.app")
+      (hostname.endsWith(".vercel.app") && hostname.includes("vorrat"))
     );
   } catch {
     return false;

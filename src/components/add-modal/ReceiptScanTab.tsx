@@ -7,6 +7,7 @@ import {
   type ParsedReceiptFoodItem,
 } from "../../utils/receiptOcr";
 import { findMatchingPantryItem } from "../../utils/pantryMatching";
+import { reportUserError } from "../../utils/logger";
 
 export interface ReceiptScanTabProps {
   groceries?: Array<{ id: number | string; name: string; category?: string; [key: string]: any }>;
@@ -123,6 +124,7 @@ export const ReceiptScanTab: React.FC<ReceiptScanTabProps> = ({
         setReceiptUploadSuccess(false);
         const msg = err instanceof Error ? err.message : "Fehler bei der Bon-Analyse.";
         setReceiptError(msg);
+        reportUserError("ReceiptScanTab.analyzeReceipt", msg, err);
       } finally {
         setIsAnalyzingReceipt(false);
       }
@@ -261,44 +263,46 @@ export const ReceiptScanTab: React.FC<ReceiptScanTabProps> = ({
           <p style={{ margin: "0 0 14px", fontSize: "11px", color: "#64748b", lineHeight: 1.4, maxWidth: "300px", marginInline: "auto" }}>
             Mache ein Foto von deinem Einkaufszettel. Die KI erkennt Lebensmittel, Preise und berechnet das <strong>MHD automatisch</strong>.
           </p>
-          <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxWidth: "340px", margin: "0 auto" }}>
-            <button
-              type="button"
-              onClick={handleLoadLidlReceipt}
-              style={{
-                background: "linear-gradient(135deg, #059669 0%, #10b981 100%)",
-                border: "none",
-                borderRadius: "10px",
-                padding: "9px 16px",
-                fontSize: "12px",
-                fontWeight: 750,
-                color: "#ffffff",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "6px",
-              }}
-            >
-              <Sparkles className="w-3.5 h-3.5" /> Echten Lidl-Bon testen (11 Artikel)
-            </button>
-            <button
-              type="button"
-              onClick={handleLoadDemoReceipt}
-              style={{
-                background: "#ffffff",
-                border: "1px solid #cbd5e1",
-                borderRadius: "10px",
-                padding: "7px 14px",
-                fontSize: "11px",
-                fontWeight: 700,
-                color: "#64748b",
-                cursor: "pointer",
-              }}
-            >
-              Standard-Bon testen (4 Artikel)
-            </button>
-          </div>
+          {import.meta.env.DEV && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxWidth: "340px", margin: "0 auto" }}>
+              <button
+                type="button"
+                onClick={handleLoadLidlReceipt}
+                style={{
+                  background: "linear-gradient(135deg, #059669 0%, #10b981 100%)",
+                  border: "none",
+                  borderRadius: "10px",
+                  padding: "9px 16px",
+                  fontSize: "12px",
+                  fontWeight: 750,
+                  color: "#ffffff",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "6px",
+                }}
+              >
+                <Sparkles className="w-3.5 h-3.5" /> Echten Lidl-Bon testen (11 Artikel)
+              </button>
+              <button
+                type="button"
+                onClick={handleLoadDemoReceipt}
+                style={{
+                  background: "#ffffff",
+                  border: "1px solid #cbd5e1",
+                  borderRadius: "10px",
+                  padding: "7px 14px",
+                  fontSize: "11px",
+                  fontWeight: 700,
+                  color: "#64748b",
+                  cursor: "pointer",
+                }}
+              >
+                Standard-Bon testen (4 Artikel)
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -333,6 +337,14 @@ export const ReceiptScanTab: React.FC<ReceiptScanTabProps> = ({
           <div style={{ display: "flex", flexDirection: "column", gap: "7px", maxHeight: "280px", overflowY: "auto" }}>
             {receiptItems.map((item) => {
               const isAkut = Boolean(item.isUrgent || (item.shelfLifeDays !== undefined && item.shelfLifeDays <= 4));
+              const isMatchedWithGrocery = Boolean(
+                groceries &&
+                groceries.some((g) => {
+                  if (g.checked) return false;
+                  return Boolean(findMatchingPantryItem(g.name, [{ name: item.name, category: item.category }]));
+                })
+              );
+
               return (
                 <div
                   key={item.id}
@@ -366,10 +378,51 @@ export const ReceiptScanTab: React.FC<ReceiptScanTabProps> = ({
                       <strong style={{ fontSize: "12.5px", color: "#0f172a" }}>{item.name}</strong>
                       <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "3px", flexWrap: "wrap" }}>
                         <span style={{ fontSize: "11px", color: "#475569" }}>{item.amount} {item.unit}</span>
-                        {item.mhd && (
-                          <span style={{ fontSize: "10px", fontWeight: 700, padding: "1px 6px", borderRadius: "6px", background: isAkut ? "#fef2f2" : "#ecfdf5", color: isAkut ? "#b91c1c" : "#047857" }}>
-                            MHD: {item.mhd.split("-").reverse().join(".")}
+                        {isMatchedWithGrocery && (
+                          <span style={{ fontSize: "10px", fontWeight: 700, padding: "1px 6px", borderRadius: "6px", background: "#dcfce7", color: "#15803d", border: "1px solid #bbf7d0" }}>
+                            ✓ Steht auf Einkaufsliste (wird abgehakt)
                           </span>
+                        )}
+                        {item.mhd && (
+                          <div
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "4px",
+                              fontSize: "10px",
+                              fontWeight: 700,
+                              padding: "1px 6px",
+                              borderRadius: "6px",
+                              background: isAkut ? "#fef2f2" : "#ecfdf5",
+                              color: isAkut ? "#b91c1c" : "#047857",
+                              border: isAkut ? "1px solid #fecaca" : "1px solid #a7f3d0",
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <span>Geschätztes MHD: ~{item.mhd.split("-").reverse().join(".")}</span>
+                            <input
+                              type="date"
+                              value={item.mhd}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (val) {
+                                  setReceiptItems((prev) =>
+                                    prev.map((i) => (i.id === item.id ? { ...i, mhd: val } : i))
+                                  );
+                                }
+                              }}
+                              style={{
+                                border: "none",
+                                background: "transparent",
+                                color: "inherit",
+                                fontSize: "10px",
+                                cursor: "pointer",
+                                padding: "0",
+                                width: "16px",
+                              }}
+                              title="Geschätztes MHD anpassen"
+                            />
+                          </div>
                         )}
                       </div>
                     </div>

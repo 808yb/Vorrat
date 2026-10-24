@@ -8,4 +8,5 @@ coverage/
 !.env.example
 .tempmediaStorage/
 *.local
+code_*.txt
 
